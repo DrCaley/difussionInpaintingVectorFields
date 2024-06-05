@@ -2,7 +2,6 @@ import os
 import skimage
 import matplotlib.pyplot as plt
 
-
 def add_noise(img, mode, base_var=0.0005):
     return skimage.util.random_noise(img, mode=mode, var=base_var)
 
@@ -19,7 +18,7 @@ def plot_noise(img, mode, iteration, row, col, i):
     plt.axis("off")
 
 
-def generate_noised_images(img, mode="gaussian", total_iterations=1000, display_iterations=7, save_final=False,
+def generate_plot_noised_images(img, mode="gaussian", total_iterations=1000, display_iterations=7, save_final=False,
                            output_dir='./'):
     interval = total_iterations // display_iterations
 
@@ -51,9 +50,26 @@ def generate_noised_images(img, mode="gaussian", total_iterations=1000, display_
 
 def generate_noised_images(img, mode="gaussian", total_iterations=1000):
     interval = total_iterations // 100
-    noisy_img = img.copy()
 
     for i in range(total_iterations):
-        noisy_img = add_noise(noisy_img, mode)
+        noisy_img = add_noise(img, mode)
         # save_noisy_image(noisy_img, mode, i * interval, output_dir='./noisy_images')
 
+    return noisy_img
+
+
+# def main():
+#     image = Image.open('./data/images/ocean_image0.png', mode='r')
+#     transform = transforms.Compose([transforms.PILToTensor()])
+#
+#     if isinstance(image, Image.Image):
+#         vector = transform(image)
+#
+#     noisey_img = generate_noised_images(vector)
+#
+#     print("x")
+#
+#
+# if __name__ == "__main__":
+#     main()
+#

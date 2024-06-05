@@ -1,3 +1,4 @@
+import torch
 import torchvision.transforms as transforms
 import yaml
 from PIL import Image
@@ -18,8 +19,9 @@ class OceanImageDataset(Dataset):
 
         self.images = []
 
-        for i in range(5):
-            self.generate_image(i, img_dir)
+        for x in range(5):
+            # change to load_array
+            self.generate_image(x)
 
     def __len__(self):
         return len(self.images)
@@ -30,9 +32,26 @@ class OceanImageDataset(Dataset):
         transform = transforms.Compose([transforms.PILToTensor()])
 
         if isinstance(image, Image.Image):
-            image = transform(image)
+            vector = transform(image)
 
-        return image, img_label
+        return vector, img_label
+
+    def load_array(self, image_num):
+        u_array = self.mat_data['u']
+        v_array = self.mat_data['v']
+        time = self.mat_data['ocean_time'].squeeze()
+
+        # Previously found using the normal method
+        minU, maxU = -0.8973235906436031, 1.0859991093945718
+        minV, maxV = -0.6647028130174489, 0.5259408400292674
+
+        # Normalize and multiply by 255
+        adjusted_u_arr = 255 * (u_array - minU) / (maxU - minU)
+        adjusted_v_arr = 255 * (v_array - minV) / (maxV - minV)
+
+        for y in range(94):
+            for x in range(44):
+                pass
 
     def generate_image(self, image_num, img_dir):
         """Generates images"""
@@ -72,13 +91,8 @@ class OceanImageDataset(Dataset):
         self.images.append(img)
         self.img_labels.append(image_num)
         # img.save(os.path.join(img_dir, 'ocean_image' + str(image_num) + '.png'), 'PNG')
-        return img
+        # return img
 
-
-transform = transforms.Compose([
-    transforms.Resize((256, 256)),
-    transforms.ToTensor()
-])
 
 training_data = OceanImageDataset(
     mat_file="./data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
@@ -96,5 +110,6 @@ train_loader = DataLoader(
 # Hard-coded to only load first 5 images
 for epoch in range(1):
     for i, data in enumerate(train_loader):
-        # img is tensor
-        img, label = data
+        tensor, label = data
+        # apply noise to each img
+        noised_tensor = torch.from_numpy(generate_noised_images(tensor))
