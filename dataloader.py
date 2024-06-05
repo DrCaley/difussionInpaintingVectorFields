@@ -1,10 +1,8 @@
-import os
-import pandas as pd
+import torchvision.transforms as transforms
 import yaml
 from PIL import Image
 from scipy.io import loadmat
 from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms
 from image_noiser import generate_noised_images
 import numpy as np
 import datetime
@@ -13,27 +11,33 @@ import datetime
 class OceanImageDataset(Dataset):
     def __init__(self, mat_file, boundaries, img_dir):
         self.mat_data = loadmat(mat_file)
-        self.img_labels = pd.DataFrame(self.mat_data['ocean_time'])
+        self.img_labels = []
 
         with open(boundaries, 'r') as file:
             self.boundaries = yaml.safe_load(file)
 
-        self.img_dir = img_dir
-        self.generate_image()
+        self.images = []
+
+        for i in range(5):
+            self.generate_image(i, img_dir)
 
     def __len__(self):
-        return len(self.img_labels)
+        return len(self.images)
 
     def __getitem__(self, idx):
-        img_name = self.img_labels.iloc[idx, 0]
-        img_path = os.path.join(self.img_dir, img_name)
-        image = Image.open(img_path).convert("RGB")
-        label = self.img_labels.iloc[idx, 1]
+        image = self.images[idx]
+        img_label = self.img_labels[idx]
+        transform = transforms.Compose([transforms.PILToTensor()])
 
-        return image, label
+        if isinstance(image, Image.Image):
+            image = transform(image)
 
-    def __generate_image(self, image_num):
-        """ Generates images """
+        return image, img_label
+
+    def generate_image(self, image_num, img_dir):
+        """Generates images"""
+        img = Image.new('RGB', (94, 44), color='white')
+
         u_array = self.mat_data['u']
         v_array = self.mat_data['v']
         time = self.mat_data['ocean_time'].squeeze()
@@ -41,32 +45,33 @@ class OceanImageDataset(Dataset):
             datetime.datetime.fromordinal(int(t)) + datetime.timedelta(days=t % 1) - datetime.timedelta(days=366) for t
             in time]
 
-        # previously found using the normal method
+        # Previously found using the normal method
         minU, maxU = -0.8973235906436031, 1.0859991093945718
         minV, maxV = -0.6647028130174489, 0.5259408400292674
 
-        # normalize and multiply by 255
-
+        # Normalize and multiply by 255
         adjusted_u_arr = 255 * (u_array - minU) / (maxU - minU)
         adjusted_v_arr = 255 * (v_array - minV) / (maxV - minV)
 
         for y in range(94):
             for x in range(44):
                 isLand = False
-                if np.isnan(adjusted_u_arr[y][x][image_num]):  # when there was no u value
+                if np.isnan(adjusted_u_arr[y][x][image_num]):  # When there was no u value
                     curr_u = 0
-                    isLand = True  # the minimal dataloader displayed it is land
+                    isLand = True  # The minimal dataloader displayed it is land
                 else:
                     curr_u = int(adjusted_u_arr[y][x][image_num])
-                if np.isnan(adjusted_v_arr[y][x][0]):  # when there was no v value
-                    curr_v = 0  # the minimal dataloader displayed it as a place in the ocean with no current
+                if np.isnan(adjusted_v_arr[y][x][0]):  # When there was no v value
+                    curr_v = 0  # The minimal dataloader displayed it as a place in the ocean with no current
                     curr_u = 0
                 else:
                     curr_v = int(adjusted_v_arr[y][x][image_num])
 
                 img.putpixel((y, 43 - x), (curr_u, curr_v, isLand * 255))
 
-        img.save()
+        self.images.append(img)
+        self.img_labels.append(image_num)
+        # img.save(os.path.join(img_dir, 'ocean_image' + str(image_num) + '.png'), 'PNG')
         return img
 
 
@@ -81,14 +86,15 @@ training_data = OceanImageDataset(
     img_dir="./data/images"
 )
 
-train_dataloader = DataLoader(training_data, batch_size=50, shuffle=True)
+train_loader = DataLoader(
+    training_data,
+    batch_size=1,
+    shuffle=True
+)
 
-output_dir = './data/noisy_images'
-os.makedirs(output_dir, exist_ok=True)
-
-for batch_idx, (images, labels) in enumerate(train_dataloader):
-    for i, img in enumerate(images):
-        img = img.permute(1, 2, 0).numpy()  # Convert tensor to numpy array
-        noisy_img = generate_noised_images(img, mode="gaussian", total_iterations=1000, display_iterations=7,
-                                           save_final=True, output_dir=output_dir)
-        # save_noisy_image(noisy_img, "gaussian", batch_idx * len(images) + i, output_dir)
+# Iterate over dataset
+# Hard-coded to only load first 5 images
+for epoch in range(1):
+    for i, data in enumerate(train_loader):
+        # img is tensor
+        img, label = data
