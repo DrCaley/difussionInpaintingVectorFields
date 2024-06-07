@@ -4,11 +4,6 @@ import yaml
 from PIL import Image
 from scipy.io import loadmat
 from torch.utils.data import Dataset, DataLoader
-from image_noiser import generate_noised_images
-import os
-import numpy as np
-import datetime
-
 
 class OceanImageDataset(Dataset):
     def __init__(self, mat_file, boundaries, tensor_dir):
@@ -20,12 +15,12 @@ class OceanImageDataset(Dataset):
             self.boundaries = yaml.safe_load(file)
 
         for x in range(5):
-            self.load_array(x)
+            self.tensor_arr.append(self.load_array(x))
 
-        for dirpath, dirnames, filenames in os.walk(tensor_dir):
-            for filename in filenames:
-                self.tensor_arr.append(torch.load(dirpath + filename))
-                self.tensor_labels.append(filename)
+        # for dirpath, dirnames, filenames in os.walk(tensor_dir):
+        #     for filename in filenames:
+        #         self.tensor_arr.append(torch.load(dirpath + filename))
+        #         self.tensor_labels.append(filename)
 
         print('done')
 
@@ -33,10 +28,10 @@ class OceanImageDataset(Dataset):
         return len(self.tensor_arr)
 
     def __getitem__(self, idx):
-
         tensor = self.tensor_arr[idx]
-        tensor_label = self.tensor_labels[idx]
-        return tensor, tensor_label
+
+        target = self.tensor_labels
+        return tensor, target
 
     def load_array(self, tensor_num):
         u_array = self.mat_data['u']
@@ -62,32 +57,42 @@ class OceanImageDataset(Dataset):
         #1 if land, 0 if water
         for x in range(94):
             for y in range(44):
-                if land_tensors[y][x].isnan():
+                if land_tensors[y][x].isnan() or v_tensors[y][x].isnan() or u_tensors[y][x].isnan():
                     land_tensors[y][x] = 1
+                    v_tensors[y][x] = 0
+                    u_tensors[y][x] = 0
                 else:
                     land_tensors[y][x] = 0
 
         combined_tensor = torch.stack((u_tensors, v_tensors, land_tensors))
-        torch.save(combined_tensor, "./data/tensors/" + str(tensor_num) + ".pt")
+        # torch.save(combined_tensor, "./data/tensors/" + str(tensor_num) + ".pt")
+        return combined_tensor
 
 
-training_data = OceanImageDataset(
-    mat_file="./data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
-    boundaries="./data/rams_head/boundaries.yaml",
-    tensor_dir="./data/tensors/"
-)
-
-train_loader = DataLoader(
-    training_data,
-    batch_size=1,
-    shuffle=True
-)
-
-# Iterate over dataset
-# Hard-coded to only load first 5 images
-for epoch in range(1):
-    for i, data in enumerate(train_loader):
-        tensor, label = data
-        # apply noise to each img
-        noised_tensor = torch.from_numpy(generate_noised_images(tensor))
-        print(noised_tensor)
+# training_data = OceanImageDataset(
+#     mat_file="./data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+#     boundaries="./data/rams_head/boundaries.yaml",
+#     tensor_dir="./data/tensors/"
+# )
+#
+# train_loader = DataLoader(
+#     training_data,
+#     batch_size=1,
+#     shuffle=True
+# )
+#
+# # Iterate over dataset
+# # Hard-coded to only load first 5 images
+# for epoch in range(1):
+#     for i, data in enumerate(train_loader):
+#         tensor, label = data
+#         # apply noise to each img
+#
+#         target_iteration = 200
+#         var_per_iteration = 0.005
+#
+#         noisy_tensor_iterative = generate_noised_tensor_iterative(tensor, target_iteration=target_iteration,
+#                                                                   var_per_iteration=var_per_iteration)
+#         noisy_tensor_single_step = generate_noised_tensor_single_step(tensor, target_iteration=target_iteration,
+#                                                                       var_per_iteration=var_per_iteration)
+#         x = 5

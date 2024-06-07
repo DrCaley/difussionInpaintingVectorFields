@@ -1,75 +1,88 @@
 import os
+import numpy as np
 import skimage
+from skimage.util import random_noise
 import matplotlib.pyplot as plt
-
-def add_noise(img, mode, base_var=0.0005):
-    return skimage.util.random_noise(img, mode=mode, var=base_var)
+import torch
 
 
-def save_noisy_image(img, mode, iteration, output_dir):
+def save_noisy_image(tensor, mode, iteration, output_dir):
     filename = os.path.join(output_dir, f'noisy_image_{mode}_iteration_{iteration}.png')
-    skimage.io.imsave(filename, (img * 255).astype('uint8'))
+    skimage.io.imsave(filename, (tensor * 255).astype('uint8'))
 
 
-def plot_noise(img, mode, iteration, row, col, i):
+def plot_noise(tensor, mode, iteration, row, col, i):
     plt.subplot(row, col, i)
-    plt.imshow(img, aspect='auto')
+    plt.imshow(np.clip(tensor.numpy(), 0, 1), aspect='auto')
     plt.title(f'{mode} : Iteration {iteration}')
     plt.axis("off")
 
 
-def generate_plot_noised_images(img, mode="gaussian", total_iterations=1000, display_iterations=7, save_final=False,
-                           output_dir='./'):
-    interval = total_iterations // display_iterations
+def generate_noised_tensor_iterative(tensor, iteration, variance, mode="gaussian"):
+    """
+    Applies noise to a given tensor for a specified number of iterations using
+    skimage.util.random_noise()
 
-    plt.figure(figsize=(18, 12))
-    row = 2
-    col = display_iterations // row + 1
+    :param tensor: A tensor representing an image at a point in time
+    :param iteration: The number of iterations for which noise will be applied.
+    :param variance: The variance of the noise to be added per iteration.
+                     Higher values result in noisier images.
+    :param mode: The type of noise to be applied. Default is "gaussian".
 
-    noisy_img = img
-    # img with no noise
-    plot_noise(img, mode, 0, row, col, 1)
-    # save_noisy_image(noisy_img, mode, 0, output_dir)
-
-    # noise images
-    for i in range(1, display_iterations + 1):
-        for _ in range(interval):
-            noisy_img = add_noise(noisy_img, mode)
-        plot_noise(noisy_img, mode, i * interval, row, col, i + 1)
-        # save_noisy_image(noisy_img, mode, i * interval, output_dir)
-
-    plt.tight_layout()
-    plt.show()
-
-    # if save_final:
-    #     final_noisy_img_path = os.path.join(output_dir, "final_noisy_image.png")
-    #     skimage.io.imsave(final_noisy_img_path, (noisy_img * 255).astype('uint8'))
-
-    return noisy_img
+    :return: A noised tensor applied with variance * iteration amount of noise
+    """
+    noisy_tensor = tensor.clone().numpy()
+    for i in range(iteration):
+        noisy_tensor = random_noise(noisy_tensor, mode, var=variance, clip=False)
+    return torch.tensor(noisy_tensor)
 
 
-def generate_noised_images(img, mode="gaussian", total_iterations=1000):
-    interval = total_iterations // 100
+def generate_noised_tensor_single_step(tensor, target_iteration, var_per_iteration, mode="gaussian"):
+    """
+    Applies noise to a given tensor for a specified number of iterations,
+    simulating the noise accumulation over time using skimage.util.random_noise()
 
-    for i in range(total_iterations):
-        noisy_img = add_noise(img, mode)
-        # save_noisy_image(noisy_img, mode, i * interval, output_dir='./noisy_images')
-
-    return noisy_img
+    :param tensor: A tensor representing an image at a point in time
+    :param target_iteration: The number of iterations for which noise will be applied.
+    :param var_per_iteration: The variance of the noise to be added per iteration.
+                              Higher values result in noisier images.
+    :param mode: The type of noise to be applied. Default is "gaussian".
+    """
+    total_var = var_per_iteration * target_iteration
+    noisy_tensor = random_noise(tensor.numpy(), mode, var=total_var, clip=False)
+    return torch.tensor(noisy_tensor)
 
 
 # def main():
-#     image = Image.open('./data/images/ocean_image0.png', mode='r')
-#     transform = transforms.Compose([transforms.PILToTensor()])
+#     image_path = "./data/images/ocean_image0.png"
+#     try:
+#         image = skimage.io.imread(image_path) / 255.0
+#     except FileNotFoundError:
+#         print(f"Image file not found at path: {image_path}")
+#         return
+#     image_tensor = torch.tensor(image, dtype=torch.float32)
 #
-#     if isinstance(image, Image.Image):
-#         vector = transform(image)
+#     target_iteration = 1000
+#     var_per_iteration = 0.005
 #
-#     noisey_img = generate_noised_images(vector)
+#     noisy_tensor_iterative = generate_noised_tensor_iterative(image_tensor, iteration=target_iteration,
+#                                                               variance=var_per_iteration)
+#     noisy_tensor_single_step = generate_noised_tensor_single_step(image_tensor, target_iteration=target_iteration,
+#                                                                   var_per_iteration=var_per_iteration)
 #
-#     print("x")
+#     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+#     axes[0].imshow(np.clip(image_tensor.numpy(), 0, 1))
+#     axes[0].set_title('Original Image')
+#     axes[1].imshow(np.clip(noisy_tensor_iterative.numpy(), 0, 1))
+#     axes[1].set_title(f'Iterative Noise (Iteration {target_iteration})')
+#     axes[2].imshow(np.clip(noisy_tensor_single_step.numpy(), 0, 1))
+#     axes[2].set_title(f'Single Step Noise (Iteration {target_iteration})')
+#
+#     for ax in axes:
+#         ax.axis('off')
+#
+#     plt.show()
 #
 #
 # if __name__ == "__main__":
 #     main()
-#
