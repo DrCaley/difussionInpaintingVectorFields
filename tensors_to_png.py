@@ -26,3 +26,4 @@ def generate_png(tensors):
     scale = 9
     img.resize((94 * scale, 44 * scale), resample=Image.BOX).show()
 
+generate_png(torch.load("./data/tensors/4.pt"))

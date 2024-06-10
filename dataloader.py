@@ -90,4 +90,3 @@ for epoch in range(1):
         tensor, label = data
         # apply noise to each img
         noised_tensor = torch.from_numpy(generate_noised_images(tensor))
-        print(noised_tensor)
