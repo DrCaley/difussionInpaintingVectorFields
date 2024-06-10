@@ -6,8 +6,12 @@ import torch
 #input should be a 3x44x94 tensor
 #outputs are normalized, so comparing the strength of currents between maps won't work
 def generate_png(tensors):
+    expected_shape = (3, 44, 94)
+    if tensors.shape != expected_shape:
+        raise ValueError(f"Expected tensor with shape {expected_shape}, but got {tensors.shape}.")
+
     img = Image.new('RGB', (94, 44), color='white')
-    vectors_arr = tensors.numpy()
+    vectors_arr = tensors.detach().numpy()
     r_max, r_min = np.nanmax(vectors_arr[0]), np.nanmin(vectors_arr[0])
     g_max, g_min = np.nanmax(vectors_arr[1]), np.nanmin(vectors_arr[1])
     b_max, b_min = np.nanmax(vectors_arr[2]), np.nanmin(vectors_arr[2])
@@ -25,5 +29,3 @@ def generate_png(tensors):
             img.putpixel((x, -y), (r, g, b))
     scale = 9
     img.resize((94 * scale, 44 * scale), resample=Image.BOX).show()
-
-generate_png(torch.load("./data/tensors/4.pt"))
