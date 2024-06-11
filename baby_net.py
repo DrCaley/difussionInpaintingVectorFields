@@ -11,13 +11,6 @@ class NeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
         self.flatten = nn.Flatten()
-        # self.linear_relu_stack = nn.Sequential(
-        #     nn.Linear(3 * 44 * 94, 512),
-        #     nn.Sigmoid(),
-        #     nn.Linear(512, 512),
-        #     nn.Sigmoid(),
-        #     nn.Linear(512, 3 * 44 * 94),
-        # )
         self.linear1 = nn.Linear(3 * 44 * 94, 512)
         self.linear2 = nn.Linear(512, 512)
         self.linear3 = nn.Linear(512, 3 * 44 * 94)
@@ -76,9 +69,9 @@ def train(dataloader, model, loss_fn, optimizer):
         loss = loss_fn(pred, tensor.float())
 
         # Backpropagation
-        optimizer.zero_grad()  # clears the accumulated gradients from the prev iteration
-        loss.backward()  # computes the gradients of the loss with respect to the model parameters
-        optimizer.step()  # updates the model parameters using the computed gradients
+        optimizer.zero_grad()   # clears the accumulated gradients from the prev iteration
+        loss.backward()         # computes the gradients of the loss with respect to the model parameters
+        optimizer.step()        # updates the model parameters using the computed gradients
 
         if batch % 10 == 0:
             loss_value, current = loss.item(), batch * len(target)
