@@ -4,10 +4,12 @@ from tqdm import tqdm
 from random import randint
 
 from dataloader import OceanImageDataset
-from caley_nn.net import PConvUNet, VGG16FeatureExtractor
-from caley_nn.evaluation import evaluate
-from caley_nn.loss import InpaintingLoss
+from example_nn.net import PConvUNet, VGG16FeatureExtractor
+from example_nn.evaluation import evaluate
+from example_nn.loss import InpaintingLoss
 import math
+from example_nn.inPaintingNetwork import Net
+from resize_tensor import resize
 
 from image_noiser import generate_noised_tensor_single_step, generate_noised_tensor_iterative
 
@@ -53,14 +55,14 @@ val_loader = DataLoader(validation_data, batch_size=4)
 
 print(f"Number of training samples: {len(training_data)}")
 
-model = PConvUNet().to(device)
+model = Net().to(device)
 
+#what does this do?
 optimizer = torch.optim.Adam(
     filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr
 )
 
-criterion = InpaintingLoss(VGG16FeatureExtractor()).to(device)
-
+criterion = torch.nn.MSELoss()
 start_iter = 0
 num_epochs = args.max_iter // len(train_loader) + 1
 
@@ -78,6 +80,8 @@ for epoch in range(num_epochs):
         # Generate mask (assuming the mask is 1 where the data is missing and 0 elsewhere)
         input_mask = (tensor != 0).float()
 
+        tensor = resize(tensor, (3, 512, 512))
+        input_mask = resize(input_mask, (3, 512, 512))
         # Forward pass through the model
         output, _ = model(tensor, input_mask)
 
