@@ -2,7 +2,7 @@ import torch
 from tensors_to_png import generate_png
 
 
-#input should be a 3xAnyXAny tensor and a tuple of the desired dimensions for the last two
+#input should be a 3xAnyXAny tensor and a triple of the desired dimensions for the last two
 #outputs are normalized, so comparing the strength of currents between maps won't work
 def resize(tensors, end_shape):
     actual_shape = tensors.shape
