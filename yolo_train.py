@@ -4,14 +4,13 @@ from tqdm import tqdm
 from random import randint
 
 from dataloader import OceanImageDataset
-from example_nn.net import PConvUNet, VGG16FeatureExtractor
 from example_nn.evaluation import evaluate
-from example_nn.loss import InpaintingLoss
 import math
 from example_nn.inPaintingNetwork import Net
-from resize_tensor import resize
 
+from resize_tensor import resize
 from image_noiser import generate_noised_tensor_single_step, generate_noised_tensor_iterative
+from tensors_to_png import generate_png
 
 
 class Args:
@@ -59,7 +58,6 @@ model = Net().to(device)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-criterion = torch.nn.MSELoss()
 start_iter = 0
 num_epochs = args.max_iter // len(train_loader) + 1
 
@@ -68,20 +66,25 @@ for epoch in range(num_epochs):
     for i, (tensor, label) in enumerate(tqdm(train_loader)):
         tensor = tensor.float()
 
+        # Generate mask (assuming the mask is 1 where the data is missing and 0 elsewhere)
+        mask = (tensor != 0).float()
+
         target = generate_noised_tensor_single_step(tensor, target_iteration=randint(1, 1000),
                                                     var_per_iteration=0.005).float()
         tensor = generate_noised_tensor_iterative(target, iteration=1, variance=0.005).float()
 
-        # Generate mask (assuming the mask is 1 where the data is missing and 0 elsewhere)
-        input_mask = (tensor != 0).float()
-
         tensor = resize(tensor, (3, 512, 512))
-        input_mask = resize(input_mask, (3, 512, 512))
+        target = resize(target, (3, 512, 512))
+        mask = resize(mask, (3, 512, 512))
         # Forward pass through the model
-        output = model(tensor, input_mask)
+        output = model(tensor, mask)
 
-        # Calculate loss
-        loss = criterion(output, tensor)
+        #calculate loss
+        output = output * mask
+        target = target * mask
+        squared_error = (output - target) ** 2
+        masked_squared_error = squared_error * mask
+        loss = masked_squared_error.sum() / mask.sum()
 
         if i % 100 == 0:
             print(loss.item())

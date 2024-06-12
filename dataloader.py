@@ -43,17 +43,17 @@ class OceanImageDataset(Dataset):
         v_tensors = torch.from_numpy(adjusted_v_arr)
         v_tensors = v_tensors.permute(*torch.arange(v_tensors.ndim - 1, -1, -1))[tensor_num]
 
-        land_tensors = u_tensors.clone().detach()
+        mask = u_tensors.clone().detach()
 
         # 1 if land, 0 if water
         for x in range(94):
             for y in range(44):
-                if land_tensors[y][x].isnan() or v_tensors[y][x].isnan() or u_tensors[y][x].isnan():
-                    land_tensors[y][x] = 1
+                if v_tensors[y][x].isnan() or u_tensors[y][x].isnan():
+                    mask[y][x] = 0
                     v_tensors[y][x] = 0
                     u_tensors[y][x] = 0
                 else:
-                    land_tensors[y][x] = 0
+                    mask[y][x] = 1
 
-        combined_tensor = torch.stack((u_tensors, v_tensors, land_tensors))
+        combined_tensor = torch.stack((u_tensors, v_tensors, mask))
         return combined_tensor

@@ -9,8 +9,10 @@ import torch
 def generate_png(tensors, scale=9):
 
     shape = tensors.shape
-    if shape[0] != 3:
-        raise ValueError(f"Expected tensor with shape (3, Any, Any), but got {shape}.")
+    if len(shape) > 3:
+        for tensor in tensors:
+            generate_png(tensor, scale)
+        return
     img = Image.new('RGB', (shape[2], shape[1]), color='white')
     vectors_arr = tensors.detach().numpy()
     r_max, r_min = np.nanmax(vectors_arr[0]), np.nanmin(vectors_arr[0])
