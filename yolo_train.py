@@ -49,9 +49,9 @@ training_data, test_data, validation_data = random_split(data, [train_len, test_
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-train_loader = DataLoader(training_data, batch_size=4, shuffle=True)
-test_loader = DataLoader(test_data, batch_size=4)
-val_loader = DataLoader(validation_data, batch_size=4)
+train_loader = DataLoader(training_data, batch_size=1, shuffle=True)
+test_loader = DataLoader(test_data, batch_size=1)
+val_loader = DataLoader(validation_data, batch_size=1)
 
 print(f"Number of training samples: {len(training_data)}")
 
@@ -78,16 +78,13 @@ for epoch in range(num_epochs):
         tensor = resize(tensor, (3, 512, 512))
         input_mask = resize(input_mask, (3, 512, 512))
         # Forward pass through the model
-        output, _ = model(tensor, input_mask)
+        output = model(tensor, input_mask)
 
         # Calculate loss
-        loss_dict = criterion(output, tensor)
-        loss = 0.0
-        for key, coef in args.LAMBDA_DICT.items():
-            value = coef * loss_dict[key]
-            loss += value
-            if (epoch * len(train_loader) + i + 1) % args.log_interval == 0:
-                print(f"Iteration {epoch * len(train_loader) + i + 1}: {key} loss: {value.item()}")
+        loss = criterion(output, tensor)
+
+        if i % 100 == 0:
+            print(loss.item())
 
         # Backpropagation
         optimizer.zero_grad()
