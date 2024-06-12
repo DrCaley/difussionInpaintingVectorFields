@@ -5,6 +5,8 @@ from tensors_to_png import generate_png
 #input should be a 3xAnyXAny tensor and a triple of the desired dimensions for the last two
 #outputs are normalized, so comparing the strength of currents between maps won't work
 def resize(tensors, end_shape):
+    if len(tensors.shape) > 3:
+        return torch.stack( [resize(tensor, end_shape) for tensor in tensors])
     actual_shape = tensors.shape
     if actual_shape[0] != 3:
         raise ValueError(f"Expected tensor with shape (3, Any, Any), but got {actual_shape}.")
