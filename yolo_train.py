@@ -57,10 +57,7 @@ print(f"Number of training samples: {len(training_data)}")
 
 model = Net().to(device)
 
-#what does this do?
-optimizer = torch.optim.Adam(
-    filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr
-)
+optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
 criterion = torch.nn.MSELoss()
 start_iter = 0
@@ -69,12 +66,10 @@ num_epochs = args.max_iter // len(train_loader) + 1
 for epoch in range(num_epochs):
     model.train()
     for i, (tensor, label) in enumerate(tqdm(train_loader)):
-        # Ensure tensors are float32
         tensor = tensor.float()
+
         target = generate_noised_tensor_single_step(tensor, target_iteration=randint(1, 1000),
                                                     var_per_iteration=0.005).float()
-
-        # Generate noised input tensor
         tensor = generate_noised_tensor_iterative(target, iteration=1, variance=0.005).float()
 
         # Generate mask (assuming the mask is 1 where the data is missing and 0 elsewhere)
@@ -99,7 +94,6 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
 
-        # Visualization and evaluation
         if (epoch * len(train_loader) + i + 1) % args.vis_interval == 0:
             model.eval()
             evaluate(model, test_loader, device,

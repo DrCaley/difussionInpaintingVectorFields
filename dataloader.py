@@ -1,7 +1,7 @@
 import torch
 import yaml
 from scipy.io import loadmat
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset
 
 
 class OceanImageDataset(Dataset):
@@ -13,8 +13,8 @@ class OceanImageDataset(Dataset):
         with open(boundaries, 'r') as file:
             self.boundaries = yaml.safe_load(file)
 
-        for x in range(num):
-            self.tensor_arr.append(self.load_array(x))
+        for n in range(num):
+            self.tensor_arr.append(self.load_array(n))
 
     def __len__(self):
         return len(self.tensor_arr)
@@ -57,11 +57,3 @@ class OceanImageDataset(Dataset):
 
         combined_tensor = torch.stack((u_tensors, v_tensors, land_tensors))
         return combined_tensor
-
-# dataset = OceanImageDataset(
-#     mat_file="./data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
-#     boundaries="./data/rams_head/boundaries.yaml",
-#     tensor_dir="./data/tensors/"
-# )
-#
-# train_data, test_data, holdout_data = random_split(dataset, [7, 2, 1])
