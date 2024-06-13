@@ -33,11 +33,10 @@ class Args:
 
 
 args = Args()
-
 data = OceanImageDataset(
     mat_file="./data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
     boundaries="./data/rams_head/boundaries.yaml",
-    num=10
+    num=100
 )
 
 train_len = int(math.floor(len(data) * 0.7))

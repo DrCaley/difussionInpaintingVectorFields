@@ -25,35 +25,30 @@ class OceanImageDataset(Dataset):
         return tensor, label
 
     def load_array(self, tensor_num):
-        u_array = self.mat_data['u']
-        v_array = self.mat_data['v']
-        time = self.mat_data['ocean_time'].squeeze()
-
-        # Previously found using the normal method
-        minU, maxU = -0.8973235906436031, 1.0859991093945718
-        minV, maxV = -0.6647028130174489, 0.5259408400292674
-
-        # Normalize and multiply by 255
-        adjusted_u_arr = (u_array - minU) / (maxU - minU)
-        adjusted_v_arr = (v_array - minV) / (maxV - minV)
-
-        # Convert to tensors
-        u_tensors = torch.from_numpy(adjusted_u_arr)
+        #load tensors
+        u_tensors = torch.from_numpy(self.mat_data['u'])
         u_tensors = u_tensors.permute(*torch.arange(u_tensors.ndim - 1, -1, -1))[tensor_num]
-        v_tensors = torch.from_numpy(adjusted_v_arr)
+        v_tensors = torch.from_numpy(self.mat_data['v'])
         v_tensors = v_tensors.permute(*torch.arange(v_tensors.ndim - 1, -1, -1))[tensor_num]
+        time = torch.from_numpy(self.mat_data['ocean_time'].squeeze())
+
+        # Normalize if wanted
+        #minU, maxU = -0.8973235906436031, 1.0859991093945718
+        #minV, maxV = -0.6647028130174489, 0.5259408400292674
+        #u_tensors = (u_tensors - minU) / (maxU - minU)
+        #v_tensors = (v_tensors - minV) / (maxV - minV)
 
         mask = u_tensors.clone().detach()
-
         # 1 if land, 0 if water
         for x in range(94):
             for y in range(44):
-                if v_tensors[y][x].isnan() or u_tensors[y][x].isnan():
+                if u_tensors[y][x].isnan() or u_tensors[y][x].isnan():
                     mask[y][x] = 0
-                    v_tensors[y][x] = 0
+                    u_tensors[y][x] = 0
                     u_tensors[y][x] = 0
                 else:
                     mask[y][x] = 1
 
-        combined_tensor = torch.stack((u_tensors, v_tensors, mask))
+        combined_tensor = torch.stack((u_tensors, u_tensors, mask))
+
         return combined_tensor
