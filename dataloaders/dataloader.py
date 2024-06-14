@@ -12,16 +12,18 @@ class OceanImageDataset(Dataset):
 
         with open(boundaries, 'r') as file:
             self.boundaries = yaml.safe_load(file)
+        print(f"Loaded {boundaries}")
 
         for n in range(num):
             self.tensor_arr.append(self.load_array(n))
+        print(f"Loaded tensor_arr")
 
     def __len__(self):
         return len(self.tensor_arr)
 
     def __getitem__(self, idx):
         tensor = self.tensor_arr[idx]
-        label = self.tensor_labels
+        label = self.tensor_labels[idx]
         return tensor, label
 
     def load_array(self, tensor_num):
