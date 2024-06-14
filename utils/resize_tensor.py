@@ -1,5 +1,4 @@
 import torch
-from tensors_to_png import generate_png
 
 
 #input should be a 3xAnyXAny tensor and a triple of the desired dimensions for the last two
