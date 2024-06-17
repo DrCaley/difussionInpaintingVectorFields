@@ -22,9 +22,9 @@ def evaluate(model, testloader, device):
                                                         var_per_iteration=0.005).float().to(device)
             tensor = generate_noised_tensor_iterative(target, iteration=1, variance=0.005).float().to(device)
 
-            tensor = resize(tensor, (3, 512, 512)).to(device)
-            target = resize(target, (3, 512, 512)).to(device)
-            mask = resize(mask, (3, 512, 512)).to(device)
+            tensor = resize(tensor, (3, 64, 128)).to(device)
+            target = resize(target, (3, 64, 128)).to(device)
+            mask = resize(mask, (3, 64, 128)).to(device)
 
             output = model(tensor, mask)
 

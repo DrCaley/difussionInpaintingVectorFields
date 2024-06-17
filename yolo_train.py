@@ -3,11 +3,11 @@ from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 from random import randint
 import math
-from dataloader import OceanImageDataset
-from example_nn.inPaintingNetwork import Net
-from resize_tensor import resize
-from image_noiser import generate_noised_tensor_single_step, generate_noised_tensor_iterative
-from eval import evaluate
+from dataloaders.dataloader import OceanImageDataset
+from yolo_net_64x128 import Net
+from utils.resize_tensor import resize
+from utils.image_noiser import generate_noised_tensor_single_step, generate_noised_tensor_iterative
+from utils.eval import evaluate
 
 lr = 0.001
 max_iter = 100
@@ -27,9 +27,9 @@ training_data, test_data, validation_data = random_split(data, [train_len, test_
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-train_loader = DataLoader(training_data, batch_size=1, shuffle=True)
-test_loader = DataLoader(test_data, batch_size=1)
-val_loader = DataLoader(validation_data, batch_size=1)
+train_loader = DataLoader(training_data, batch_size=2, shuffle=True)
+test_loader = DataLoader(test_data, batch_size=2)
+val_loader = DataLoader(validation_data, batch_size=2)
 
 model = Net().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -46,9 +46,9 @@ for epoch in range(num_epochs):
                                                     var_per_iteration=0.005).float().to(device)
         tensor = generate_noised_tensor_iterative(target, iteration=1, variance=0.005).float().to(device)
 
-        tensor = resize(tensor, (3, 512, 512)).to(device)
-        target = resize(target, (3, 512, 512)).to(device)
-        mask = resize(mask, (3, 512, 512)).to(device)
+        tensor = resize(tensor, (3, 64, 128)).to(device)
+        target = resize(target, (3, 64, 128)).to(device)
+        mask = resize(mask, (3, 64, 128)).to(device)
 
         output = model(tensor, mask)
         output = output * mask

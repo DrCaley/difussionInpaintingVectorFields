@@ -23,8 +23,8 @@ class OceanImageDataset(Dataset):
 
     def __getitem__(self, idx):
         tensor = self.tensor_arr[idx]
-        label = self.tensor_labels[idx]
-        return tensor, label
+        #label = self.tensor_labels[idx]
+        return tensor, 0
 
     def load_array(self, tensor_num):
         #load tensors
