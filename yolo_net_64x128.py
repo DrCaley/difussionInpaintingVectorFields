@@ -8,7 +8,7 @@ class Net(nn.Module):
     def __init__(self):
         super(Net,self).__init__()
         # 64 x 128
-        self.conv1 = PConv2d(3, 64, 3, 2, 1)
+        self.conv1 = PConv2d(2, 64, 3, 2, 1)
         # 32 x 64
         self.conv2 = PConv2d(64, 128, 3, 2, 1)
         # 16 x 32
@@ -24,7 +24,7 @@ class Net(nn.Module):
         self.conv7 = PConv2d(768, 256, 3, 1, 1)
         self.conv8 = PConv2d(384, 128, 3, 1, 1)
         self.conv9 = PConv2d(192, 64, 3, 1, 1)
-        self.conv10 = PConv2d(67, 3, 3, 1, 1)
+        self.conv10 = PConv2d(66, 2, 3, 1, 1)
 
         self.batchNorm1 = nn.BatchNorm2d(64)
         self.batchNorm2 = nn.BatchNorm2d(128)

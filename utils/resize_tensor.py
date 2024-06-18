@@ -1,23 +1,36 @@
 import torch
+import numpy as np
 
 
-#input should be a 3xAnyXAny tensor and a triple of the desired dimensions for the last two
-#outputs are normalized, so comparing the strength of currents between maps won't work
+#input should be a tensor with the same number of dimensions as the desired end shape
+#or a greater number of dimensions where the first (input_dim - end_dim) dimensions will be ignored
 def resize(tensors, end_shape):
-    if len(tensors.shape) > 3:
-        return torch.stack( [resize(tensor, end_shape) for tensor in tensors])
-    actual_shape = tensors.shape
-    if actual_shape[0] != 3:
-        raise ValueError(f"Expected tensor with shape (3, Any, Any), but got {actual_shape}.")
+    start_shape = list(tensors.shape)
+    dimensions = len(start_shape)
 
-    #1st dimension
-    zeros_tensor = torch.zeros((actual_shape[0], end_shape[1] - actual_shape[1], actual_shape[2]) )
-    resized_tensor = torch.cat((tensors, zeros_tensor), dim=1)
-    #2nd dimension
-    zeros_tensor = torch.zeros(actual_shape[0], end_shape[1], end_shape[2] - actual_shape[2])
-    resized_tensor = torch.cat((resized_tensor, zeros_tensor), dim=2)
+    if dimensions > len(end_shape):
+        resized_tensors = [resize(tensors[i], end_shape) for i in range(start_shape[0])]
+        return torch.from_numpy(np.array(resized_tensors))
 
-    return resized_tensor
+    if dimensions < len(end_shape):
+        raise ValueError(f"Expected tensor with {len(end_shape)} dimensions,"
+                         f" but got {len(tensors.shape)} dimensions for Tensor with shape {start_shape}.")
+    for i in range(dimensions):
+        if start_shape[i] == end_shape[i]:
+            pass
 
+        elif start_shape[i] > end_shape[i]:
+            diff = start_shape[i] - end_shape[i]
+            slices = [slice(0, start_shape[j] - diff) if j == i else slice(None) for j in range(dimensions)]
+            tensors = tensors[tuple(slices)]
 
-#generate_png(resize(torch.load("./data/tensors/0.pt"), (3, 512, 512)), )
+        elif end_shape[i] > start_shape[i]:
+            diff = end_shape[i] - start_shape[i]
+            zeros_shape = list(tensors.shape)
+            zeros_shape[i] = diff
+            zero_tensor = torch.zeros(tuple(zeros_shape))
+            tensors = torch.concat((tensors, zero_tensor), dim=i)
+
+    return tensors
+
+#generate_png(resize(torch.load("../data/tensors/0.pt"), (2, 64, 128)), )

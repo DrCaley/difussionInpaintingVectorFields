@@ -2,6 +2,7 @@ import torch
 from utils.resize_tensor import resize
 from utils.image_noiser import generate_noised_tensor_single_step, generate_noised_tensor_iterative
 from random import randint
+#from utils.tensors_to_png import generate_png
 
 
 def unnormalize(tensor, mean, std):
@@ -22,11 +23,13 @@ def evaluate(model, testloader, device):
                                                         var_per_iteration=0.005).float().to(device)
             tensor = generate_noised_tensor_iterative(target, iteration=1, variance=0.005).float().to(device)
 
-            tensor = resize(tensor, (3, 64, 128)).to(device)
-            target = resize(target, (3, 64, 128)).to(device)
-            mask = resize(mask, (3, 64, 128)).to(device)
+            tensor = resize(tensor, (2, 64, 128)).to(device)
+            target = resize(target, (2, 64, 128)).to(device)
+            mask = resize(mask, (2, 64, 128)).to(device)
 
             output = model(tensor, mask)
+
+            #generate_png(torch.concat((output[0], mask[0][0:1]), dim=1))
 
             output = output * mask
             target = target * mask
