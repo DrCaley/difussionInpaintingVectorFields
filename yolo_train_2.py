@@ -55,6 +55,9 @@ for epoch in range(num_epochs):
         target = target * mask
         loss = ((output - target) ** 2 * mask).sum() / mask.sum()
 
+        if i == 0:
+            print("Loss: ", loss)
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

@@ -72,23 +72,22 @@ def get_known_samples(tensor, num_known_points):
 
 
 for num, (tensor, _) in enumerate(val_loader):
-    if num == 0:
-        val_tensor = tensor.to(device).float()
-        num_known_points = 340
+    val_tensor = tensor.to(device).float()
+    num_known_points = 340
 
-        known_samples, known_mask = get_known_samples(val_tensor, num_known_points)
-        land_mask = (tensor != 0).float()
+    known_samples, known_mask = get_known_samples(val_tensor, num_known_points)
+    land_mask = (tensor != 0).float()
 
-        known_samples = resize(known_samples, (2, 64, 128)).to(device)
-        known_mask = resize(known_mask, (2, 64, 128)).to(device)
-        land_mask = resize(land_mask, (2, 64, 128)).to(device)
+    known_samples = resize(known_samples, (2, 64, 128)).to(device)
+    known_mask = resize(known_mask, (2, 64, 128)).to(device)
+    land_mask = resize(land_mask, (2, 64, 128)).to(device)
 
-        noised_samples = generate_noised_tensor_iterative(known_samples, T, variance=0.005).float().to(device)
+    noised_samples = generate_noised_tensor_iterative(known_samples, T, variance=0.005).float().to(device)
 
-        print(f"Starting to sample {num}/{len(val_loader)} number of validation set")
-        samples = generate_samples(model, T, device, noised_samples, land_mask)
+    print(f"Starting to sample {num}/{len(val_loader)} number of validation set")
+    samples = generate_samples(model, T, device, noised_samples, land_mask)
 
-        for i, sample in enumerate(samples):
-            generate_png(sample, scale=9)
+    for i, sample in enumerate(samples):
+        generate_png(sample * land_mask, scale=9)
 
-        break
+    break

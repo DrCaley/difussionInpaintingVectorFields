@@ -6,7 +6,7 @@ import torch
 
 #input should be a 3 by n by m tensor
 #outputs are normalized, so comparing the strength of currents between maps won't work
-def generate_png(tensors, scale=9):
+def generate_png(tensors, scale=1):
 
     shape = tensors.shape
     channels = shape[0]
