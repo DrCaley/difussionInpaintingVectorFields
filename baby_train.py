@@ -2,8 +2,8 @@ import math
 import random
 import torch
 from torch import nn, optim
-from image_noiser import generate_noised_tensor_iterative, generate_noised_tensor_single_step
-from dataloader import OceanImageDataset
+from utils.image_noiser import generate_noised_tensor_iterative, generate_noised_tensor_single_step
+from dataloaders.dataloader import OceanImageDataset
 from torch.utils.data import DataLoader, random_split
 import setproctitle
 

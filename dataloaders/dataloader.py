@@ -16,6 +16,7 @@ class OceanImageDataset(Dataset):
 
         for n in range(num):
             self.tensor_arr.append(self.load_array(n))
+            self.tensor_labels.append(n)
         print(f"Loaded tensor_arr")
 
     def __len__(self):
