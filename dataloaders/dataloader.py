@@ -25,7 +25,7 @@ class OceanImageDataset(Dataset):
     def __getitem__(self, idx):
         tensor = self.tensor_arr[idx]
         #label = self.tensor_labels[idx]
-        return tensor, 0
+        return tensor, idx
 
     def load_array(self, tensor_num):
         #load tensors
@@ -45,13 +45,13 @@ class OceanImageDataset(Dataset):
         # 1 if land, 0 if water
         for x in range(94):
             for y in range(44):
-                if u_tensors[y][x].isnan() or u_tensors[y][x].isnan():
+                if u_tensors[y][x].isnan() or v_tensors[y][x].isnan():
                     mask[y][x] = 0
                     u_tensors[y][x] = 0
-                    u_tensors[y][x] = 0
+                    v_tensors[y][x] = 0
                 else:
                     mask[y][x] = 1
 
-        combined_tensor = torch.stack((u_tensors, u_tensors, mask))
+        combined_tensor = torch.stack((u_tensors, v_tensors, mask))
 
         return combined_tensor
