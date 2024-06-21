@@ -63,6 +63,7 @@ def get_known_samples(tensor, num_known_points):
 
     known_indices = sample(ocean_indices, num_known_points)
 
+    # verify these are correct
     known_mask = torch.zeros_like(tensor)
     for (y, x) in known_indices:
         known_mask[:, :, y, x] = 1.0

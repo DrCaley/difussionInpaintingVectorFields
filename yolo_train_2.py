@@ -63,6 +63,13 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
 
+        # do train
+        if (epoch * len(train_loader) + batch) % 1000 == 0:
+            model.eval()
+            avg_loss = evaluate(model, train_loader, device)
+            print(f"Evaluation at step {(epoch * len(train_loader) + batch + 1)}: {avg_loss}")
+            model.train()
+
         if (epoch * len(train_loader) + batch) % 1000 == 0:
             model.eval()
             avg_loss = evaluate(model, test_loader, device)
