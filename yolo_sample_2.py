@@ -6,7 +6,6 @@ from dataloaders.dataloader import OceanImageDataset
 from yolo_net_64x128 import Net
 from utils.resize_tensor import resize
 from utils.tensors_to_png import generate_png
-from utils.eval import evaluate
 from utils.image_noiser import generate_noised_tensor_iterative
 
 data = OceanImageDataset(
@@ -31,10 +30,12 @@ test_loader = DataLoader(test_data, batch_size=batch_size)
 val_loader = DataLoader(validation_data, batch_size=batch_size)
 
 model = Net().to(device)
-model_path = 'models/yolo_model_epoch_150.pth'
+model_path = 'models/yolo_model_epoch_10.pth'
+model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval()
 
 T = 1
+use_known_samples = False  # Toggle to use/not use known samples
 
 
 def generate_samples(model, T, device, noised_samples, mask):
@@ -75,11 +76,15 @@ for num, (tensor, _) in enumerate(val_loader):
     val_tensor = tensor.to(device).float()
     num_known_points = 340
 
-    known_samples, known_mask = get_known_samples(val_tensor, num_known_points)
-    land_mask = (tensor != 0).float()
+    if use_known_samples:
+        known_samples, known_mask = get_known_samples(val_tensor, num_known_points)
+        known_samples = resize(known_samples, (2, 64, 128)).to(device)
+        known_mask = resize(known_mask, (2, 64, 128)).to(device)
+    else:
+        known_samples = resize(val_tensor, (2, 64, 128)).to(device)
+        known_mask = torch.ones_like(val_tensor)
 
-    known_samples = resize(known_samples, (2, 64, 128)).to(device)
-    known_mask = resize(known_mask, (2, 64, 128)).to(device)
+    land_mask = (tensor != 0).float()
     land_mask = resize(land_mask, (2, 64, 128)).to(device)
 
     noised_samples = generate_noised_tensor_iterative(known_samples, T, variance=0.005).float().to(device)
@@ -87,7 +92,6 @@ for num, (tensor, _) in enumerate(val_loader):
     print(f"Starting to sample {num}/{len(val_loader)} number of validation set")
     samples = generate_samples(model, T, device, noised_samples, land_mask)
 
-    for i, sample in enumerate(samples):
-        generate_png(sample * land_mask, scale=9)
+    generate_png(samples, scale=9, output_path="./results", filename=f"output_{num}.png")
 
     break
