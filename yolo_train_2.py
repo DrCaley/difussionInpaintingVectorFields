@@ -4,6 +4,7 @@ from tqdm import tqdm
 from random import randint
 import math
 from dataloaders.dataloader import OceanImageDataset
+from utils.loss import MSE_with_flow
 from yolo_net_64x128 import Net
 from utils.resize_tensor import resize
 from utils.image_noiser import generate_noised_tensor_single_step, generate_noised_tensor_iterative
@@ -15,7 +16,7 @@ max_iter = 100
 data = OceanImageDataset(
     mat_file="./data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
     boundaries="./data/rams_head/boundaries.yaml",
-    num=17040
+    num=10
 )
 
 train_len = int(math.floor(len(data) * 0.7))
@@ -28,8 +29,8 @@ training_data, test_data, validation_data = random_split(data, [train_len, test_
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 train_loader = DataLoader(training_data, batch_size=5, shuffle=True)
-test_loader = DataLoader(test_data, batch_size=50)
-val_loader = DataLoader(validation_data, batch_size=50)
+test_loader = DataLoader(test_data, batch_size=5)
+val_loader = DataLoader(validation_data, batch_size=5)
 
 model = Net().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -51,9 +52,11 @@ for epoch in range(num_epochs):
         mask = resize(mask, (2, 64, 128)).to(device)
 
         output = model(tensor, mask)
+
         output = output * mask
         target = target * mask
-        loss = ((output - target) ** 2 * mask).sum() / mask.sum()
+
+        loss = MSE_with_flow(output, target, mask)
 
         if i == 0:
             print("Loss: ", loss)

@@ -34,7 +34,7 @@ model = Net().to(device)
 model_path = 'models/yolo_model_epoch_150.pth'
 model.eval()
 
-T = 1
+T = 100
 
 
 def generate_samples(model, T, device, noised_samples, mask):
@@ -88,6 +88,7 @@ for num, (tensor, _) in enumerate(val_loader):
     samples = generate_samples(model, T, device, noised_samples, land_mask)
 
     for i, sample in enumerate(samples):
-        generate_png(sample * land_mask, scale=9)
+        sample = torch.concat(((sample*land_mask[0][0:1]), land_mask[0])) #add blue to make it pretty
+        generate_png(sample, scale=9)
 
     break
