@@ -1,53 +1,43 @@
 from random import sample
 import torch
-from torch.utils.data import DataLoader, random_split
-import math
-from dataloaders.dataloader import OceanImageDataset
+from torch.utils.data import DataLoader
+from torchvision import datasets
+from torchvision.transforms import ToTensor
 from yolo_net_64x128 import Net
 from utils.resize_tensor import resize
 from utils.tensors_to_png import generate_png
 from utils.image_noiser import generate_noised_tensor_iterative
 
-data = OceanImageDataset(
-    mat_file="./data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
-    boundaries="./data/rams_head/boundaries.yaml",
-    num=10
+
+test_data = datasets.FashionMNIST(
+    root="data",
+    train=False,
+    download=True,
+    transform=ToTensor()
 )
 
-train_len = int(math.floor(len(data) * 0.7))
-test_len = int(math.floor(len(data) * 0.15))
-val_len = len(data) - train_len - test_len
-
-torch.manual_seed(42)
-training_data, test_data, validation_data = random_split(data, [train_len, test_len, val_len])
+test_dataloader = DataLoader(test_data, batch_size=15, shuffle=True)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-batch_size = 15
-
-train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(test_data, batch_size=batch_size)
-val_loader = DataLoader(validation_data, batch_size=batch_size)
-
 model = Net().to(device)
-model_path = 'models/yolo_model_epoch_10.pth'
+model_path = 'models/mnist_model_ep_1.pth'
 model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval()
 
-T = 1
-use_known_samples = False  # Toggle to use/not use known samples
+
+T = 100
+use_known_samples = False
 
 
 def generate_samples(model, T, device, noised_samples, mask):
     sample = noised_samples.clone().float().to(device)
-
     for t in range(T):
         with torch.no_grad():
             predicted_noise = model(sample, mask)
             sample = sample - predicted_noise
-
+            sample = sample * (1 - mask)
     return sample
-
 
 def get_known_samples(tensor, num_known_points):
     b, c, h, w = tensor.shape
@@ -63,7 +53,7 @@ def get_known_samples(tensor, num_known_points):
 
     known_indices = sample(ocean_indices, num_known_points)
 
-    # verify these are correct
+    # Verify these are correct
     known_mask = torch.zeros_like(tensor)
     for (y, x) in known_indices:
         known_mask[:, :, y, x] = 1.0
@@ -73,7 +63,7 @@ def get_known_samples(tensor, num_known_points):
     return known_samples, known_mask
 
 
-for num, (tensor, _) in enumerate(val_loader):
+for num, (tensor, _) in enumerate(test_dataloader):
     val_tensor = tensor.to(device).float()
     num_known_points = 340
 
@@ -83,16 +73,18 @@ for num, (tensor, _) in enumerate(val_loader):
         known_mask = resize(known_mask, (2, 64, 128)).to(device)
     else:
         known_samples = resize(val_tensor, (2, 64, 128)).to(device)
-        known_mask = torch.ones_like(val_tensor)
+        known_mask = torch.ones_like(known_samples).to(device)
 
-    land_mask = (tensor != 0).float()
-    land_mask = resize(land_mask, (2, 64, 128)).to(device)
+
+    land_mask = torch.zeros_like(known_samples).to(device)
+
+    land_mask[:, :, 10:20, 10:20] = 1
 
     noised_samples = generate_noised_tensor_iterative(known_samples, T, variance=0.005).float().to(device)
 
-    print(f"Starting to sample {num}/{len(val_loader)} number of validation set")
+    print(f"Starting to sample {num}/{len(test_dataloader)} number of validation set")
     samples = generate_samples(model, T, device, noised_samples, land_mask)
 
-    generate_png(samples, scale=9, output_path="./results", filename=f"output_{num}.png")
+    generate_png(samples.cpu(), scale=9, output_path="./results", filename=f"output_{num}.png")
 
     break
