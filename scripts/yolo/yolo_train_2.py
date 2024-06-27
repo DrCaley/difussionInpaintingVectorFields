@@ -4,6 +4,7 @@ from tqdm import tqdm
 from random import randint
 import math
 from dataloaders.dataloader import OceanImageDataset
+from utils.loss import MSE_with_flow
 from yolo_net_64x128 import Net
 from utils.resize_tensor import resize
 from utils.image_noiser import generate_noised_tensor_single_step, generate_noised_tensor_iterative
@@ -52,9 +53,11 @@ for epoch in range(num_epochs):
         mask = resize(mask, (2, 64, 128)).to(device)
 
         output = model(tensor, mask)
+
         output = output * mask
         target = target * mask
-        loss = ((output - target) ** 2 * mask).sum() / mask.sum()
+
+        loss = MSE_with_flow(output, target, mask)
 
         if batch % 1000 == 0:
             print(f"Epoch [{epoch}/{num_epochs}], Step [{batch}/{len(train_loader)}], Loss: {loss.item()}")

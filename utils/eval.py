@@ -1,7 +1,9 @@
 import torch
 from utils.resize_tensor import resize
 from utils.image_noiser import generate_noised_tensor_single_step, generate_noised_tensor_iterative
+from utils.loss import MSE_with_flow
 from random import randint
+
 #from utils.tensors_to_png import generate_png
 
 
@@ -29,12 +31,8 @@ def evaluate(model, testloader, device):
 
             output = model(tensor, mask)
 
+            tot_loss += MSE_with_flow(output, target, mask)
             #generate_png(torch.concat((output[0], mask[0][0:1]), dim=1))
-
-            output = output * mask
-            target = target * mask
-            loss = ((output - target) ** 2 * mask).sum() / mask.sum()
-            tot_loss += loss
 
     avg_loss = tot_loss / len(testloader)
     return avg_loss
