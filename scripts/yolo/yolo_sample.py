@@ -9,7 +9,7 @@ from utils.image_noiser import generate_noised_tensor_single_step, generate_nois
 
 
 data = OceanImageDataset(
-    mat_file="./data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+    mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
     boundaries="./data/rams_head/boundaries.yaml",
     num=10
 )
@@ -30,7 +30,7 @@ test_loader = DataLoader(test_data, batch_size=batch_size)
 val_loader = DataLoader(validation_data, batch_size=batch_size)
 
 model = Net().to(device)
-model_path = 'models/model_ep_149.pth'
+model_path = '../../models/model_ep_149.pth'
 model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval()
 
@@ -50,11 +50,27 @@ def generate_samples(model, T, device, noised_samples, mask):
     return sample
 
 def get_known_samples(tensor, num_known_points):
-    mask = (tensor != 0).float()
+    b, c, h, w = tensor.shape
+    total_points = h * w
 
-    known_samples = tensor * mask
+    if num_known_points > total_points:
+        raise ValueError("num_known_points is greater than the total number of points in the tensor")
 
-    return known_samples, mask
+    ocean_indices = [(y, x) for y in range(h) for x in range(w) if tensor[:, :, y, x].sum() == 0]
+
+    if num_known_points > len(ocean_indices):
+        raise ValueError("num_known_points is greater than the number of ocean points")
+
+    known_indices = sample(ocean_indices, num_known_points)
+
+    # verify these are correct
+    known_mask = torch.zeros_like(tensor)
+    for (y, x) in known_indices:
+        known_mask[:, :, y, x] = 1.0
+
+    known_samples = tensor * known_mask
+
+    return known_samples, known_mask
 
 for num, (tensor, _) in enumerate(val_loader):
     if num == 0:

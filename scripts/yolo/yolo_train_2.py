@@ -12,7 +12,7 @@ from utils.eval import evaluate
 
 
 data = OceanImageDataset(
-    mat_file="./data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+    mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
     boundaries="./data/rams_head/boundaries.yaml",
     num=10
 )
