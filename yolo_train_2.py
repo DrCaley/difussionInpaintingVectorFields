@@ -10,8 +10,6 @@ from utils.resize_tensor import resize
 from utils.image_noiser import generate_noised_tensor_single_step, generate_noised_tensor_iterative
 from utils.eval import evaluate
 
-lr = 0.001
-max_iter = 100
 
 data = OceanImageDataset(
     mat_file="./data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
@@ -28,18 +26,21 @@ training_data, test_data, validation_data = random_split(data, [train_len, test_
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-train_loader = DataLoader(training_data, batch_size=5, shuffle=True)
-test_loader = DataLoader(test_data, batch_size=5)
-val_loader = DataLoader(validation_data, batch_size=5)
+batch_size = 15
+
+train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
+test_loader = DataLoader(test_data, batch_size=batch_size)
+val_loader = DataLoader(validation_data, batch_size=batch_size)
 
 model = Net().to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
 
-num_epochs = 150
+num_epochs = 10
+save_interval = 1
 
 for epoch in range(num_epochs):
     model.train()
-    for i, (tensor, label) in enumerate(tqdm(train_loader)):
+    for batch, (tensor, label) in enumerate(tqdm(train_loader)):
         tensor = tensor.float()
         mask = (tensor != 0).float()
 
@@ -58,16 +59,29 @@ for epoch in range(num_epochs):
 
         loss = MSE_with_flow(output, target, mask)
 
-        if i == 0:
-            print("Loss: ", loss)
+        if batch % 1000 == 0:
+            print(f"Epoch [{epoch}/{num_epochs}], Step [{batch}/{len(train_loader)}], Loss: {loss.item()}")
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-    if (epoch + 1) % 5 == 0:
-        model.eval()
-        avg_loss = evaluate(model, test_loader, device)
-        print(f"Evaluation at Epoch {str(epoch)}: "
-              f"{avg_loss}")
-        model.train()
+        # do train
+        if (epoch * len(train_loader) + batch) % 1000 == 0:
+            model.eval()
+            avg_loss = evaluate(model, train_loader, device)
+            print(f"Evaluation at step {(epoch * len(train_loader) + batch + 1)}: {avg_loss}")
+            model.train()
+
+        if (epoch * len(train_loader) + batch) % 1000 == 0:
+            model.eval()
+            avg_loss = evaluate(model, test_loader, device)
+            print(f"Evaluation at step {(epoch * len(train_loader) + batch + 1)}: {avg_loss}")
+            model.train()
+
+    if (epoch + 1) % save_interval == 0:
+        model_path = f'yolo_model_epoch_{epoch + 1}.pth'
+        torch.save(model.state_dict(), model_path)
+        print(f"Model saved to {model_path}")
+
+print("Training complete.")
