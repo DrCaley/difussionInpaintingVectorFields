@@ -5,6 +5,7 @@ from skimage.util import random_noise
 import matplotlib.pyplot as plt
 import torch
 from utils.tensors_to_png import generate_png
+import math
 
 
 def save_noisy_image(tensor, mode, iteration, output_dir):
@@ -33,10 +34,9 @@ def generate_noised_tensor_iterative(tensor, iteration, variance, mode="gaussian
     :return: A noised tensor applied with variance * iteration amount of noise
     """
     noisy_ndarr = tensor.clone().numpy()
+    noisy_ndarr *= math.sqrt(1 - variance) #scale to stay within bounds
     for i in range(iteration):
         noisy_ndarr = random_noise(noisy_ndarr, mode, var=variance, clip=False)
-        fix_extremes = np.vectorize(ensure_bounds)
-        noisy_ndarr = fix_extremes(noisy_ndarr, tensor.numpy(), variance)
     return torch.tensor(noisy_ndarr)
 
 
@@ -52,15 +52,15 @@ def generate_noised_tensor_single_step(tensor, target_iteration, var_per_iterati
     :param mode: The type of noise to be applied. Default is "gaussian".
     """
     total_var = var_per_iteration * target_iteration
+    if total_var > 0.99:
+        halfway = generate_noised_tensor_single_step(tensor, target_iteration / 2, var_per_iteration, mode="gaussian")
+        return generate_noised_tensor_single_step(halfway, target_iteration / 2, var_per_iteration, mode="gaussian")
+
+    noisy_ndarr = torch.clone(tensor).numpy()
+    noisy_ndarr *= math.sqrt(1 - total_var) #scale to fit bounds
     noisy_ndarr = random_noise(tensor.numpy(), mode, var=total_var, clip=False)
-    fix_extremes = np.vectorize(ensure_bounds)
-    noisy_ndarr = fix_extremes(noisy_ndarr, tensor.numpy(), total_var)
     return torch.tensor(noisy_ndarr)
 
-def ensure_bounds(val, prev, var, ceiling=1.5, floor=-1.0 ):
-    while val > ceiling or val < floor:
-        val = random_noise(np.array(prev), var=var, clip=False)
-    return val
 
 def main():
     path = "./../data/tensors/0.pt"
@@ -77,7 +77,10 @@ def main():
                                                               variance=var_per_iteration)
     noisy_tensor_single_step = generate_noised_tensor_single_step(tensor, target_iteration=target_iteration,
                                                                   var_per_iteration=var_per_iteration)
-
+    iterative_ndarr = noisy_tensor_iterative.numpy()
+    single_step_ndarr = noisy_tensor_single_step.numpy()
+    iterative_std = [[np.std(iterative_ndarr[c][x]) for x in range(44)] for c in range(3)]
+    mean_std = sum(iterative_std) / len(iterative_std)
     generate_png(noisy_tensor_single_step, scale=16, filename="single_step_no_clip.png")
     generate_png(noisy_tensor_iterative, scale=16, filename="iterative_no_clip.png")
 

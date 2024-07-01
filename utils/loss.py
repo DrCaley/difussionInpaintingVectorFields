@@ -3,15 +3,14 @@ from utils.stream_flow import calculate_flow
 def MSE_with_flow(predicted, target, mask, weight=1.0):
     predicted = predicted * mask
     target = target * mask
-
     flow_diff = torch.abs(calculate_flow(predicted)) - torch.abs(calculate_flow(target))
     flow_diff = flow_diff * mask
     flow_diff[flow_diff < 0.0] = 0.0
 
-    pixel_MSE = ((predicted - target) ** 2).sum() / mask.sum()
+    current_MSE = ((predicted - target) ** 2).sum() / mask.sum()
     flow_MSE = (flow_diff ** 2).sum() / mask.sum()
 
     if(flow_MSE > 0):
         print(f"Flow_MSE: {flow_MSE}")
 
-    return pixel_MSE + flow_MSE * weight
+    return current_MSE + flow_MSE * weight
