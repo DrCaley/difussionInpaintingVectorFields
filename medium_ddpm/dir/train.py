@@ -14,7 +14,8 @@ from torchvision.datasets.mnist import MNIST, FashionMNIST
 
 from ddpm import MyDDPM
 from unet import MyUNet
-from utils import show_images, generate_new_images
+from utils import show_images
+from sample import generate_new_images
 
 # Setting reproducibility
 SEED = 0
