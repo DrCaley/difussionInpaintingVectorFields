@@ -12,13 +12,12 @@ def sinusoidal_embedding(n, d):
     :param d: Dimensionality of the embedding
     :return: Tensor of shape (n, d) containing the sinusoidal embeddings.
     """
-    # Returns the standard positional embedding
     embedding = torch.zeros(n, d)
     wk = torch.tensor([1 / 10_000 ** (2 * j / d) for j in range(d)])
     wk = wk.reshape((1, d))
     t = torch.arange(n).reshape((n, 1))
-    embedding[:,::2] = torch.sin(t * wk[:,::2])
-    embedding[:,1::2] = torch.cos(t * wk[:,::2])
+    embedding[:, ::2] = torch.sin(t * wk[:, ::2])
+    embedding[:, 1::2] = torch.cos(t * wk[:, ::2])
 
     return embedding
 
@@ -50,99 +49,111 @@ class MyUNet(nn.Module):
         self.time_embed.weight.data = sinusoidal_embedding(n_steps, time_emb_dim)
         self.time_embed.requires_grad_(False)
 
-        # First half
+        # First half of the network (downsampling path)
         self.te1 = self._make_te(time_emb_dim, 1)
         self.b1 = nn.Sequential(
-            MyBlock((1, 28, 28), 1, 10),
-            MyBlock((10, 28, 28), 10, 10),
-            MyBlock((10, 28, 28), 10, 10)
+            MyBlock((1, 64, 128), 1, 16),
+            MyBlock((16, 64, 128), 16, 16),
+            MyBlock((16, 64, 128), 16, 16)
         )
-        self.down1 = nn.Conv2d(10, 10, 4, 2, 1)
+        self.down1 = nn.Conv2d(16, 16, 4, 2, 1)  # (64x128) -> (32x64)
 
-        self.te2 = self._make_te(time_emb_dim, 10)
+        self.te2 = self._make_te(time_emb_dim, 16)
         self.b2 = nn.Sequential(
-            MyBlock((10, 14, 14), 10, 20),
-            MyBlock((20, 14, 14), 20, 20),
-            MyBlock((20, 14, 14), 20, 20)
+            MyBlock((16, 32, 64), 16, 32),
+            MyBlock((32, 32, 64), 32, 32),
+            MyBlock((32, 32, 64), 32, 32)
         )
-        self.down2 = nn.Conv2d(20, 20, 4, 2, 1)
+        self.down2 = nn.Conv2d(32, 32, 4, 2, 1)  # (32x64) -> (16x32)
 
-        self.te3 = self._make_te(time_emb_dim, 20)
+        self.te3 = self._make_te(time_emb_dim, 32)
         self.b3 = nn.Sequential(
-            MyBlock((20, 7, 7), 20, 40),
-            MyBlock((40, 7, 7), 40, 40),
-            MyBlock((40, 7, 7), 40, 40)
+            MyBlock((32, 16, 32), 32, 64),
+            MyBlock((64, 16, 32), 64, 64),
+            MyBlock((64, 16, 32), 64, 64)
         )
         self.down3 = nn.Sequential(
-            nn.Conv2d(40, 40, 2, 1),
+            nn.Conv2d(64, 64, 4, 2, 1),  # (16x32) -> (8x16)
             nn.SiLU(),
-            nn.Conv2d(40, 40, 4, 2, 1)
+            nn.Conv2d(64, 64, 4, 2, 1)  # (8x16) -> (4x8)
         )
 
-        # Bottleneck
-        self.te_mid = self._make_te(time_emb_dim, 40)
+        # Bottleneck (middle part of the network)
+        self.te_mid = self._make_te(time_emb_dim, 64)
         self.b_mid = nn.Sequential(
-            MyBlock((40, 3, 3), 40, 20),
-            MyBlock((20, 3, 3), 20, 20),
-            MyBlock((20, 3, 3), 20, 40)
+            MyBlock((64, 4, 8), 64, 128),
+            MyBlock((128, 4, 8), 128, 128),
+            MyBlock((128, 4, 8), 128, 64)
         )
 
-        # Second half
+        # Second half of the network (upsampling path)
         self.up1 = nn.Sequential(
-            nn.ConvTranspose2d(40, 40, 4, 2, 1),
+            nn.ConvTranspose2d(64, 64, 4, 2, 1),  # (4x8) -> (8x16)
             nn.SiLU(),
-            nn.ConvTranspose2d(40, 40, 2, 1)
+            nn.ConvTranspose2d(64, 64, 4, 2, 1)  # (8x16) -> (16x32)
         )
 
-        self.te4 = self._make_te(time_emb_dim, 80)
+        self.te4 = self._make_te(time_emb_dim, 128)
         self.b4 = nn.Sequential(
-            MyBlock((80, 7, 7), 80, 40),
-            MyBlock((40, 7, 7), 40, 20),
-            MyBlock((20, 7, 7), 20, 20)
+            MyBlock((128, 16, 32), 128, 64),
+            MyBlock((64, 16, 32), 64, 32),
+            MyBlock((32, 16, 32), 32, 32)
         )
 
-        self.up2 = nn.ConvTranspose2d(20, 20, 4, 2, 1)
-        self.te5 = self._make_te(time_emb_dim, 40)
+        self.up2 = nn.ConvTranspose2d(32, 32, 4, 2, 1)  # (16x32) -> (32x64)
+        self.te5 = self._make_te(time_emb_dim, 64)
         self.b5 = nn.Sequential(
-            MyBlock((40, 14, 14), 40, 20),
-            MyBlock((20, 14, 14), 20, 10),
-            MyBlock((10, 14, 14), 10, 10)
+            MyBlock((64, 32, 64), 64, 32),
+            MyBlock((32, 32, 64), 32, 16),
+            MyBlock((16, 32, 64), 16, 16)
         )
 
-        self.up3 = nn.ConvTranspose2d(10, 10, 4, 2, 1)
-        self.te_out = self._make_te(time_emb_dim, 20)
+        self.up3 = nn.ConvTranspose2d(16, 16, 4, 2, 1)  # (32x64) -> (64x128)
+        self.te_out = self._make_te(time_emb_dim, 32)
         self.b_out = nn.Sequential(
-            MyBlock((20, 28, 28), 20, 10),
-            MyBlock((10, 28, 28), 10, 10),
-            MyBlock((10, 28, 28), 10, 10, normalize=False)
+            MyBlock((32, 64, 128), 32, 16),
+            MyBlock((16, 64, 128), 16, 16),
+            MyBlock((16, 64, 128), 16, 16, normalize=False)
         )
 
-        self.conv_out = nn.Conv2d(10, 1, 3, 1, 1)
+        self.conv_out = nn.Conv2d(16, 1, 3, 1, 1)
 
     def forward(self, x, t):
-        # x is (N, 2, 28, 28) (image with positional embedding stacked on channel dimension)
+        # Get the time embedding
         t = self.time_embed(t)
         n = len(x)
-        out1 = self.b1(x + self.te1(t).reshape(n, -1, 1, 1))  # (N, 10, 28, 28)
-        out2 = self.b2(self.down1(out1) + self.te2(t).reshape(n, -1, 1, 1))  # (N, 20, 14, 14)
-        out3 = self.b3(self.down2(out2) + self.te3(t).reshape(n, -1, 1, 1))  # (N, 40, 7, 7)
 
-        out_mid = self.b_mid(self.down3(out3) + self.te_mid(t).reshape(n, -1, 1, 1))  # (N, 40, 3, 3)
+        # First downsampling block
+        out1 = self.b1(x + self.te1(t).reshape(n, -1, 1, 1))  # (N, 16, 64, 128)
 
-        out4 = torch.cat((out3, self.up1(out_mid)), dim=1)  # (N, 80, 7, 7)
-        out4 = self.b4(out4 + self.te4(t).reshape(n, -1, 1, 1))  # (N, 20, 7, 7)
+        # Second downsampling block
+        out2 = self.b2(self.down1(out1) + self.te2(t).reshape(n, -1, 1, 1))  # (N, 32, 32, 64)
 
-        out5 = torch.cat((out2, self.up2(out4)), dim=1)  # (N, 40, 14, 14)
-        out5 = self.b5(out5 + self.te5(t).reshape(n, -1, 1, 1))  # (N, 10, 14, 14)
+        # Third downsampling block
+        out3 = self.b3(self.down2(out2) + self.te3(t).reshape(n, -1, 1, 1))  # (N, 64, 16, 32)
 
-        out = torch.cat((out1, self.up3(out5)), dim=1)  # (N, 20, 28, 28)
-        out = self.b_out(out + self.te_out(t).reshape(n, -1, 1, 1))  # (N, 1, 28, 28)
+        # Bottleneck
+        out_mid = self.b_mid(self.down3(out3) + self.te_mid(t).reshape(n, -1, 1, 1))  # (N, 128, 4, 8)
 
+        # First upsampling block
+        out4 = torch.cat((out3, self.up1(out_mid)), dim=1)  # (N, 128, 16, 32)
+        out4 = self.b4(out4 + self.te4(t).reshape(n, -1, 1, 1))  # (N, 64, 16, 32)
+
+        # Second upsampling block
+        out5 = torch.cat((out2, self.up2(out4)), dim=1)  # (N, 64, 32, 64)
+        out5 = self.b5(out5 + self.te5(t).reshape(n, -1, 1, 1))  # (N, 32, 32, 64)
+
+        # Third upsampling block
+        out = torch.cat((out1, self.up3(out5)), dim=1)  # (N, 32, 64, 128)
+        out = self.b_out(out + self.te_out(t).reshape(n, -1, 1, 1))  # (N, 16, 64, 128)
+
+        # Final convolution to get the output
         out = self.conv_out(out)
 
         return out
 
     def _make_te(self, dim_in, dim_out):
+        # Helper function to create a time embedding MLP
         return nn.Sequential(
             nn.Linear(dim_in, dim_out),
             nn.SiLU(),
