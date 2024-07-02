@@ -6,7 +6,7 @@ import os
 
 # Input should be a 3 by n by m tensor
 # Outputs are normalized, so comparing the strength of currents between maps won't work
-def generate_png(tensors, scale=1, output_path="./results", filename="output.png", maxes=None, mins=None):
+def generate_png(tensors, scale=1, output_path="./results", filename="output.png", compare_to=None):
     shape = tensors.shape
     channels = shape[0]
     dim_num = len(shape)
@@ -20,18 +20,21 @@ def generate_png(tensors, scale=1, output_path="./results", filename="output.png
         raise ValueError(f"Expected tensor with at least 3 dimensions,"
                          f" but got {len(shape)} dimensions for Tensor with shape {shape}.")
 
-    if maxes is not None and mins is not None:
-        if channels != len(maxes) or channels != len(mins):
-            raise ValueError(f"Expected one min and max per channel,"
-                            f" but got {len(maxes)} maxes and {len(min)} mins for {channels} channels")
 
     img = Image.new('RGB', (shape[2], shape[1]), color='white')
+
     vectors_arr = tensors.detach().numpy()
-    pixels_arr = np.zeros(shape)
-    if maxes is None:
-        maxes = [np.nanmax(vectors_arr[i]) for i in range(channels)]
-    if mins is None:
-        mins = [np.nanmin(vectors_arr[i]) for i in range(channels)]
+    maxes, mins = [], []
+
+
+    if compare_to is None:
+        compare_to = vectors_arr
+    else:
+        compare_to = compare_to.detach().numpy()
+
+    maxes = [np.nanmax(compare_to[i]) for i in range(channels)]
+    mins = [np.nanmin(compare_to[i]) for i in range(channels)]
+
 
 
     for y in range(shape[1]):

@@ -70,19 +70,27 @@ def main():
     except FileNotFoundError:
         print(f"File not found at path: {path}")
 
-    target_iteration = 1000
     var_per_iteration = 0.005
 
-    noisy_tensor_iterative = generate_noised_tensor_iterative(tensor, iteration=target_iteration,
-                                                              variance=var_per_iteration)
-    noisy_tensor_single_step = generate_noised_tensor_single_step(tensor, target_iteration=target_iteration,
-                                                                  var_per_iteration=var_per_iteration)
-    iterative_ndarr = noisy_tensor_iterative.numpy()
-    single_step_ndarr = noisy_tensor_single_step.numpy()
-    iterative_std = [[np.std(iterative_ndarr[c][x]) for x in range(44)] for c in range(3)]
-    mean_std = sum(iterative_std) / len(iterative_std)
-    generate_png(noisy_tensor_single_step, scale=16, filename="single_step_no_clip.png")
-    generate_png(noisy_tensor_iterative, scale=16, filename="iterative_no_clip.png")
+    for i in range(5):
+        target_iteration = i * 10
+        maxes = [0.5, 0.5, 1]
+        mins = [-0.25, -0.25, 0]
+
+        noisy_tensor_iterative = generate_noised_tensor_iterative(tensor, iteration=target_iteration,
+                                                                  variance=var_per_iteration)
+        noisy_tensor_single_step = generate_noised_tensor_single_step(tensor, target_iteration=target_iteration,
+                                                            var_per_iteration=var_per_iteration)
+        generate_png(noisy_tensor_single_step, scale=16, filename=f"single_step_itr{target_iteration}.png",
+                     compare_to=tensor)
+        generate_png(noisy_tensor_iterative, scale=16, filename=f"iterative_itr{target_iteration}.png",
+                     compare_to=tensor)
+
+    # iterative_ndarr = noisy_tensor_iterative.numpy()
+    # single_step_ndarr = noisy_tensor_single_step.numpy()
+    # iterative_std = [[np.std(iterative_ndarr[c][x]) for x in range(44)] for c in range(3)]
+    # starting_std = [[np.std(tensor.numpy()[c][x]) for x in range(44)] for c in range(3)]
+
 
     #
     # fig, axes = plt.subplots(1, 3, figsize=(15, 5))
