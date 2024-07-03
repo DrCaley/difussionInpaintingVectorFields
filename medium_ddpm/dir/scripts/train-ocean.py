@@ -49,7 +49,7 @@ def custom_normalization(tensor):
 # Initialize dataset with transformations
 transform = Compose([
     Lambda(custom_normalization),        # Custom normalization to keep zeros intact
-    ResizeTransform((1, 64, 128))        # Resized to (1, 64, 128)
+    ResizeTransform((2, 64, 128))        # Resized to (2, 64, 128)
 ])
 
 store_path = "../../../models/ddpm_ocean_v0.pt"
@@ -110,9 +110,9 @@ def training_loop(ddpm, loader, n_epochs, optim, device, display=False, store_pa
             x0 = batch[0].to(device).float()
             n = len(x0)
 
-            if epoch == 0:
-                show_images(x0.cpu(), "Original images before noising")
-                # tensors_to_png.generate_png(x0)
+        #    if epoch == 0:
+                #show_images(x0.cpu(), "Original images before noising")
+                #tensors_to_png.generate_png(x0)
 
             eta = torch.randn_like(x0).to(device)  # Generate noise
             t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps

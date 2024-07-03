@@ -52,7 +52,7 @@ class MyUNet(nn.Module):
         # First half of the network (downsampling path)
         self.te1 = self._make_te(time_emb_dim, 1)
         self.b1 = nn.Sequential(
-            MyBlock((1, 64, 128), 1, 16),
+            MyBlock((2, 64, 128), 2, 16),
             MyBlock((16, 64, 128), 16, 16),
             MyBlock((16, 64, 128), 16, 16)
         )
@@ -116,7 +116,7 @@ class MyUNet(nn.Module):
             MyBlock((16, 64, 128), 16, 16, normalize=False)
         )
 
-        self.conv_out = nn.Conv2d(16, 1, 3, 1, 1)
+        self.conv_out = nn.Conv2d(16, 2, 3, 1, 1)
 
     def forward(self, x, t):
         # Get the time embedding
