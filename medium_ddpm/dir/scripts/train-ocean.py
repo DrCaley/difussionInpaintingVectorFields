@@ -40,16 +40,10 @@ class ResizeTransform:
     def __call__(self, tensor):
         return resize(tensor, self.end_shape).float()
 
-
-def custom_normalization(tensor):
-    non_zero_mask = (tensor != 0)
-    tensor[non_zero_mask] = (tensor[non_zero_mask] - 0.5) * 2
-    return tensor
-
 # Initialize dataset with transformations
 transform = Compose([
-    Lambda(custom_normalization),        # Custom normalization to keep zeros intact
-    ResizeTransform((2, 64, 128))        # Resized to (2, 64, 128)
+    Lambda(lambda x: (x - 0.5) * 2),     # Normalize to range [-1, 1]
+    ResizeTransform((2, 64, 128))        # Resized to (1, 64, 128)
 ])
 
 store_path = "../../../models/ddpm_ocean_v0.pt"
