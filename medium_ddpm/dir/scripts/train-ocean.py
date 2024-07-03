@@ -40,15 +40,9 @@ class ResizeTransform:
     def __call__(self, tensor):
         return resize(tensor, self.end_shape).float()
 
-
-def custom_normalization(tensor):
-    non_zero_mask = (tensor != 0)
-    tensor[non_zero_mask] = (tensor[non_zero_mask] - 0.5) * 2
-    return tensor
-
 # Initialize dataset with transformations
 transform = Compose([
-    Lambda(custom_normalization),        # Custom normalization to keep zeros intact
+    Lambda(lambda x: (x - 0.5) * 2),     # Normalize to range [-1, 1]
     ResizeTransform((1, 64, 128))        # Resized to (1, 64, 128)
 ])
 
