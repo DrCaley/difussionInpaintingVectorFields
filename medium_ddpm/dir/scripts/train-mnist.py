@@ -11,7 +11,7 @@ from torchvision.datasets import FashionMNIST
 
 from medium_ddpm.dir.ddpm import MyDDPM
 from medium_ddpm.dir.resize_tensor import resize
-from medium_ddpm.dir.unet import MyUNet
+from medium_ddpm.dir.unet_resized import MyUNet
 from medium_ddpm.dir.utils import show_images, generate_new_images
 
 # Setting reproducibility

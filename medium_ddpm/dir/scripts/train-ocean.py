@@ -11,8 +11,9 @@ from torchvision.transforms import Compose, Lambda
 from dataloaders.dataloader import OceanImageDataset
 from medium_ddpm.dir.ddpm import MyDDPM
 from medium_ddpm.dir.resize_tensor import resize
-from medium_ddpm.dir.unet import MyUNet
+from medium_ddpm.dir.unet_resized import MyUNet
 from medium_ddpm.dir.utils import show_images, generate_new_images
+from utils import tensors_to_png
 
 # Setting reproducibility
 SEED = 0
@@ -27,8 +28,8 @@ n_steps, min_beta, max_beta = 1000, 0.0001, 0.02
 ddpm = MyDDPM(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=device)
 
 no_train = False
-batch_size = 64
-n_epochs = 20
+batch_size = 1
+n_epochs = 1
 lr = 0.001
 
 
@@ -40,17 +41,22 @@ class ResizeTransform:
         return resize(tensor, self.end_shape).float()
 
 
+def custom_normalization(tensor):
+    non_zero_mask = (tensor != 0)
+    tensor[non_zero_mask] = (tensor[non_zero_mask] - 0.5) * 2
+    return tensor
+
 # Initialize dataset with transformations
 transform = Compose([
-    Lambda(lambda x: (x - 0.5) * 2),  # Normalize to range [-1, 1]
-    ResizeTransform((1, 64, 128))  # Resized to (1, 64, 128)
+    Lambda(custom_normalization),        # Custom normalization to keep zeros intact
+    ResizeTransform((1, 64, 128))        # Resized to (1, 64, 128)
 ])
 
-store_path = "../../../models/ddpm_ocean.pt"
+store_path = "../../../models/ddpm_ocean_v0.pt"
 
 data = OceanImageDataset(
     mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
-    boundaries="../../data/rams_head/boundaries.yaml",
+    boundaries="../../../data/rams_head/boundaries.yaml",
     num=10,
     transform=transform
 )
@@ -66,9 +72,34 @@ test_loader = DataLoader(test_data, batch_size=batch_size)
 val_loader = DataLoader(validation_data, batch_size=batch_size)
 
 
+class CustomLoss(nn.Module):
+    def __init__(self, non_zero_weight=5.0, zero_weight=1.0):
+        super(CustomLoss, self).__init__()
+        self.mse = nn.MSELoss(reduction='none')
+        self.mae = nn.L1Loss(reduction='none')
+        self.non_zero_weight = non_zero_weight
+        self.zero_weight = zero_weight
+
+    def forward(self, eta_theta, eta, x0):
+        non_zero_mask = (x0 != 0).float()
+        zero_mask = (x0 == 0).float()
+
+        mse_loss = self.mse(eta_theta, eta)
+        mae_loss = self.mae(eta_theta, eta)
+
+        weighted_mse_loss = mse_loss * (self.non_zero_weight * non_zero_mask + self.zero_weight * zero_mask)
+        weighted_mae_loss = mae_loss * (self.non_zero_weight * non_zero_mask + self.zero_weight * zero_mask)
+
+        weighted_mse_loss = weighted_mse_loss.sum() / (non_zero_mask.sum() * self.non_zero_weight + zero_mask.sum() * self.zero_weight)
+        weighted_mae_loss = weighted_mae_loss.sum() / (non_zero_mask.sum() * self.non_zero_weight + zero_mask.sum() * self.zero_weight)
+
+        return weighted_mse_loss + weighted_mae_loss
+
+
+
 # Training loop function
 def training_loop(ddpm, loader, n_epochs, optim, device, display=False, store_path="ddpm_ocean_model.pt"):
-    mse = nn.MSELoss()
+    custom_loss = CustomLoss()
     best_loss = float("inf")
     n_steps = ddpm.n_steps
 
@@ -79,14 +110,18 @@ def training_loop(ddpm, loader, n_epochs, optim, device, display=False, store_pa
             x0 = batch[0].to(device).float()
             n = len(x0)
 
+            if epoch == 0:
+                show_images(x0.cpu(), "Original images before noising")
+                # tensors_to_png.generate_png(x0)
+
             eta = torch.randn_like(x0).to(device)  # Generate noise
             t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps
 
-            noisy_imgs = ddpm(x0, t, eta)  # Forward process: create noisy images
+            noisy_imgs = ddpm(x0, t, eta)
 
-            eta_theta = ddpm.backward(noisy_imgs, t.reshape(n, -1))  # Predict noise
+            eta_theta = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
-            loss = mse(eta_theta, eta)  # Compute MSE loss
+            loss = custom_loss(eta_theta, eta, x0)
             optim.zero_grad()
             loss.backward()
             optim.step()
@@ -108,33 +143,9 @@ def training_loop(ddpm, loader, n_epochs, optim, device, display=False, store_pa
         print(log_string)
 
 
-# Create optimizer and scheduler
+# Create optimizer
 optimizer = Adam(ddpm.parameters(), lr=lr)
 
 # Run training loop if not skipping training
 if not no_train:
     training_loop(ddpm, loader, n_epochs, optim=optimizer, device=device, store_path=store_path)
-
-
-def evaluate_model(ddpm, loader, device, description):
-    ddpm.eval()
-    mse = nn.MSELoss()
-    total_loss = 0.0
-    with torch.no_grad():
-        for step, batch in enumerate(tqdm(loader, leave=False, desc=description, colour="#0000ff")):
-            x0 = batch[0].to(device).float()
-            n = len(x0)
-
-            eta = torch.randn_like(x0).to(device)
-            t = torch.randint(0, n_steps, (n,)).to(device)
-
-            noisy_imgs = ddpm(x0, t, eta)
-            eta_theta = ddpm.backward(noisy_imgs, t.reshape(n, -1))
-
-            loss = mse(eta_theta, eta)
-            total_loss += loss.item() * len(x0) / len(loader.dataset)
-
-    print(f"{description} Loss: {total_loss:.3f}")
-
-# evaluate_model(ddpm, val_loader, device, "Validation")
-# evaluate_model(ddpm, test_loader, device, "Testing")

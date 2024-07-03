@@ -11,8 +11,9 @@ from torchvision.transforms import Compose, Lambda
 from dataloaders.dataloader import OceanImageDataset
 from medium_ddpm.dir.ddpm import MyDDPM
 from medium_ddpm.dir.resize_tensor import resize
-from medium_ddpm.dir.unet import MyUNet
+from medium_ddpm.dir.unet_resized import MyUNet
 from medium_ddpm.dir.utils import show_images, generate_new_images
+
 # Setting reproducibility
 SEED = 0
 random.seed(SEED)
@@ -42,10 +43,10 @@ class ResizeTransform:
 # Initialize dataset with transformations
 transform = Compose([
     Lambda(lambda x: (x - 0.5) * 2),  # Normalize to range [-1, 1]
-    ResizeTransform((1, 64, 128))  # Resized to (1, 64, 128)
+    ResizeTransform((1, 64, 128))
 ])
 
-store_path = "../../../models/ddpm_ocean.pt"
+store_path = "../../../models/ddpm_ocean_v0.pt"
 
 data = OceanImageDataset(
     mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
