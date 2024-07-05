@@ -20,12 +20,14 @@ def generate_new_images(ddpm, n_samples=16, device=None, frames_per_gif=100, gif
         for idx, t in enumerate(list(range(ddpm.n_steps))[::-1]):
             # Estimating noise to be removed
             time_tensor = (torch.ones(n_samples, 1) * t).to(device).long()
+
+            # estimation of the noise that was added
             eta_theta = ddpm.backward(x, time_tensor)
 
             alpha_t = ddpm.alphas[t]
             alpha_t_bar = ddpm.alpha_bars[t]
 
-            # Partially denoising the image
+            # Gradually removes noise from x over the course of n_steps
             x = (1 / alpha_t.sqrt()) * (x - (1 - alpha_t) / (1 - alpha_t_bar).sqrt() * eta_theta)
 
             if t > 0:
@@ -115,4 +117,24 @@ def show_images(images, title=""):
     fig.suptitle(title, fontsize=30)
 
     # Showing the figure
+    plt.show()
+
+
+def display_side_by_side(original, mask, inpainted, title=""):
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    original = original[0].cpu().numpy().transpose(1, 2, 0)
+    mask = mask[0].cpu().numpy().transpose(1, 2, 0)
+    inpainted = inpainted[0].cpu().numpy().transpose(1, 2, 0)
+
+    axes[0].imshow(original, aspect='auto')
+    axes[0].set_title("Original Image")
+
+    axes[1].imshow(mask, aspect='auto', cmap='gray')
+    axes[1].set_title("Mask")
+
+    axes[2].imshow(inpainted, aspect='auto')
+    axes[2].set_title("Inpainted Image")
+
+    fig.suptitle(title, fontsize=16)
     plt.show()

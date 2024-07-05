@@ -11,13 +11,16 @@ class MyDDPM(nn.Module):
         self.image_chw = image_chw
         self.network = network.to(device)
 
-        # Determines how noise is added to forward process
-        # and how model will attempt to denoise in reverse process
-        # Create a linearly spaced tensor of betas from min_beta to max_beta
+        # Linearly spaced tensor of betas (the variance of the Gaussian noise added)
+        # from min_beta to max_beta
         self.betas = torch.linspace(min_beta, max_beta, n_steps).to(device)
-        # Calculate corresponding alphas
+
+        # Represents the amount of noise to be removed at each step t during
+        # the denoising process
         self.alphas = 1 - self.betas
-        # Calculate cumulative products of alphas (alpha_bars)
+
+        # Cumulative products of alphas (alpha_bars) to determine to how much of
+        # the noise needs to be removed to progressively denoise the image.
         self.alpha_bars = torch.tensor([torch.prod(self.alphas[:i + 1]) for i in range(len(self.alphas))]).to(device)
 
     def forward(self, x0, t, eta=None):
