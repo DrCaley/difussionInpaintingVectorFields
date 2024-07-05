@@ -10,7 +10,7 @@ from torchvision.transforms import Compose, Lambda
 from dataloaders.dataloader import OceanImageDataset
 from medium_ddpm.dir.ddpm import MyDDPM
 from medium_ddpm.dir.resize import ResizeTransform
-from medium_ddpm.dir.unet_resized_v0 import MyUNet
+from medium_ddpm.dir.unet_resized_1_channel import MyUNet
 from medium_ddpm.dir.utils import show_images, generate_new_images
 
 # Setting reproducibility
