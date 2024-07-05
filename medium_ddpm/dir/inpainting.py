@@ -1,10 +1,12 @@
+import math
 import random
 import imageio
 import numpy as np
 import torch
 from einops import rearrange
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose, Lambda
+import torch.nn.functional as F
 
 from dataloaders.dataloader import OceanImageDataset
 from medium_ddpm.dir.ddpm import MyDDPM
@@ -20,10 +22,12 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 
-def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None, frames_per_gif=100, gif_name="sampling.gif", c=1, h=64, w=128):
+def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None, frames_per_gif=100,
+                                gif_name="sampling.gif", c=1, h=64, w=128):
     """Given a DDPM model, an input image, and a mask, generates inpainted samples"""
-    frame_idxs = np.linspace(0, ddpm.n_steps, frames_per_gif).astype(np.uint)
+    frame_idxs = np.linspace(0, ddpm.n_steps - 1, frames_per_gif).astype(np.uint)
     frames = []
+    noised_imgs = [None] * (ddpm.n_steps + 1)
 
     with torch.no_grad():
         if device is None:
@@ -31,12 +35,16 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
 
         input_img = input_image.clone().to(device)
         noise = torch.randn_like(input_img).to(device)
-        eta = torch.randn_like(input_img).to(device)
 
-        noised_input_img = ddpm(input_img, ddpm.n_steps - 1, eta)
-        x = noised_input_img * (1 - mask) + (noise * mask)
+        # Adding noise step by step
+        noised_imgs[0] = input_img
+        for t in range(ddpm.n_steps):
+            eta = torch.randn_like(input_img).to(device)
+            noised_imgs[t+1] = ddpm(noised_imgs[t], t, eta, one_step=True)
 
-        for idx, t in enumerate(list(range(ddpm.n_steps))[::-1]):
+        x = noised_imgs[ddpm.n_steps] * (1 - mask) + (noise * mask)
+
+        for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
             time_tensor = (torch.ones(n_samples, 1) * t).to(device).long()
             eta_theta = ddpm.backward(x, time_tensor)
 
@@ -52,8 +60,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                 sigma_t = beta_t.sqrt()
                 less_noised_img = less_noised_img + sigma_t * z
 
-            noised_x = ddpm(input_img, t - 1000, eta)
-            x = noised_x * (1 - mask) + (less_noised_img * mask)
+            x = noised_imgs[t] * (1 - mask) + (less_noised_img * mask)
 
             # Adding frames to the GIF
             if idx in frame_idxs or t == 0:
@@ -81,6 +88,21 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                     writer.append_data(last_rgb_frame)
     return x
 
+def calculate_mse(original_image, predicted_image, mask):
+    """Calculate Mean Squared Error between the original and predicted images for the masked area only."""
+    masked_original = original_image * mask
+    masked_predicted = predicted_image * mask
+    mse = F.mse_loss(masked_predicted, masked_original, reduction='sum') / mask.sum()
+    return mse
+
+def avg_pixel_value(original_image, predicted_image, mask):
+    avg_pixel_value = torch.sum(torch.abs(original_image * mask)) / mask.sum()
+
+    avg_diff = (torch.sum(torch.abs((predicted_image * mask) - (original_image * mask))) / mask.sum())
+
+    return avg_diff * (100 / avg_pixel_value)
+
+
 n_steps, min_beta, max_beta = 1000, 1e-4, 0.02
 store_path = "../../models/ddpm_ocean_v0.pt"
 
@@ -99,13 +121,23 @@ transform = Compose([
 data = OceanImageDataset(
     mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
     boundaries="../../data/rams_head/boundaries.yaml",
-    num=1,
+    num=17040,
     transform=transform
 )
 
-loader = DataLoader(data, batch_size=1, shuffle=True)
+batch_size = 1
 
-for batch in loader:
+train_len = int(math.floor(len(data) * 0.7))
+test_len = int(math.floor(len(data) * 0.15))
+val_len = len(data) - train_len - test_len
+
+training_data, test_data, validation_data = random_split(data, [train_len, test_len, val_len])
+
+loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
+test_loader = DataLoader(test_data, batch_size=batch_size)
+val_loader = DataLoader(validation_data, batch_size=batch_size)
+
+for batch in test_loader:
     input_image = batch[0].to(device)
     break
 
@@ -121,5 +153,11 @@ final_image = inpaint_generate_new_images(
     device=device,
     gif_name="ocean_inpainting.gif"
 )
+
+mse = calculate_mse(input_image, final_image, mask)
+print("Mean Squared Error:", mse.item())
+
+avg = avg_pixel_value(input_image, final_image, mask)
+print(f"Avg. Pixel Value: %{avg.item()}")
 
 display_side_by_side(input_image, mask, final_image, title="Inpainting Example")

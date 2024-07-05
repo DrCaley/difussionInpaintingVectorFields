@@ -23,12 +23,15 @@ class MyDDPM(nn.Module):
         # the noise needs to be removed to progressively denoise the image.
         self.alpha_bars = torch.tensor([torch.prod(self.alphas[:i + 1]) for i in range(len(self.alphas))]).to(device)
 
-    def forward(self, x0, t, eta=None):
+    def forward(self, x0, t, eta=None, one_step=False):
         # Extract the shape of the input images
         n, c, h, w = x0.shape
 
-        # Get the cumulative product of alphas for the given timestep t
-        a_bar = self.alpha_bars[t]
+        if one_step:
+            a_bar = self.alphas[t]
+        else:
+            # Get the cumulative product of alphas for the given timestep t
+            a_bar = self.alpha_bars[t]
 
         # If eta (noise) is not provided, generate Gaussian noise
         if eta is None:
