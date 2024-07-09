@@ -45,7 +45,7 @@ def generate_png(tensors, scale=1, output_path="./results", filename="output.png
                 if i < channels:
                     denom = maxes[i] - mins[i]
                     if denom == 0:
-                        rgb[i] = 0
+                        rgb[i] = 1
                     else:
                         rgb[i] = (vectors_arr[i][y][x] - mins[i]) / denom
                 if np.isnan(rgb[i]):

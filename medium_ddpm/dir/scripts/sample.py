@@ -1,13 +1,11 @@
 from IPython.display import Image
 import random
-import imageio
 import numpy as np
 import torch
 
 from medium_ddpm.dir.ddpm import MyDDPM
 from medium_ddpm.dir.unet_resized import MyUNet
-from medium_ddpm.dir.utils import show_images, generate_new_images
-from utils import tensors_to_png
+from medium_ddpm.dir.util import show_images, generate_new_images
 
 # Setting reproducibility
 SEED = 0
@@ -17,7 +15,7 @@ torch.manual_seed(SEED)
 
 # Parameters
 n_steps, min_beta, max_beta = 1000, 1e-4, 0.02
-store_path = "../../../models/ddpm_ocean_v0.pt"
+store_path = "../../../models/ddpm_ocean_2channel.pt"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -32,8 +30,9 @@ generated = generate_new_images(
     best_model,
     n_samples=1,
     device=device,
-    gif_name="ocean.gif"
+    gif_name="ocean.gif",
+    c=2
 )
 show_images(generated, "Final result")
 
-Image(open('ocean.gif', 'rb').read())
+Image(open('ocean.gif', 'rbg').read())
