@@ -5,7 +5,8 @@ import torch
 
 from medium_ddpm.dir.ddpm import MyDDPM
 from medium_ddpm.dir.unet_resized import MyUNet
-from medium_ddpm.dir.util import show_images, generate_new_images
+from medium_ddpm.dir.utils import show_images, generate_new_images
+from utils import tensors_to_png
 
 # Setting reproducibility
 SEED = 0
@@ -23,6 +24,11 @@ best_model = MyDDPM(MyUNet(), n_steps=n_steps, device=device)
 best_model.load_state_dict(torch.load(store_path, map_location=device))
 best_model.eval()
 print("Model loaded")
+
+
+# Define unnormalize function
+def unnormalize(tensor):
+    return (tensor + 1) / 2
 
 # Generate new images
 print("Generating new images")
