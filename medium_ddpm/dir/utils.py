@@ -78,6 +78,7 @@ def show_first_batch(loader):
         show_images(batch[0], "Images in the first batch")
         break
 
+
 def show_forward(ddpm, loader, device):
     # Showing the forward process
     for batch in loader:
@@ -92,6 +93,7 @@ def show_forward(ddpm, loader, device):
                 f"DDPM Noisy images {int(percent * 100)}%"
             )
         break
+
 
 def show_images(images, title=""):
     """Shows the provided images as sub-pictures in a square"""

@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 from medium_ddpm.dir.ddpm import MyDDPM
-from medium_ddpm.dir.unet_resized import MyUNet
+from medium_ddpm.dir.unet_resized_2_channel import MyUNet
 from medium_ddpm.dir.utils import show_images, generate_new_images
 from utils import tensors_to_png
 
@@ -41,4 +41,4 @@ generated = generate_new_images(
 )
 show_images(generated, "Final result")
 
-Image(open('ocean.gif', 'rbg').read())
+Image(open('ocean.gif', 'rgb').read())

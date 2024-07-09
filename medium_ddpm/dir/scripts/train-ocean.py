@@ -13,6 +13,8 @@ from medium_ddpm.dir.ddpm import MyDDPM
 from medium_ddpm.dir.resize_tensor import resize
 from medium_ddpm.dir.unet_resized_2_channel import MyUNet
 from medium_ddpm.dir.utils import show_images, generate_new_images
+from utils.loss import flow_MSE
+from utils.stream_flow import calculate_flow as flow
 
 # Setting reproducibility
 SEED = 0
@@ -28,7 +30,7 @@ ddpm = MyDDPM(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_
 
 no_train = False
 batch_size = 1
-n_epochs = 1
+n_epochs = 100
 lr = 0.001
 
 
@@ -86,12 +88,14 @@ class CustomLoss(nn.Module):
         weighted_mse_loss = weighted_mse_loss.sum() / (non_zero_mask.sum() * self.non_zero_weight + zero_mask.sum() * self.zero_weight)
         weighted_mae_loss = weighted_mae_loss.sum() / (non_zero_mask.sum() * self.non_zero_weight + zero_mask.sum() * self.zero_weight)
 
+
+
         return weighted_mse_loss + weighted_mae_loss
 
 
 
 # Training loop function
-def training_loop(ddpm, loader, n_epochs, optim, device, display=False, store_path="ddpm_ocean_model.pt"):
+def training_loop(ddpm, loader, n_epochs, optim, device, display=False, include_stream_loss=False, store_path="ddpm_ocean_model.pt"):
     custom_loss = CustomLoss()
     best_loss = float("inf")
     n_steps = ddpm.n_steps
@@ -115,6 +119,20 @@ def training_loop(ddpm, loader, n_epochs, optim, device, display=False, store_pa
             eta_theta = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
             loss = custom_loss(eta_theta, eta, x0)
+
+            if include_stream_loss:
+                #change weight to customize how much the stream equations impact the loss
+                weight = 100
+                # Estimating noise to be removed
+                alpha_t = ddpm.alphas[t]
+                alpha_t_bar = ddpm.alpha_bars[t]
+                # Generating predicted and target images
+                predicted = (1 / alpha_t.sqrt()) * (noisy_imgs - (1 - alpha_t) / (1 - alpha_t_bar).sqrt() * eta_theta)
+                target = ddpm(x0, t-1, eta) #bug? based on noisy_imgs
+
+                flow_loss = flow_MSE(predicted, target) * weight
+                loss += flow_loss
+
             optim.zero_grad()
             loss.backward()
             optim.step()
@@ -141,4 +159,5 @@ optimizer = Adam(ddpm.parameters(), lr=lr)
 
 # Run training loop if not skipping training
 if not no_train:
-    training_loop(ddpm, loader, n_epochs, optim=optimizer, device=device, store_path=store_path)
+    training_loop(ddpm, loader, n_epochs, optim=optimizer, device=device,
+                  store_path=store_path, include_stream_loss=False)
