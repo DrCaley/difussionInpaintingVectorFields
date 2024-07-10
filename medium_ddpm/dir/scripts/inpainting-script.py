@@ -7,10 +7,20 @@ from torchvision.transforms import Compose, Lambda
 
 from dataloaders.dataloader import OceanImageDataset
 from medium_ddpm.dir.ddpm import MyDDPM
-from medium_ddpm.dir.inpainting import inpaint_generate_new_images, calculate_mse, avg_pixel_value
+from medium_ddpm.dir.inpainting import inpaint_generate_new_images, calculate_mse, avg_pixel_value, naive_inpaint
 from medium_ddpm.dir.resize_tensor import ResizeTransform
 from medium_ddpm.dir.unets.unet_resized_2_channel_xl import MyUNet
 from medium_ddpm.dir.utils import display_side_by_side
+
+def generate_random_mask(image_shape, max_mask_size=32):
+    h, w = image_shape
+    mask = torch.zeros((1, h, w), dtype=torch.float32)
+    mask_h = random.randint(1, max_mask_size)
+    mask_w = random.randint(1, max_mask_size)
+    start_h = random.randint(0, h - mask_h)
+    start_w = random.randint(0, w - mask_w)
+    mask[:, start_h:start_h + mask_h, start_w:start_w + mask_w] = 1
+    return mask
 
 # Setting reproducibility
 SEED = 0
@@ -33,7 +43,7 @@ else:
     model_state_dict = checkpoint
 
 best_model = MyDDPM(MyUNet(n_steps), n_steps=n_steps, device=device)
-best_model.load_state_dict(torch.load(store_path, map_location=device)['model_state_dict'])  # Correctly load the model state dict
+best_model.load_state_dict(torch.load(store_path, map_location=device)['model_state_dict'])
 best_model.eval()
 print("Model loaded")
 
@@ -43,8 +53,8 @@ transform = Compose([
 ])
 
 data = OceanImageDataset(
-    mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
-    boundaries="../../data/rams_head/boundaries.yaml",
+    mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+    boundaries="../../../data/rams_head/boundaries.yaml",
     num=10,
     transform=transform
 )
@@ -78,10 +88,18 @@ final_image = inpaint_generate_new_images(
     gif_name="ocean_inpainting.gif"
 )
 
-mse = calculate_mse(input_image, final_image, mask)
-print("Mean Squared Error:", mse.item())
+mask = generate_random_mask((64, 128)).to(device)
 
-avg = avg_pixel_value(input_image, final_image, mask)
-print(f"Avg. Pixel Value: %{avg.item()}")
+naive_inpainted_image = naive_inpaint(input_image, mask)
 
-display_side_by_side(input_image, mask, final_image, title="Inpainting Example")
+# Ensure mask shape is compatible for display
+mask = mask.unsqueeze(0)
+
+mse_naive = calculate_mse(input_image, naive_inpainted_image, mask)
+display_side_by_side(input_image, mask, naive_inpainted_image, title="Naive Inpainted Image")
+
+print(f"MSE (Naive Inpainting): {mse_naive.item()}")
+
+mse_ddpm = calculate_mse(input_image, final_image, mask)
+print(f"MSE (DDPM Inpainting): {mse_ddpm.item()}")
+display_side_by_side(input_image, mask, final_image, title="Inpainted Image")

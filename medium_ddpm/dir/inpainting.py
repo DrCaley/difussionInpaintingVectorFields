@@ -71,6 +71,34 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                     writer.append_data(last_rgb_frame)
     return x
 
+
+def naive_inpaint(input_image, mask):
+    inpainted_image = input_image.clone()
+
+    _, _, h, w = input_image.shape
+
+    for y in range(h):
+        for x in range(w):
+            if mask[0, y, x] == 1:  # If in the masked region
+                # Get neighboring pixels
+                neighbors = []
+                if y > 0:
+                    neighbors.append(input_image[0, 0, y - 1, x])
+                if y < h - 1:
+                    neighbors.append(input_image[0, 0, y + 1, x])
+                if x > 0:
+                    neighbors.append(input_image[0, 0, y, x - 1])
+                if x < w - 1:
+                    neighbors.append(input_image[0, 0, y, x + 1])
+
+                if neighbors:
+                    inpainted_image[0, 0, y, x] = torch.mean(torch.stack(neighbors))
+                else:
+                    inpainted_image[0, 0, y, x] = 0
+    return inpainted_image
+
+
+
 def calculate_mse(original_image, predicted_image, mask):
     """Calculate Mean Squared Error between the original and predicted images for the masked area only."""
     masked_original = original_image * mask
