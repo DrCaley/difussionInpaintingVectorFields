@@ -69,6 +69,7 @@ class CustomLoss(nn.Module):
     def __init__(self, non_zero_weight=5.0, zero_weight=1.0):
         super(CustomLoss, self).__init__()
         self.mse = nn.MSELoss(reduction='none')
+        self.mae = nn.L1Loss(reduction='none')
         self.non_zero_weight = non_zero_weight
         self.zero_weight = zero_weight
 
@@ -77,10 +78,15 @@ class CustomLoss(nn.Module):
         zero_mask = (x0 == 0).float()
 
         mse_loss = self.mse(eta_theta, eta)
-        weighted_mse_loss = mse_loss * (self.non_zero_weight * non_zero_mask + self.zero_weight * zero_mask)
-        weighted_mse_loss = weighted_mse_loss.sum() / (non_zero_mask.sum() * self.non_zero_weight + zero_mask.sum() * self.zero_weight)
+        mae_loss = self.mae(eta_theta, eta)
 
-        return weighted_mse_loss
+        weighted_mse_loss = mse_loss * (self.non_zero_weight * non_zero_mask + self.zero_weight * zero_mask)
+        weighted_mae_loss = mae_loss * (self.non_zero_weight * non_zero_mask + self.zero_weight * zero_mask)
+
+        weighted_mse_loss = weighted_mse_loss.sum() / (non_zero_mask.sum() * self.non_zero_weight + zero_mask.sum() * self.zero_weight)
+        weighted_mae_loss = weighted_mae_loss.sum() / (non_zero_mask.sum() * self.non_zero_weight + zero_mask.sum() * self.zero_weight)
+
+        return weighted_mse_loss + weighted_mae_loss
 
 def evaluate(model, data_loader, device):
     model.eval()
