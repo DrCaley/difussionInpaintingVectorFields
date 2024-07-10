@@ -194,4 +194,4 @@ optimizer = Adam(ddpm.parameters(), lr=lr)
 if not no_train:
     training_loop(ddpm, train_loader, test_loader, n_epochs,
                   optim=optimizer, device=device, store_path=store_path,
-                  include_stream_loss=True)
+                  include_stream_loss=False)
