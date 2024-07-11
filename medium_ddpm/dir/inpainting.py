@@ -4,7 +4,6 @@ import torch
 from einops import rearrange
 import torch.nn.functional as F
 
-
 def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None, frames_per_gif=100,
                                 gif_name="sampling.gif", c=1, h=64, w=128):
     """Given a DDPM model, an input image, and a mask, generates inpainted samples"""
@@ -23,7 +22,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         noised_imgs[0] = input_img
         for t in range(ddpm.n_steps):
             eta = torch.randn_like(input_img).to(device)
-            noised_imgs[t+1] = ddpm(noised_imgs[t], t, eta, one_step=True)
+            noised_imgs[t + 1] = ddpm(noised_imgs[t], t, eta, one_step=True)
 
         x = noised_imgs[ddpm.n_steps] * (1 - mask) + (noise * mask)
 
@@ -50,18 +49,20 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                 # Normalize and prepare the frame for the GIF
                 normalized = x.clone()
                 for i in range(len(normalized)):
-                    normalized[i] -= torch.min(normalized[i])
-                    normalized[i] *= 255 / torch.max(normalized[i])
+                    min_val = torch.min(normalized[i])
+                    max_val = torch.max(normalized[i])
+                    normalized[i] = (normalized[i] - min_val) / (max_val - min_val) * 255
 
-                frame = rearrange(normalized, "(b1 b2) c h w -> (b1 h) (b2 w) c", b1=int(n_samples ** 0.5))
+                frame = rearrange(normalized, "b c h w -> b h w c")
                 frame = frame.cpu().numpy().astype(np.uint8)
 
-                frames.append(frame)
+                grid_frame = rearrange(frame, "(b1 b2) h w c -> (b1 h) (b2 w) c", b1=int(n_samples ** 0.5))
+                frames.append(grid_frame)
 
-    # Storing the gif
+    # Save the frames as a GIF
     with imageio.get_writer(gif_name, mode="I") as writer:
         for idx, frame in enumerate(frames):
-            rgb_frame = np.repeat(frame, 3, axis=2)
+            rgb_frame = np.repeat(frame, 3, axis=2)  # Ensure RGB format
             writer.append_data(rgb_frame)
 
             # Show the last frame for a longer time
@@ -69,6 +70,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                 last_rgb_frame = np.repeat(frames[-1], 3, axis=2)
                 for _ in range(frames_per_gif // 3):
                     writer.append_data(last_rgb_frame)
+
     return x
 
 
@@ -79,7 +81,7 @@ def naive_inpaint(input_image, mask):
 
     for y in range(h):
         for x in range(w):
-            if mask[0, y, x] == 1:  # If in the masked region
+            if mask[0, 0, y, x] == 1:  # If in the masked region
                 # Get neighboring pixels
                 neighbors = []
                 if y > 0:
