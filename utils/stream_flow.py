@@ -6,39 +6,34 @@ from dataloaders.dataloader import OceanImageDataset
 from utils.tensors_to_png import generate_png
 
 #input should be an any by 2 or 3 by any by any Tensor
+#takes really long, not sure why
+
 def calculate_flow(tensor):
-    diff_tensor = torch.zeros(tensor.shape)
     if len(tensor.shape) > 3:
+        return torch.stack([calculate_flow(tensor[i]) for i in range(tensor.shape[0])])
 
-        for i in range(tensor.shape[0]):
-            diff_tensor[i] = calculate_flow(tensor[i])[0]
-        return diff_tensor
-    #left strategy
-    total = 0
-    for y in range(tensor.shape[1] - 1):
-        for x in range(tensor.shape[2] - 1):
-            u_right = tensor[0][y][x+1]
-            u_left = tensor[0][y][x]
-            v_up = tensor[1][y][x]
-            v_down = tensor[1][y+1][x]
+    u = tensor[0]
+    v = tensor[1]
 
-            u_right = 0 if torch.isnan(u_right) else u_right
-            u_left = 0 if torch.isnan(u_left) else u_left
-            v_up = 0 if torch.isnan(v_up) else v_up
-            v_down = 0 if torch.isnan(v_down) else v_down
+    # Replace NaNs with 0
+    u = torch.nan_to_num(u, nan=0.0)
+    v = torch.nan_to_num(v, nan=0.0)
 
-            net_both = u_left - u_right + v_up - v_down
-            total += abs(net_both)
-            diff_tensor[0][y][x] = net_both
-    avg = total / (92 * 42) #.0069,.0059
-    for channel in range(tensor.shape[0]):
-        diff_tensor[channel] = diff_tensor[0].clone().detach()
+    # Calculate differences
+    u_diff = u[:, :-1] - u[:, 1:]
+    v_diff = v[:-1, :] - v[1:, :]
 
-    #testing
-    diff_arr = diff_tensor.detach().numpy() #between -0.3195 and 0.2726
+    # Pad the differences to match the original tensor shape
+    u_diff = torch.nn.functional.pad(u_diff, (0, 1, 0, 0))
+    v_diff = torch.nn.functional.pad(v_diff, (0, 0, 0, 1))
+
+    # Sum the differences
+    diff_tensor = u_diff + v_diff
+
+    # Expand to match the input tensor shape (for consistency)
+    diff_tensor = diff_tensor.unsqueeze(0)
+
     return diff_tensor
-
-
 
 def test_flow():
     data = OceanImageDataset(
