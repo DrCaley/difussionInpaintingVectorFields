@@ -1,4 +1,3 @@
-import math
 import random
 import numpy as np
 from tqdm.auto import tqdm
@@ -11,7 +10,7 @@ from torchvision.datasets import FashionMNIST
 
 from medium_ddpm.dir.ddpm import MyDDPM
 from medium_ddpm.dir.resize_tensor import resize
-from medium_ddpm.dir.unet_resized_2_channel import MyUNet
+from medium_ddpm.dir.unets.unet_resized_2_channel import MyUNet
 from medium_ddpm.dir.utils import show_images, generate_new_images
 
 # Setting reproducibility
