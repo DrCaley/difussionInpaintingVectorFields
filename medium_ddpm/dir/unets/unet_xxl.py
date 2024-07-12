@@ -36,7 +36,6 @@ class MyBlock(nn.Module):
         out = self.conv2(out)
         out = self.activation(out)
         return out
-
 class MyUNet(nn.Module):
     def __init__(self, n_steps=1000, time_emb_dim=100):
         super(MyUNet, self).__init__()
@@ -51,7 +50,8 @@ class MyUNet(nn.Module):
         self.b1 = nn.Sequential(
             MyBlock((2, 64, 128), 2, 16),
             MyBlock((16, 64, 128), 16, 16),
-            MyBlock((16, 64, 128), 16, 16)
+            MyBlock((16, 64, 128), 16, 16),
+            MyBlock((16, 64, 128), 16, 16)  # Added layer
         )
         # (64x128) -> (32x64)
         self.down1 = nn.Conv2d(16, 16, 4, 2, 1)
@@ -60,7 +60,8 @@ class MyUNet(nn.Module):
         self.b2 = nn.Sequential(
             MyBlock((16, 32, 64), 16, 32),
             MyBlock((32, 32, 64), 32, 32),
-            MyBlock((32, 32, 64), 32, 32)
+            MyBlock((32, 32, 64), 32, 32),
+            MyBlock((32, 32, 64), 32, 32)  # Added layer
         )
         # (32x64) -> (16x32)
         self.down2 = nn.Conv2d(32, 32, 4, 2, 1)
@@ -69,7 +70,8 @@ class MyUNet(nn.Module):
         self.b3 = nn.Sequential(
             MyBlock((32, 16, 32), 32, 64),
             MyBlock((64, 16, 32), 64, 64),
-            MyBlock((64, 16, 32), 64, 64)
+            MyBlock((64, 16, 32), 64, 64),
+            MyBlock((64, 16, 32), 64, 64)  # Added layer
         )
         # (16x32) -> (8x16)
         self.down3 = nn.Conv2d(64, 64, 4, 2, 1)
@@ -78,7 +80,8 @@ class MyUNet(nn.Module):
         self.b4 = nn.Sequential(
             MyBlock((64, 8, 16), 64, 128),
             MyBlock((128, 8, 16), 128, 128),
-            MyBlock((128, 8, 16), 128, 128)
+            MyBlock((128, 8, 16), 128, 128),
+            MyBlock((128, 8, 16), 128, 128)  # Added layer
         )
         self.down4 = nn.Sequential(
             # (8x16) -> (4x8)
@@ -109,7 +112,8 @@ class MyUNet(nn.Module):
         self.b5 = nn.Sequential(
             MyBlock((256, 8, 16), 256, 128),
             MyBlock((128, 8, 16), 128, 64),
-            MyBlock((64, 8, 16), 64, 64)
+            MyBlock((64, 8, 16), 64, 64),
+            MyBlock((64, 8, 16), 64, 64)  # Added layer
         )
         # (8x16) -> (16x32)
         self.up2 = nn.ConvTranspose2d(64, 64, 4, 2, 1)
@@ -117,7 +121,8 @@ class MyUNet(nn.Module):
         self.b6 = nn.Sequential(
             MyBlock((128, 16, 32), 128, 64),
             MyBlock((64, 16, 32), 64, 32),
-            MyBlock((32, 16, 32), 32, 32)
+            MyBlock((32, 16, 32), 32, 32),
+            MyBlock((32, 16, 32), 32, 32)  # Added layer
         )
         # (16x32) -> (32x64)
         self.up3 = nn.ConvTranspose2d(32, 32, 4, 2, 1)
@@ -125,7 +130,8 @@ class MyUNet(nn.Module):
         self.b7 = nn.Sequential(
             MyBlock((64, 32, 64), 64, 32),
             MyBlock((32, 32, 64), 32, 16),
-            MyBlock((16, 32, 64), 16, 16)
+            MyBlock((16, 32, 64), 16, 16),
+            MyBlock((16, 32, 64), 16, 16)  # Added layer
         )
         # (32x64) -> (64x128)
         self.up4 = nn.ConvTranspose2d(16, 16, 4, 2, 1)
@@ -133,7 +139,8 @@ class MyUNet(nn.Module):
         self.b_out = nn.Sequential(
             MyBlock((32, 64, 128), 32, 16),
             MyBlock((16, 64, 128), 16, 16),
-            MyBlock((16, 64, 128), 16, 16, normalize=False)
+            MyBlock((16, 64, 128), 16, 16, normalize=False),
+            MyBlock((16, 64, 128), 16, 16, normalize=False)  # Added layer
         )
 
         self.conv_out = nn.Conv2d(16, 2, 3, 1, 1)

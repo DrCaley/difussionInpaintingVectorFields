@@ -14,7 +14,7 @@ from tqdm import tqdm
 from dataloaders.dataloader import OceanImageDataset
 from medium_ddpm.dir.ddpm import MyDDPM
 from medium_ddpm.dir.resize_tensor import resize
-from medium_ddpm.dir.unets.unet_resized_2_channel_xl import MyUNet
+from medium_ddpm.dir.unets.unet_xxl import MyUNet
 from medium_ddpm.dir.utils import show_images, generate_new_images
 
 # Setting reproducibility
@@ -46,7 +46,7 @@ transform = Compose([
     ResizeTransform((2, 64, 128))        # Resized to (2, 64, 128)
 ])
 
-store_path = "./ddpm_ocean_xl.pt"
+store_path = "./ddpm_ocean_xxl.pt"
 
 data = OceanImageDataset(
     mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
@@ -189,7 +189,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     plt.ylabel('Loss')
     plt.legend()
     plt.title('Training and Test Loss')
-    plt.savefig('train_test_loss_xl.png')
+    plt.savefig('train_test_loss_xxl.png')
 
 optimizer = Adam(ddpm.parameters(), lr=lr)
 
