@@ -1,9 +1,9 @@
 import torch
 from utils.stream_flow import calculate_flow
 
+
 def flow_MSE(predicted, target):
     flow_diff = torch.abs(calculate_flow(predicted)) - torch.abs(calculate_flow(target))
-    flow_diff = flow_diff
     flow_diff[flow_diff < 0.0] = 0.0
     flow_MSE = (flow_diff ** 2).sum() / torch.ones_like(flow_diff).sum()
 
