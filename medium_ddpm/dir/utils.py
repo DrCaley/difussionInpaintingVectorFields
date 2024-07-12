@@ -1,4 +1,5 @@
 import imageio
+import numpy
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -129,6 +130,11 @@ def display_side_by_side(original, mask, inpainted, title=""):
     mask = mask[0].cpu().numpy().transpose(1, 2, 0)
     inpainted = inpainted[0].cpu().numpy().transpose(1, 2, 0)
 
+    blue = np.ones_like(original)[0:64, 0:128, 0:1]
+    original = numpy.concatenate((original, blue), axis=-1)
+    mask = numpy.concatenate((mask, blue), axis=-1)
+    inpainted = numpy.concatenate((inpainted, blue), axis=-1)
+
     axes[0].imshow(original, aspect='auto')
     axes[0].set_title("Original Image")
 
@@ -140,3 +146,4 @@ def display_side_by_side(original, mask, inpainted, title=""):
 
     fig.suptitle(title, fontsize=16)
     plt.show()
+    print("done")

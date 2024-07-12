@@ -1,11 +1,30 @@
+import math
+import random
 import imageio
 import numpy as np
 import torch
 from einops import rearrange
+from torch.utils.data import DataLoader, random_split
+from torchvision.transforms import Compose, Lambda
 import torch.nn.functional as F
 
+from dataloaders.dataloader import OceanImageDataset
+from medium_ddpm.dir.ddpm import MyDDPM
+from medium_ddpm.dir.resize import ResizeTransform
+from medium_ddpm.dir.unets.unet_resized_2_channel_xl import MyUNet
+import matplotlib.pyplot as plt
+from medium_ddpm.dir.utils import display_side_by_side
+from utils.tensors_to_png import generate_png
+
+# Setting reproducibility
+SEED = 0
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+
 def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None, frames_per_gif=100,
-                                gif_name="sampling.gif", c=1, h=64, w=128):
+                                gif_name="sampling.gif", c=2, h=64, w=128):
     """Given a DDPM model, an input image, and a mask, generates inpainted samples"""
     frame_idxs = np.linspace(0, ddpm.n_steps - 1, frames_per_gif).astype(np.uint)
     frames = []
@@ -22,7 +41,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         noised_imgs[0] = input_img
         for t in range(ddpm.n_steps):
             eta = torch.randn_like(input_img).to(device)
-            noised_imgs[t + 1] = ddpm(noised_imgs[t], t, eta, one_step=True)
+            noised_imgs[t+1] = ddpm(noised_imgs[t], t, eta, one_step=True)
 
         x = noised_imgs[ddpm.n_steps] * (1 - mask) + (noise * mask)
 
@@ -49,20 +68,18 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                 # Normalize and prepare the frame for the GIF
                 normalized = x.clone()
                 for i in range(len(normalized)):
-                    min_val = torch.min(normalized[i])
-                    max_val = torch.max(normalized[i])
-                    normalized[i] = (normalized[i] - min_val) / (max_val - min_val) * 255
+                    normalized[i] -= torch.min(normalized[i])
+                    normalized[i] *= 255 / torch.max(normalized[i])
 
-                frame = rearrange(normalized, "b c h w -> b h w c")
+                frame = rearrange(normalized, "(b1 b2) c h w -> (b1 h) (b2 w) c", b1=int(n_samples ** 0.5))
                 frame = frame.cpu().numpy().astype(np.uint8)
 
-                grid_frame = rearrange(frame, "(b1 b2) h w c -> (b1 h) (b2 w) c", b1=int(n_samples ** 0.5))
-                frames.append(grid_frame)
+                frames.append(frame)
 
-    # Save the frames as a GIF
+    # Storing the gif
     with imageio.get_writer(gif_name, mode="I") as writer:
         for idx, frame in enumerate(frames):
-            rgb_frame = np.repeat(frame, 3, axis=2)  # Ensure RGB format
+            rgb_frame = np.repeat(frame, 3, axis=2)
             writer.append_data(rgb_frame)
 
             # Show the last frame for a longer time
@@ -70,36 +87,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                 last_rgb_frame = np.repeat(frames[-1], 3, axis=2)
                 for _ in range(frames_per_gif // 3):
                     writer.append_data(last_rgb_frame)
-
     return x
-
-
-def naive_inpaint(input_image, mask):
-    inpainted_image = input_image.clone()
-
-    _, _, h, w = input_image.shape
-
-    for y in range(h):
-        for x in range(w):
-            if mask[0, 0, y, x] == 1:  # If in the masked region
-                # Get neighboring pixels
-                neighbors = []
-                if y > 0:
-                    neighbors.append(input_image[0, 0, y - 1, x])
-                if y < h - 1:
-                    neighbors.append(input_image[0, 0, y + 1, x])
-                if x > 0:
-                    neighbors.append(input_image[0, 0, y, x - 1])
-                if x < w - 1:
-                    neighbors.append(input_image[0, 0, y, x + 1])
-
-                if neighbors:
-                    inpainted_image[0, 0, y, x] = torch.mean(torch.stack(neighbors))
-                else:
-                    inpainted_image[0, 0, y, x] = 0
-    return inpainted_image
-
-
 
 def calculate_mse(original_image, predicted_image, mask):
     """Calculate Mean Squared Error between the original and predicted images for the masked area only."""
@@ -115,3 +103,62 @@ def avg_pixel_value(original_image, predicted_image, mask):
 
     return avg_diff * (100 / avg_pixel_value)
 
+
+n_steps, min_beta, max_beta = 1000, 1e-4, 0.02
+store_path = "../../models/ddpm_ocean_xl.pt"
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+best_model = MyDDPM(MyUNet(), n_steps=n_steps, device=device)
+best_model.load_state_dict(torch.load(store_path, map_location=device), strict=False) #bug? strict=False probably is bad
+best_model.eval()
+print("Model loaded")
+
+transform = Compose([
+    Lambda(lambda x: (x - 0.5) * 2),  # Normalize to range [-1, 1]
+    ResizeTransform((2, 64, 128))  # Resized to (2, 64, 128)
+])
+
+data = OceanImageDataset(
+    mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+    boundaries="../../data/rams_head/boundaries.yaml",
+    num=10,
+    transform=transform
+)
+
+batch_size = 1
+
+train_len = int(math.floor(len(data) * 0.7))
+test_len = int(math.floor(len(data) * 0.15))
+val_len = len(data) - train_len - test_len
+
+training_data, test_data, validation_data = random_split(data, [train_len, test_len, val_len])
+
+loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
+test_loader = DataLoader(test_data, batch_size=batch_size)
+val_loader = DataLoader(validation_data, batch_size=batch_size)
+
+for batch in test_loader:
+    input_image = batch[0].to(device)
+    break
+
+# Fill with 0's size of img, then place 1s (missing regions)
+mask = torch.zeros_like(input_image)
+mask[:, :, 10:20, 50:60] = 1
+
+final_image = inpaint_generate_new_images(
+    best_model,
+    input_image,
+    mask,
+    n_samples=1,
+    device=device,
+    gif_name="ocean_inpainting.gif"
+)
+
+mse = calculate_mse(input_image, final_image, mask)
+print("Mean Squared Error:", mse.item())
+
+avg = avg_pixel_value(input_image, final_image, mask)
+print(f"Avg. Pixel Value: %{avg.item()}")
+
+display_side_by_side(input_image, mask, final_image, title="Inpainting Example")

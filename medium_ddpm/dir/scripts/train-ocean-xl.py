@@ -33,12 +33,14 @@ batch_size = 64
 n_epochs = 1
 lr = 0.001
 
+
 class ResizeTransform:
     def __init__(self, end_shape):
         self.end_shape = end_shape
 
     def __call__(self, tensor):
         return resize(tensor, self.end_shape).float()
+
 
 # Initialize dataset with transformations
 transform = Compose([
@@ -65,6 +67,7 @@ train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=batch_size)
 val_loader = DataLoader(validation_data, batch_size=batch_size)
 
+
 class CustomLoss(nn.Module):
     def __init__(self, non_zero_weight=5.0, zero_weight=1.0):
         super(CustomLoss, self).__init__()
@@ -88,6 +91,7 @@ class CustomLoss(nn.Module):
 
         return weighted_mse_loss + weighted_mae_loss
 
+
 def evaluate(model, data_loader, device):
     model.eval()
     total_loss = 0.0
@@ -109,6 +113,7 @@ def evaluate(model, data_loader, device):
             count += n
 
     return total_loss / count
+
 
 def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, store_path="ddpm_ocean_model.pt"):
     custom_loss = CustomLoss()
@@ -190,6 +195,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     plt.legend()
     plt.title('Training and Test Loss')
     plt.savefig('train_test_loss_xl.png')
+
 
 optimizer = Adam(ddpm.parameters(), lr=lr)
 
