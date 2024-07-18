@@ -8,10 +8,10 @@ import matplotlib.pyplot as plt
 
 from dataloaders.dataloader import OceanImageDataset
 from medium_ddpm.dir.ddpm import MyDDPM
-from medium_ddpm.dir.inpainting import inpaint_generate_new_images, calculate_mse, naive_inpaint
+from medium_ddpm.dir.inpainting_utils import inpaint_generate_new_images, calculate_mse, naive_inpaint
 from medium_ddpm.dir.masks import generate_squiggly_line_mask, generate_random_mask, generate_straight_line_mask
 from medium_ddpm.dir.resize_tensor import ResizeTransform
-from medium_ddpm.dir.unets.unet_resized_2_channel_xl import MyUNet
+from medium_ddpm.dir.unets.unet_xl import MyUNet
 from medium_ddpm.dir.tensors_to_png import generate_png
 
 SEED = 0
@@ -21,7 +21,7 @@ torch.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 
 n_steps, min_beta, max_beta = 1000, 1e-4, 0.02
-store_path = "./ddpm_ocean_xl.pt"
+store_path = "../../../models/ddpm_ocean_xl.pt"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 checkpoint = torch.load(store_path, map_location=device)
@@ -72,7 +72,7 @@ input_image_original = reverse_normalization(input_image)
 land_mask = (input_image_original != 0).float()
 
 # Change to 'square', 'squiggly', or 'straight_line'
-mask_type = 'squiggly'
+mask_type = 'square'
 
 if mask_type == 'square':
     mask = generate_random_mask(input_image.shape, input_image_original)
