@@ -9,10 +9,11 @@ import logging
 from dataloaders.dataloader import OceanImageDataset
 from medium_ddpm.dir.ddpm import MyDDPM
 from medium_ddpm.dir.inpainting_utils import inpaint_generate_new_images, calculate_mse, naive_inpaint
-from medium_ddpm.dir.masks import generate_squiggly_line_mask, generate_random_mask, generate_straight_line_mask
+from medium_ddpm.dir.masks import generate_squiggly_line_mask, generate_random_mask, generate_straight_line_mask,
+     generate_robot_path_mask
 from medium_ddpm.dir.resize_tensor import ResizeTransform
 from medium_ddpm.dir.unets.unet_xl import MyUNet
-from utils.tensors_to_png import generate_png
+from medium_ddpm.dir.tensors_to_png import generate_png
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -55,7 +56,7 @@ try:
     data = OceanImageDataset(
         mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
         boundaries="../../../data/rams_head/boundaries.yaml",
-        num=20,
+        num=17040,
         transform=transform
     )
 
@@ -78,16 +79,16 @@ def reverse_normalization(tensor):
     return (tensor + 1) / 2
 
 try:
-    logging.info("Processing training data")
+    logging.info("Processing data")
     mse_naive_list = []
     mse_ddpm_list = []
     image_counter = 0
     # Number of images in dataset to process
-    num_images = 10
+    num_images = 1
     # Number of times to sample each image
     n_samples = 1
     #Number of times to resample
-    resample_steps = 10
+    resample_steps = 1
 
     #loader is training data, test_loader is test data
     for batch in loader:
@@ -99,20 +100,22 @@ try:
         input_image_original = reverse_normalization(input_image)
         land_mask = (input_image_original != 0).float()
 
-        # Change to 'square', 'squiggly', or 'straight_line'
-        mask_type = 'straight_line'
+        # Change to 'square', 'squiggly', 'robot', or 'straight_line'
+        mask_type = 'robot'
 
         if mask_type == 'square':
             mask = generate_random_mask(input_image.shape, input_image_original)
+        elif mask_type == 'robot':
+            mask = generate_robot_path_mask(input_image.shape, land_mask)
         elif mask_type == 'squiggly':
             mask = generate_squiggly_line_mask(input_image.shape, input_image_original)
         elif mask_type == 'straight_line':
-            mask = generate_straight_line_mask(input_image.shape, input_image_original, orientation='horizontal')
+            mask = generate_straight_line_mask(input_image.shape, input_image_original)
 
         mask = mask.to(device)
 
         mse_ddpm_samples = []
-        for i in range(1):
+        for i in range(n_samples):
             final_image_ddpm = inpaint_generate_new_images(
                 best_model,
                 input_image,
@@ -143,7 +146,7 @@ try:
         generate_png(input_image, filename=f'input_image_{image_counter}.png')
         generate_png(naive_inpainted_image, filename=f'naive_inpainted_image_{image_counter}.png')
         generate_png(mask, filename=f'{mask_type}_mask_{image_counter}.png')
-        # generate_png(land_mask, filename=f'land_mask_{image_counter}.png')
+        generate_png(land_mask, filename=f'land_mask_{image_counter}.png')
 
         image_counter += 1
 
