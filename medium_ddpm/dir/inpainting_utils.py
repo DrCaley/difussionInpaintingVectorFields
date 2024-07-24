@@ -4,12 +4,33 @@ import torch
 from einops import rearrange
 import torch.nn.functional as F
 
-def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None, frames_per_gif=100,
-                                gif_name="sampling.gif", c=1, h=64, w=128):
+def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
+                                resample_steps=1, c=1, h=64, w=128):
     """Given a DDPM model, an input image, and a mask, generates inpainted samples"""
-    frame_idxs = np.linspace(0, ddpm.n_steps - 1, frames_per_gif).astype(np.uint)
-    frames = []
     noised_imgs = [None] * (ddpm.n_steps + 1)
+
+    def denoise_one_step(noisy_img):
+        time_tensor = (torch.ones(n_samples, 1) * t).to(device).long()
+        eta_theta = ddpm.backward(noisy_img, time_tensor)
+
+        alpha_t = ddpm.alphas[t]
+        alpha_t_bar = ddpm.alpha_bars[t]
+
+        # Partially denoising the image
+        less_noised_img = (1 / alpha_t.sqrt()) * (noisy_img - (1 - alpha_t) / (1 - alpha_t_bar).sqrt() * eta_theta)
+
+        if t > 0:
+            z = torch.randn(n_samples, c, h, w).to(device)
+            beta_t = ddpm.betas[t]
+            sigma_t = beta_t.sqrt()
+            less_noised_img = less_noised_img + sigma_t * z
+
+        return less_noised_img
+
+    def noise_one_step(unnoised_img):
+        eta = torch.randn_like(unnoised_img).to(device)
+        noised_img = ddpm(unnoised_img, t, eta, one_step=True)
+        return noised_img
 
     with torch.no_grad():
         if device is None:
@@ -21,55 +42,19 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         # Adding noise step by step
         noised_imgs[0] = input_img
         for t in range(ddpm.n_steps):
-            eta = torch.randn_like(input_img).to(device)
-            noised_imgs[t + 1] = ddpm(noised_imgs[t], t, eta, one_step=True)
+            noised_imgs[t + 1] = noise_one_step(noised_imgs[t])
 
         x = noised_imgs[ddpm.n_steps] * (1 - mask) + (noise * mask)
 
         for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
-            time_tensor = (torch.ones(n_samples, 1) * t).to(device).long()
-            eta_theta = ddpm.backward(x, time_tensor)
 
-            alpha_t = ddpm.alphas[t]
-            alpha_t_bar = ddpm.alpha_bars[t]
-
-            # Partially denoising the image
-            less_noised_img = (1 / alpha_t.sqrt()) * (x - (1 - alpha_t) / (1 - alpha_t_bar).sqrt() * eta_theta)
-
-            if t > 0:
-                z = torch.randn(n_samples, c, h, w).to(device)
-                beta_t = ddpm.betas[t]
-                sigma_t = beta_t.sqrt()
-                less_noised_img = less_noised_img + sigma_t * z
-
-            x = noised_imgs[t] * (1 - mask) + (less_noised_img * mask)
-
-            # Adding frames to the GIF
-            # if idx in frame_idxs or t == 0:
-            #     # Normalize and prepare the frame for the GIF
-            #     normalized = x.clone()
-            #     for i in range(len(normalized)):
-            #         min_val = torch.min(normalized[i])
-            #         max_val = torch.max(normalized[i])
-            #         normalized[i] = (normalized[i] - min_val) / (max_val - min_val) * 255
-            #
-            #     frame = rearrange(normalized, "b c h w -> b h w c")
-            #     frame = frame.cpu().numpy().astype(np.uint8)
-            #
-            #     grid_frame = rearrange(frame, "(b1 b2) h w c -> (b1 h) (b2 w) c", b1=int(n_samples ** 0.5))
-            #     frames.append(grid_frame)
-
-    # Save the frames as a GIF
-    # with imageio.get_writer(gif_name, mode="I") as writer:
-    #     for idx, frame in enumerate(frames):
-    #         rgb_frame = np.repeat(frame, 3, axis=2)  # Ensure RGB format
-    #         writer.append_data(rgb_frame)
-    #
-    #         # Show the last frame for a longer time
-    #         if idx == len(frames) - 1:
-    #             last_rgb_frame = np.repeat(frames[-1], 3, axis=2)
-    #             for _ in range(frames_per_gif // 3):
-    #                 writer.append_data(last_rgb_frame)
+            for i in range(resample_steps):
+                x = denoise_one_step(x)
+                #combine parts
+                x = noised_imgs[t] * (1 - mask) + (x * mask)
+                #renoise and repeat if not the last step
+                if not (i + 1) >= resample_steps:
+                    x = noise_one_step(x)
 
     return x
 

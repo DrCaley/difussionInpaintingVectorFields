@@ -12,7 +12,7 @@ from medium_ddpm.dir.inpainting_utils import inpaint_generate_new_images, calcul
 from medium_ddpm.dir.masks import generate_squiggly_line_mask, generate_random_mask, generate_straight_line_mask
 from medium_ddpm.dir.resize_tensor import ResizeTransform
 from medium_ddpm.dir.unets.unet_xl import MyUNet
-from medium_ddpm.dir.tensors_to_png import generate_png
+from utils.tensors_to_png import generate_png
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -55,7 +55,7 @@ try:
     data = OceanImageDataset(
         mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
         boundaries="../../../data/rams_head/boundaries.yaml",
-        num=10,
+        num=20,
         transform=transform
     )
 
@@ -78,17 +78,20 @@ def reverse_normalization(tensor):
     return (tensor + 1) / 2
 
 try:
-    logging.info("Processing test data")
+    logging.info("Processing training data")
     mse_naive_list = []
     mse_ddpm_list = []
     image_counter = 0
     # Number of images in dataset to process
-    num_images_to_process = 1
+    num_images = 10
     # Number of times to sample each image
     n_samples = 1
+    #Number of times to resample
+    resample_steps = 10
 
+    #loader is training data, test_loader is test data
     for batch in loader:
-        if image_counter >= num_images_to_process:
+        if image_counter >= num_images:
             break
 
         input_image = batch[0].to(device)
@@ -109,14 +112,14 @@ try:
         mask = mask.to(device)
 
         mse_ddpm_samples = []
-        for i in range(n_samples):
+        for i in range(1):
             final_image_ddpm = inpaint_generate_new_images(
                 best_model,
                 input_image,
                 mask,
-                n_samples=1,
+                n_samples=1, #fixme: only works when n_samples=1, different from the other n_samples
                 device=device,
-                gif_name=f"ocean_inpainting_{image_counter}_sample_{i}.gif"
+                resample_steps=resample_steps
             )
 
             mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
