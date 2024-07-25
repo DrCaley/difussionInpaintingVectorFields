@@ -76,7 +76,7 @@ def generate_squiggly_line_mask(image_shape, input_image_original, num_lines=5, 
     return mask
 
 
-def generate_robot_path_mask(image_shape, land_mask, num_lines=0, line_thickness=5):
+def generate_robot_path_mask(image_shape, land_mask, num_squares=10, square_size=10, line_thickness=1):
     _, _, h, w = image_shape
 
     mask = np.ones((h, w), dtype=np.float32)
@@ -86,23 +86,36 @@ def generate_robot_path_mask(image_shape, land_mask, num_lines=0, line_thickness
     area_bottom = 64
     area_right = 94
 
-    current_y = 0
+    current_y = random.randint(area_top, area_bottom - square_size)
     current_x = 0
 
-    directions = [(0, line_thickness), (0, -line_thickness), (line_thickness, 0), (-line_thickness, 0)]  # (dy, dx) for (N, S, E, W)
+    directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]  # (dy, dx) for (N, S, E, W)
 
-    for _ in range(num_lines):
-        current_y = max(area_top, min(area_bottom - line_thickness, current_y))
-        current_x = max(area_left, min(area_right - line_thickness, current_x))
+    for _ in range(num_squares):
+        # Draw the top edge of the square
+        for i in range(square_size):
+            mask[current_y, current_x + i] = 0.0
 
-        mask[current_y:current_y + line_thickness, current_x:current_x + line_thickness] = 0.0  # Unmask the path
+        # Draw the right edge of the square
+        for i in range(square_size):
+            mask[current_y + i, current_x + square_size - 1] = 0.0
 
+        # Draw the bottom edge of the square
+        for i in range(square_size):
+            mask[current_y + square_size - 1, current_x + square_size - 1 - i] = 0.0
+
+        # Draw the left edge of the square
+        for i in range(square_size):
+            mask[current_y + square_size - 1 - i, current_x] = 0.0
+
+        # Move to the next position
         direction = random.choice(directions)
-        new_y = current_y + direction[0]
-        new_x = current_x + direction[1]
+        new_y = current_y + direction[0] * square_size
+        new_x = current_x + direction[1] * square_size
 
-        new_y = max(area_top, min(area_bottom - line_thickness, new_y))
-        new_x = max(area_left, min(area_right - line_thickness, new_x))
+        # Ensure the new position is within bounds
+        new_y = max(area_top, min(area_bottom - square_size, new_y))
+        new_x = max(area_left, min(area_right - square_size, new_x))
 
         current_y = new_y
         current_x = new_x
@@ -114,10 +127,8 @@ def generate_robot_path_mask(image_shape, land_mask, num_lines=0, line_thickness
 
     return mask
 
-
 def create_border_mask(image_shape, area_height=44, area_width=94, offset_top=0, offset_left=0):
     _, _, h, w = image_shape
     border_mask = np.zeros((h, w), dtype=np.float32)
     border_mask[offset_top:offset_top + area_height, offset_left:offset_left + area_width] = 1.0
     return torch.tensor(border_mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
-
