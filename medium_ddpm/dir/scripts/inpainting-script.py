@@ -5,21 +5,22 @@ import torch
 from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose, Lambda
 import logging
+import csv
 
 from dataloaders.dataloader import OceanImageDataset
 from medium_ddpm.dir.ddpm import MyDDPM
-from medium_ddpm.dir.inpainting_utils import inpaint_generate_new_images, calculate_mse, naive_inpaint
-from medium_ddpm.dir.masks import generate_squiggly_line_mask, generate_random_mask, generate_straight_line_mask,
-     generate_robot_path_mask
+from medium_ddpm.dir.inpainting_utils import inpaint_generate_new_images, calculate_mse
+from medium_ddpm.dir.masks import generate_squiggly_line_mask, generate_random_mask, generate_straight_line_mask, \
+    generate_robot_path_mask
 from medium_ddpm.dir.resize_tensor import ResizeTransform
 from medium_ddpm.dir.unets.unet_xl import MyUNet
-from medium_ddpm.dir.tensors_to_png import generate_png
+from utils.tensors_to_png import generate_png
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Set seeds for reproducibility
-SEED = 6
+SEED = 0
 random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
@@ -56,7 +57,7 @@ try:
     data = OceanImageDataset(
         mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
         boundaries="../../../data/rams_head/boundaries.yaml",
-        num=17040,
+        num=20,
         transform=transform
     )
 
@@ -80,15 +81,15 @@ def reverse_normalization(tensor):
 
 try:
     logging.info("Processing data")
-    mse_naive_list = []
+    #mse_naive_list = []
     mse_ddpm_list = []
     image_counter = 0
     # Number of images in dataset to process
-    num_images = 1
+    num_images = 10
     # Number of times to sample each image
     n_samples = 1
-    #Number of times to resample
-    resample_steps = 1
+    # Number of times to resample
+    resample_steps = 20
 
     #loader is training data, test_loader is test data
     for batch in loader:
@@ -129,7 +130,8 @@ try:
             mse_ddpm_samples.append(mse_ddpm.item())
             logging.info(f"MSE (DDPM Inpainting) on {mask_type} mask for image {image_counter}, sample {i}: {mse_ddpm.item()}")
 
-            generate_png(final_image_ddpm, filename=f'final_image_ddpm_{image_counter}_sample_{i}.png')
+            generate_png(final_image_ddpm, filename=f'ddpm_image_{image_counter}_sample{i}_resample{resample_steps}.png',
+                         compare_to=input_image, scale=12)
 
             del final_image_ddpm
             torch.cuda.empty_cache()
@@ -137,22 +139,23 @@ try:
         mean_mse_ddpm_samples = np.mean(mse_ddpm_samples)
         mse_ddpm_list.append(mean_mse_ddpm_samples)
 
-        naive_inpainted_image = naive_inpaint(input_image, mask)
+        #naive_inpainted_image = naive_inpaint(input_image, mask)
 
-        mse_naive = calculate_mse(input_image, naive_inpainted_image, mask)
-        mse_naive_list.append(mse_naive.item())
-        logging.info(f"MSE (Naive Inpainting) on {mask_type} mask for image {image_counter}: {mse_naive.item()}")
+        #mse_naive = calculate_mse(input_image, naive_inpainted_image, mask)
+        #mse_naive_list.append(mse_naive.item())
+        #logging.info(f"MSE (Naive Inpainting) on {mask_type} mask for image {image_counter}: {mse_naive.item()}")
 
-        generate_png(input_image, filename=f'input_image_{image_counter}.png')
-        generate_png(naive_inpainted_image, filename=f'naive_inpainted_image_{image_counter}.png')
-        generate_png(mask, filename=f'{mask_type}_mask_{image_counter}.png')
-        generate_png(land_mask, filename=f'land_mask_{image_counter}.png')
+        generate_png(input_image, filename=f'input_image_{image_counter}.png', scale=12)
+        #generate_png(naive_inpainted_image, filename=f'naive_image_{image_counter}.png',
+        #             compare_to=input_image, scale=12)
+        generate_png(mask, filename=f'{mask_type}_mask_{image_counter}.png', scale=12)
+        generate_png(land_mask, filename=f'land_mask_{image_counter}.png', scale=12)
 
         image_counter += 1
 
-    mean_mse_naive = np.mean(mse_naive_list)
+    #mean_mse_naive = np.mean(mse_naive_list)
     mean_mse_ddpm = np.mean(mse_ddpm_list)
-    logging.info(f"Mean MSE (Naive Inpainting) on {mask_type} mask: {mean_mse_naive}")
+    #logging.info(f"Mean MSE (Naive Inpainting) on {mask_type} mask: {mean_mse_naive}")
     logging.info(f"Mean MSE (DDPM Inpainting) on {mask_type} mask: {mean_mse_ddpm}")
 
 except Exception as e:
