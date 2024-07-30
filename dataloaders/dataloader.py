@@ -4,7 +4,7 @@ from scipy.io import loadmat
 from torch.utils.data import Dataset
 
 class OceanImageDataset(Dataset):
-    def __init__(self, mat_file, boundaries, num, transform=None):
+    def __init__(self, num, transform=None, mat_file="../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat", boundaries="../data/rams_head/boundaries.yaml"):
         self.mat_data = loadmat(mat_file)
         self.tensor_labels = []
         self.tensor_arr = []
