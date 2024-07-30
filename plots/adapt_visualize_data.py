@@ -40,7 +40,6 @@ def revert_png(image_path, original_shape, scale=1, compare_to=None):
 
 def plot_png(image_path, land_mask_path):
     """
-    Plots
     :param image_path: Path to ocean image to be plotted
     :param land_mask_path: Path to land mask image
     """
@@ -62,8 +61,7 @@ def plot_png(image_path, land_mask_path):
 
 def plot_tensor(input_tensor, land_mask_tensor=None):
     """
-
-    :param input_tensor: (3, 94, 44)
+    :param input_tensor: (3, 94, 44), where third channel is binary representation of land mask
     :param land_mask_tensor: Optional land mask tensor, default is third channel
     """
 
