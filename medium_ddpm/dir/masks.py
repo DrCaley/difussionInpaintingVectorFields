@@ -22,7 +22,7 @@ def generate_random_mask(image_shape, input_image_original, max_mask_size=32):
 def generate_straight_line_mask(image_shape, land_mask, num_lines=10, line_thickness=5):
     _, _, h, w = image_shape
 
-    mask = np.zeros((h, w), dtype=np.float32)
+    mask = np.ones((h, w), dtype=np.float32)
 
     # Exclude border
     area_height = 44
@@ -30,15 +30,58 @@ def generate_straight_line_mask(image_shape, land_mask, num_lines=10, line_thick
 
     for _ in range(num_lines):
         y = random.randint(0, area_height - line_thickness)
-        mask[y:y + line_thickness, 0:0 + area_width] = 1.0
+        mask[y:y + line_thickness, 0:0 + area_width] = 0.0
 
     mask = torch.tensor(mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
-
+    border_mask = create_border_mask(image_shape=image_shape)
     # Exclude land
-    mask = (land_mask != 0) * mask
+    mask = land_mask * mask * border_mask
 
     return mask
 
+
+def generate_random_path_mask(image_shape, land_mask, num_lines=1, line_thickness=1, line_length=5):
+    _, _, h, w = image_shape
+
+    mask = np.ones((h, w), dtype=np.float32)
+
+    area_top = 64 - 44
+    area_left = 0
+    area_bottom = 64
+    area_right = 94
+
+    current_y = random.randint(0, 44)
+    current_x = random.randint(0,94)
+
+
+
+    directions = [(0, line_thickness), (0, -line_thickness), (line_thickness, 0), (-line_thickness, 0)]  # (dy, dx) for (N, S, E, W)
+
+    for _ in range(num_lines):
+        current_y = max(area_top, min(area_bottom - line_thickness, current_y))
+        current_x = max(area_left, min(area_right - line_thickness, current_x))
+
+        direction = random.choice(directions)
+
+        for i in range(line_length):
+
+            mask[current_y:current_y + line_thickness, current_x:current_x + line_thickness] = 0.0  # Unmask the path
+
+            new_y = current_y + direction[0]
+            new_x = current_x + direction[1]
+
+            new_y = max(area_top, min(area_bottom - line_thickness, new_y))
+            new_x = max(area_left, min(area_right - line_thickness, new_x))
+
+            current_y = new_y
+            current_x = new_x
+
+    mask = torch.tensor(mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+    border_mask = create_border_mask(image_shape)
+
+    mask = mask * land_mask * border_mask
+
+    return mask
 
 def generate_squiggly_line_mask(image_shape, input_image_original, num_lines=5, line_thickness=2):
     _, _, h, w = image_shape
