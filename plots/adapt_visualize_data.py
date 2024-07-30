@@ -40,8 +40,8 @@ def revert_png(image_path, original_shape, scale=1, compare_to=None):
 
 def plot_png(image_path, land_mask_path):
     """
-    :param image_path: Path to ocean image to be plotted
-    :param land_mask_path: Path to land mask image
+    :param image_path: Path to ocean image to be plotted, must be 94x44
+    :param land_mask_path: Path to land mask image, must be 94x44
     """
     data = OceanImageDataset(num=1)
     train_loader = DataLoader(data, batch_size=1, shuffle=True)
