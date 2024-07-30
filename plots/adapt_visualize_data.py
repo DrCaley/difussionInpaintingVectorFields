@@ -94,12 +94,12 @@ def plot_tensor(input_tensor, land_mask_tensor=None):
 
 # Example Usage
 # Load & plot tensor
-data = OceanImageDataset(num=1)
-train_loader = DataLoader(data, batch_size=1, shuffle=True)
-original_tensor = train_loader.dataset[0][0]
-
-plot_tensor(original_tensor)
-
-# Plot PNG
-plot_png('../../plots/images/gp_image.png',
-         '../../plots/images/land_mask_cropped.png')
+# data = OceanImageDataset(num=1)
+# train_loader = DataLoader(data, batch_size=1, shuffle=True)
+# original_tensor = train_loader.dataset[0][0]
+#
+# plot_tensor(original_tensor)
+#
+# # Plot PNG
+# plot_png('../../plots/images/gp_image.png',
+#          '../../plots/images/land_mask_cropped.png')
