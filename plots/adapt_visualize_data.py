@@ -84,7 +84,6 @@ def plot_tensor(input_tensor, land_mask_tensor=None):
     x_coords = np.arange(u_component.shape[0])
     y_coords = np.arange(u_component.shape[1])
 
-    # TODO: will not color in land bc we make NaN = 0 in dataloader.py
     plotQuiverData(x_coords,  # (94,)
                    y_coords,  # (44,)
                    u_component,  # ([94, 44])
