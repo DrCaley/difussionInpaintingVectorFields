@@ -27,7 +27,6 @@ values = image[known_pixels]
 coords = torch.tensor(coords, dtype=torch.float32)
 values = torch.tensor(values, dtype=torch.float32)
 
-# Model Initialization
 likelihood = gpytorch.likelihoods.GaussianLikelihood()
 model = GPModel(coords, values, likelihood)
 
