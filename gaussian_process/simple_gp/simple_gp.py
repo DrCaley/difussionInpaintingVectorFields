@@ -3,20 +3,29 @@ import torch
 from PIL import Image
 import matplotlib.pyplot as plt
 import gpytorch
-from gaussian_process.gp_model import GPModel_2D
-from plots.visualize_data import plotQuiverData
+from torch.utils.data import DataLoader
 
-image = Image.open('images/input_img_cropped.png').convert('RGB')
+from dataloaders.dataloader import OceanImageDataset
+from gaussian_process.incompressible_gp.incompressible_gp_model import incompressibleRBFKernel
+from gaussian_process.simple_gp.simple_gp_model import GPModel_2D
+from plots.adapt_visualize_data import plot_tensor, plot_png
+from utils.tensors_to_png import generate_png
+
+# data = OceanImageDataset(num=1)
+# train_loader = DataLoader(data, batch_size=1, shuffle=True)
+# image = train_loader.dataset[0][0][0, ..., ...]
+
+image = Image.open('./images/input_img_cropped.png').convert('RGB')
 image = np.array(image, dtype=np.float32)
 
 # Creates speckled mask
-# np.random.seed(0)
-# missing_rate = 0.10
-# missing_pixel_mask = np.random.rand(*image.shape[:2]) > missing_rate
+np.random.seed(0)
+missing_rate = 0.01
+missing_pixel_mask = np.random.rand(*image.shape[:2]) > missing_rate
 
-mask = Image.open('images/mask_cropped.png').convert('L')
-mask = np.array(mask, dtype=np.float32)
-missing_pixel_mask = mask > 0
+# mask = Image.open('./images/mask_cropped.png').convert('L')
+# mask = np.array(mask, dtype=np.float32)
+# missing_pixel_mask = mask > 0
 
 masked_image = image.copy()
 masked_image[missing_pixel_mask] = np.nan
@@ -90,8 +99,8 @@ masked_image = np.nan_to_num(masked_image, nan=0.0)
 output_image = Image.fromarray(masked_image.astype(np.uint8))
 output_image.save('./gp_image.png')
 
-expanded_mask = np.repeat(missing_pixel_mask[..., np.newaxis], 3, axis=2)
-
+expanded_mask = torch.from_numpy(np.repeat(missing_pixel_mask[..., np.newaxis], 3, axis=2))
+generate_png(expanded_mask, filename='expanded_mask.png')
 
 # Testing
 def calculate_mse(original_image, reconstructed_image, mask):
@@ -107,3 +116,5 @@ print(f"GP MSE: {mse_gp}")
 plt.imshow(masked_image.astype(np.uint8))
 plt.title("Reconstructed Image")
 plt.show()
+
+plot_png('./gp_image.png', './images/land_mask_cropped.png')
