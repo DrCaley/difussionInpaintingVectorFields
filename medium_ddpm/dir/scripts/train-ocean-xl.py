@@ -15,7 +15,8 @@ from dataloaders.dataloader import OceanImageDataset
 from medium_ddpm.dir.ddpm import MyDDPM
 from medium_ddpm.dir.resize_tensor import resize
 from medium_ddpm.dir.unets.unet_xl import MyUNet
-from medium_ddpm.dir.utils import show_images, generate_new_images
+from medium_ddpm.dir.util import show_images, generate_new_images
+
 
 # Setting reproducibility
 SEED = 0
@@ -29,8 +30,8 @@ n_steps, min_beta, max_beta = 1000, 0.0001, 0.02
 ddpm = MyDDPM(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=device)
 
 no_train = False
-batch_size = 64
-n_epochs = 1
+batch_size = 35
+n_epochs = 100
 lr = 0.001
 
 
@@ -48,12 +49,12 @@ transform = Compose([
     ResizeTransform((2, 64, 128))        # Resized to (2, 64, 128)
 ])
 
-store_path = "./ddpm_ocean_xl.pt"
+store_path = "./ddpm_ocean_v0.pt"
 
 data = OceanImageDataset(
     mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
     boundaries="../../../data/rams_head/boundaries.yaml",
-    num=10,
+    num=100,
     transform=transform
 )
 
@@ -116,6 +117,8 @@ def evaluate(model, data_loader, device):
 
 
 def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, store_path="ddpm_ocean_model.pt"):
+    """Trains the xl model (1 more layer than the original). The xl model is the main one we use as of early August, 2024"""
+
     custom_loss = CustomLoss()
     best_train_loss = float("inf")
     best_test_loss = float("inf")

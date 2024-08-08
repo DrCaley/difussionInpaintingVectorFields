@@ -1,8 +1,6 @@
-import imageio
-import numpy as np
 import torch
-from einops import rearrange
 import torch.nn.functional as F
+
 
 def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
                                 resample_steps=1, c=1, h=64, w=128):
@@ -60,7 +58,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
 
 
 
-def calculate_mse(original_image, predicted_image, mask):
+def calculate_mse(original_image, predicted_image, mask, flow=False):
     """Calculate Mean Squared Error between the original and predicted images for the masked area only."""
     masked_original = original_image * mask
     masked_predicted = predicted_image * mask

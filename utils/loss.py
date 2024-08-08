@@ -2,25 +2,24 @@ import torch
 from utils.stream_flow import calculate_flow
 
 
-def flow_MSE(predicted, target):
-    flow_diff = torch.abs(calculate_flow(predicted)) - torch.abs(calculate_flow(target))
-    flow_diff[flow_diff < 0.0] = 0.0
-    flow_MSE = (flow_diff ** 2).sum() / torch.ones_like(flow_diff).sum()
+def flow_mse(predicted, target, mask=None, weight=1.0):
+    """MSE where error is how much predicted pixels are worse at following the incompressible stream function than the target"""
 
-    return flow_MSE
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    predicted = predicted.to(device)
+    target = target.to(device)
 
+    if mask is None:
+        mask = torch.ones_like(target).to(device)
 
-def MSE_with_flow(predicted, target, mask, weight=1.0):
+    mask = mask.to(device)
     predicted = predicted * mask
     target = target * mask
+
     flow_diff = torch.abs(calculate_flow(predicted)) - torch.abs(calculate_flow(target))
     flow_diff = flow_diff * mask
     flow_diff[flow_diff < 0.0] = 0.0
 
-    current_MSE = ((predicted - target) ** 2).sum() / mask.sum()
-    flow_MSE = (flow_diff ** 2).sum() / mask.sum()
+    mse = (flow_diff ** 2).sum() / mask.sum()
 
-    if(flow_MSE > 0):
-        print(f"Flow_MSE: {flow_MSE}")
-
-    return current_MSE + flow_MSE * weight
+    return mse * weight
