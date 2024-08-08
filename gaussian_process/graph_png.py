@@ -40,5 +40,5 @@ expanded_mask = np.repeat(missing_pixel_mask[..., np.newaxis], 3, axis=2)
 # print(f"DDPM MSE: {mse_ddpm}")
 
 plot_png('images/0_ddpm_image_0_sample0_resample20.png', './images/land_mask_cropped.png')
-# plot_png('./images/gp_image.png', './images/land_mask_cropped.png')
+plot_png('./images/gp_image.png', './images/land_mask_cropped.png')
 plot_png('images/input_img_cropped.png', './images/land_mask_cropped.png')
