@@ -42,9 +42,14 @@ class ResizeTransform:
     def __call__(self, tensor):
         return resize(tensor, self.end_shape).float()
 
+# Initialize dataset with transformations
+# minU, maxU = -0.8973235906436031, 1.0859991093945718
+# minV, maxV = -0.6647028130174489, 0.5259408400292674
+min = -0.8973235906436031 * 1.2
+max = 1.0859991093945718 * 1.2
 transform = Compose([
-    Lambda(lambda x: (x - 0.5) * 2),     # Normalize to range [-1, 1]
-    ResizeTransform((2, 64, 128))        # Resized to (1, 64, 128)
+    Lambda(lambda x: (x - min) / (max - min) * 2),     # Normalize to range [-1, 1]
+    ResizeTransform((2, 64, 128))        # Resized to (2, 64, 128)
 ])
 
 store_path = "../../../models/ddpm_ocean_xl_wl.pt"
