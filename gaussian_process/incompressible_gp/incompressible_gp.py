@@ -10,7 +10,6 @@ from torch.utils.data import DataLoader
 from dataloaders.dataloader import OceanImageDataset
 from flow_observation import FlowObservation
 from gaussian_process.incompressible_gp.incompressible_gp_model import IncompressibleGP, CompressibleGP
-from plots.adapt_visualize_data import revert_png
 
 def main():
     project_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../..")
