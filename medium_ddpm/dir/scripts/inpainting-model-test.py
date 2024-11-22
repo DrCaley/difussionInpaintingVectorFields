@@ -25,8 +25,11 @@ torch.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 
 n_steps, min_beta, max_beta = 1000, 1e-4, 0.02
-store_path = "../../../models/ddpm_ocean_xl_2999.pt"
+store_path = "../../../models/ddpm_ocean_good_normalized.pt"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+#t = torch.load("./results/predicted/img1_random_path_thin_resample5.pt")
+#og_1 = torch.load("./results/predicted/og1.pt")
 
 checkpoint = torch.load(store_path, map_location=device)
 model_state_dict = checkpoint.get('model_state_dict', checkpoint)
@@ -41,8 +44,12 @@ except Exception as e:
     logging.error(f"Error loading model: {e}")
     exit(1)
 
+min = -0.8973235906436031 * 1.2
+max = 1.0859991093945718 * 1.2
+
+
 transform = Compose([
-    Lambda(lambda x: (x - 0.5) * 2),  # Normalize to range [-1, 1]
+    Lambda(lambda x: torch.where(x != 0, (x - min) / (max - min) * 2, 0)),
     ResizeTransform((2, 64, 128))  # Resized to (2, 64, 128)
 ])
 
@@ -51,7 +58,7 @@ try:
     data = OceanImageDataset(
         mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
         boundaries="../../../data/rams_head/boundaries.yaml",
-        num=17040,
+        num=17,
         transform=transform
     )
 
@@ -87,7 +94,7 @@ with open("inpainting-xl-data.csv", "w", newline="") as file:
         writer.writerow(header)
         logging.info("Processing data")
         image_counter = 0
-        num_images_to_process = 100
+        num_images_to_process = 1
         n_samples = 1
 
         loader = val_loader
@@ -97,8 +104,12 @@ with open("inpainting-xl-data.csv", "w", newline="") as file:
                 break
 
             input_image = batch[0].to(device)
+            # torch.save(input_image, f"results/predicted/og1.pt")
+            torch.save(input_image, "results/myInputNormed.pt")
+            print("i saved my input")
             input_image_original = reverse_normalization(input_image)
             land_mask = (input_image_original != 0).float()
+
 
             for mask_type in masks_to_test:
                 for resample in resample_nums:
@@ -108,7 +119,12 @@ with open("inpainting-xl-data.csv", "w", newline="") as file:
                             mask = generate_random_path_mask(input_image.shape, land_mask, num_lines=num_lines, line_thickness=1)
                         elif mask_type == "random_path_thick":
                             mask = generate_random_path_mask(input_image.shape, land_mask, num_lines=num_lines, line_thickness=5)
+                        torch.save(mask, "results/maskNormed.pt")
+                        print("i saved my mask")
+
                         mask = mask.to(device)
+
+
 
                         mse_ddpm_samples = []
                         for i in range(n_samples):
@@ -121,7 +137,7 @@ with open("inpainting-xl-data.csv", "w", newline="") as file:
                                 resample_steps=resample
                             )
 
-                            torch.save(final_image_ddpm, f"results/predicted:img{batch[1].item()}_{mask_type}_resample{resample}.pt")
+                            torch.save(final_image_ddpm, f"results/predicted/img{batch[1].item()}_{mask_type}_resample{resample}.pt")
 
                             mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
                             mse_ddpm_samples.append(mse_ddpm.item())
