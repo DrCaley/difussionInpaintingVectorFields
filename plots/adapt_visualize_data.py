@@ -99,7 +99,7 @@ def plot_tensor(input_tensor, land_mask_tensor=None):
 # original_tensor = train_loader.dataset[0][0]
 #
 # plot_tensor(original_tensor)
-#
-# # Plot PNG
+
+# Plot PNG
 # plot_png('../../plots/images/gp_image.png',
 #          '../../plots/images/land_mask_cropped.png')
