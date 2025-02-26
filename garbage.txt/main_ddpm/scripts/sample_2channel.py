@@ -40,4 +40,4 @@ generated = generate_new_images(
 )
 show_images(generated, "Final result")
 
-Image(open('../../../main_ddpm/dir/scripts/ocean.gif', 'rgb').read())
+Image(open('../../../medium_ddpm/dir/scripts/ocean.gif', 'rgb').read())
