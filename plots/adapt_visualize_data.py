@@ -6,7 +6,10 @@ from torch.utils.data import DataLoader
 from dataloaders.dataloader import OceanImageDataset
 from plots.visualize_data import plotQuiverData
 
+"""Adapted from WHOI. We use some of this to vizualize data."""
+
 def revert_png(image_path, original_shape, scale=1, compare_to=None):
+    """To change the original png visualization format back into data. No longer useful"""
     img = Image.open(image_path)
     img = img.resize((original_shape[2], original_shape[1]), resample=Image.BOX)
     img_array = np.array(img)
@@ -40,6 +43,7 @@ def revert_png(image_path, original_shape, scale=1, compare_to=None):
 
 def plot_png(image_path, land_mask_path):
     """
+    To change the original png data vizualization into a plot. No longer useful
     :param image_path: Path to ocean image to be plotted, must be 94x44
     :param land_mask_path: Path to land mask image, must be 94x44
     """
@@ -61,6 +65,7 @@ def plot_png(image_path, land_mask_path):
 
 def plot_tensor(input_tensor, land_mask_tensor=None, filename = "results/plot.png"):
     """
+    Plots a tensor. May still be useful
     :param input_tensor: (3, 94, 44), where third channel is binary representation of land mask
     :param land_mask_tensor: Optional land mask tensor, default is third channel
     """

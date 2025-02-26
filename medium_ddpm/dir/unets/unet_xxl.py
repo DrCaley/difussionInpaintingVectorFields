@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+"""The framework for the xxl model, which we mostly abandoned as of Feb 2025 because the xl one is faster for the same quality."""
 def sinusoidal_embedding(n, d):
     """
     Generates a sinusoidal embedding for each time-step.

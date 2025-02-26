@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-
+"""Based on the medium article. This does a bunch of hard math we don't understand - Feb 2025"""
 def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
                                 resample_steps=1, c=1, h=64, w=128):
     """Given a DDPM model, an input image, and a mask, generates inpainted samples"""

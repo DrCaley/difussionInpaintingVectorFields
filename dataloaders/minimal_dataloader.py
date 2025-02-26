@@ -12,7 +12,7 @@ from PIL import Image
 from scipy.io import loadmat
 from tqdm import tqdm
 
-#FROM WHOI
+"""From WHOI. We don't use this"""
 def main():
     current_script_dir = os.path.dirname(os.path.abspath(__file__))
     project_path = os.path.dirname(current_script_dir)

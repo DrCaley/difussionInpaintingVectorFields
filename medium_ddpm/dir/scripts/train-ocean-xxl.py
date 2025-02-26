@@ -17,6 +17,9 @@ from medium_ddpm.dir.resize_tensor import resize
 from medium_ddpm.dir.unets.unet_xxl import MyUNet
 from medium_ddpm.dir.util import show_images, generate_new_images
 
+"""This file trains a model about twice the size of the xl model. It does not seem to have improved on the results, and
+takes significantly longer"""
+
 # Setting reproducibility
 SEED = 0
 random.seed(SEED)

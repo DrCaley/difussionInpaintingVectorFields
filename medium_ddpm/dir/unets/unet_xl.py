@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+"""The framework for the xl model, currently the best as of Feb 2025"""
+
 def sinusoidal_embedding(n, d):
     """
     Generates a sinusoidal embedding for each time-step.

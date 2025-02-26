@@ -2,6 +2,8 @@ import random
 import torch
 import numpy as np
 
+"""Code that generates the masks"""
+
 def generate_random_mask(image_shape, input_image_original, max_mask_size=32):
     _, _, h, w = image_shape
     mask = torch.zeros((1, 1, h, w), dtype=torch.float32)

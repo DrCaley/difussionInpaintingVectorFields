@@ -18,6 +18,9 @@ from medium_ddpm.dir.unets.unet_xl import MyUNet
 from medium_ddpm.dir.util import show_images, generate_new_images
 from utils.loss import flow_mse
 
+"""This file trains the xl (best as of Feb 2025) model, with an attempt to include the stream flow equation in the loss function.
+The current implementation (Feb 2025) does not improve on the xl model"""
+
 
 # Setting reproducibility
 SEED = 0

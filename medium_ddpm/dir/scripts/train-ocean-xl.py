@@ -17,6 +17,7 @@ from medium_ddpm.dir.resize_tensor import resize
 from medium_ddpm.dir.unets.unet_xl import MyUNet
 from medium_ddpm.dir.util import show_images, generate_new_images
 
+"""This file trains the most successful model as of Feb 2025."""
 
 # Setting reproducibility
 SEED = 0
