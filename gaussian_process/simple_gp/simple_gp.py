@@ -3,12 +3,9 @@ import torch
 from PIL import Image
 import matplotlib.pyplot as plt
 import gpytorch
-from torch.utils.data import DataLoader
 
-from dataloaders.dataloader import OceanImageDataset
-from gaussian_process.incompressible_gp.incompressible_gp_model import incompressibleRBFKernel
 from gaussian_process.simple_gp.simple_gp_model import GPModel_2D
-from plots.adapt_visualize_data import plot_tensor, plot_png
+from plots.adapt_visualize_data import plot_png
 from utils.tensors_to_png import generate_png
 
 # data = OceanImageDataset(num=1)

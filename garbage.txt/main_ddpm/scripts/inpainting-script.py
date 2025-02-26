@@ -5,7 +5,6 @@ import torch
 from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose, Lambda
 import logging
-import csv
 
 from dataloaders.dataloader import OceanImageDataset
 from medium_ddpm.dir.ddpm import MyDDPM
@@ -14,7 +13,6 @@ from medium_ddpm.dir.masks import generate_squiggly_line_mask, generate_random_m
     generate_robot_path_mask
 from medium_ddpm.dir.resize_tensor import ResizeTransform
 from medium_ddpm.dir.unets.unet_xl import MyUNet
-from utils.tensors_to_png import generate_png
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -130,8 +128,6 @@ try:
             mse_ddpm_samples.append(mse_ddpm.item())
             logging.info(f"MSE (DDPM Inpainting) on {mask_type} mask for image {image_counter}, sample {i}: {mse_ddpm.item()}")
 
-            generate_png(final_image_ddpm, filename=f'ddpm_image_{image_counter}_sample{i}_resample{resample_steps}.png',
-                         compare_to=input_image, scale=12)
 
             del final_image_ddpm
             torch.cuda.empty_cache()
@@ -145,11 +141,6 @@ try:
         #mse_naive_list.append(mse_naive.item())
         #logging.info(f"MSE (Naive Inpainting) on {mask_type} mask for image {image_counter}: {mse_naive.item()}")
 
-        generate_png(input_image, filename=f'input_image_{image_counter}.png', scale=12)
-        #generate_png(naive_inpainted_image, filename=f'naive_image_{image_counter}.png',
-        #             compare_to=input_image, scale=12)
-        generate_png(mask, filename=f'{mask_type}_mask_{image_counter}.png', scale=12)
-        generate_png(land_mask, filename=f'land_mask_{image_counter}.png', scale=12)
 
         image_counter += 1
 

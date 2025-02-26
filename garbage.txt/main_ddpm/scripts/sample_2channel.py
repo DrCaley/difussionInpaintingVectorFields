@@ -5,8 +5,7 @@ import torch
 
 from medium_ddpm.dir.ddpm import MyDDPM
 from medium_ddpm.dir.unets.unet_resized_2_channel_xl import MyUNet
-from medium_ddpm.dir.utils import show_images, generate_new_images
-from utils import tensors_to_png
+from medium_ddpm.dir.util import show_images, generate_new_images
 
 # Setting reproducibility
 SEED = 0
@@ -41,4 +40,4 @@ generated = generate_new_images(
 )
 show_images(generated, "Final result")
 
-Image(open('ocean.gif', 'rgb').read())
+Image(open('../../../main_ddpm/dir/scripts/ocean.gif', 'rgb').read())

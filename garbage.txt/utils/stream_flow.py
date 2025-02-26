@@ -1,9 +1,8 @@
 import torch
 from torch.utils.data import DataLoader
-import numpy as np
 
 from dataloaders.dataloader import OceanImageDataset
-from utils.tensors_to_png import generate_png
+
 
 #input should be an any by 2 or 3 by any by any Tensor
 #takes really long, not sure why
@@ -37,7 +36,7 @@ def calculate_flow(tensor):
 
 def test_flow():
     data = OceanImageDataset(
-        mat_file=".././data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+        mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
         boundaries=".././data/rams_head/boundaries.yaml",
         num=5
     )

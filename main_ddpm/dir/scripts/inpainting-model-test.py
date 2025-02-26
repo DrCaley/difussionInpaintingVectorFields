@@ -41,7 +41,7 @@ except Exception as e:
     logging.error(f"Error loading model: {e}")
     exit(1)
 
-transform = Compose([
+transform = Compose([ #fixme
     Lambda(lambda x: (x - 0.5) * 2),  # Normalize to range [-1, 1]
     ResizeTransform((2, 64, 128))  # Resized to (2, 64, 128)
 ])
@@ -51,7 +51,7 @@ try:
     data = OceanImageDataset(
         mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
         boundaries="../../../data/rams_head/boundaries.yaml",
-        num=17040,
+        num=10,
         transform=transform
     )
 
@@ -75,22 +75,22 @@ def reverse_normalization(tensor):
     return (tensor + 1) / 2
 
 
-line_numbers = [40]
+line_numbers = [10, 20, 40]
 resample_nums = [5]
-masks_to_test = ["random_path_thin"]
+masks_to_test = ["random_path_thin", "random_path_thick"]
 mse_ddpm_list = []
 
 with open("inpainting-xl-data.csv", "w", newline="") as file:
     try:
         writer = csv.writer(file)
-        header = ["image_num", "mask_type", "num_lines" "resample_steps", "mse"]
+        header = ["image_num", "mask_type", "num_lines", "resample_steps", "mse"]
         writer.writerow(header)
         logging.info("Processing data")
         image_counter = 0
-        num_images_to_process = 100
+        num_images_to_process = 5
         n_samples = 1
 
-        loader = val_loader
+        loader = train_loader
 
         for batch in loader:
             if image_counter >= num_images_to_process:
@@ -109,7 +109,7 @@ with open("inpainting-xl-data.csv", "w", newline="") as file:
                         elif mask_type == "random_path_thick":
                             mask = generate_random_path_mask(input_image.shape, land_mask, num_lines=num_lines, line_thickness=5)
                         mask = mask.to(device)
-
+                        torch.save(mask, f"results/predicted/{mask_type}_{num_lines}.pt")
                         mse_ddpm_samples = []
                         for i in range(n_samples):
                             final_image_ddpm = inpaint_generate_new_images(
@@ -121,7 +121,8 @@ with open("inpainting-xl-data.csv", "w", newline="") as file:
                                 resample_steps=resample
                             )
 
-                            torch.save(final_image_ddpm, f"results/predicted:img{batch[1].item()}_{mask_type}_resample{resample}.pt")
+                            torch.save(final_image_ddpm, f"results/predicted/img{batch[1].item()}_{mask_type}_resample{resample}_num_lines_{num_lines}.pt")
+                            torch.save(mask, f"results/predicted/mask{batch[1].item()}_{mask_type}_resample{resample}_num_lines_{num_lines}.pt");
 
                             mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
                             mse_ddpm_samples.append(mse_ddpm.item())

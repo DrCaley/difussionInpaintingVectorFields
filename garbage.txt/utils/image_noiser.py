@@ -4,7 +4,6 @@ import skimage
 from skimage.util import random_noise
 import matplotlib.pyplot as plt
 import torch
-from utils.tensors_to_png import generate_png
 import math
 
 
@@ -63,7 +62,7 @@ def generate_noised_tensor_single_step(tensor, target_iteration, var_per_iterati
 
 
 def main():
-    path = "./../data/tensors/0.pt"
+    path = "../../data/tensors/0.pt"
     tensor = torch.empty(0)
     try:
         tensor = torch.load(path)

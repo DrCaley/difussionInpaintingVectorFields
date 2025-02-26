@@ -12,14 +12,14 @@ from PIL import Image
 from scipy.io import loadmat
 from tqdm import tqdm
 
-
+#FROM WHOI
 def main():
     current_script_dir = os.path.dirname(os.path.abspath(__file__))
     project_path = os.path.dirname(current_script_dir)
 
     parser = argparse.ArgumentParser(add_help=False)
 
-    default_dataset_path = os.path.join(project_path, "difussionInpaintingVectorFields/data/rams_head/", "stjohn_hourly_5m_velocity_ramhead_v2.mat")
+    default_dataset_path = os.path.join(project_path, "../difussionInpaintingVectorFields/data/rams_head/", "stjohn_hourly_5m_velocity_ramhead_v2.mat")
 
     parser.add_argument("--dataset", "-d", default=default_dataset_path)
 
@@ -37,7 +37,7 @@ def main():
     current_u = mat['u'].transpose((2, 0, 1))  # lat,lon,idx -> idx,lat,lon
     current_v = mat['v'].transpose((2, 0, 1))  # lat,lon,idx -> idx,lat,lon
 
-    with open(os.path.join(project_path, "difussionInpaintingVectorFields/data/rams_head/", "boundaries.yaml"), 'r') as f:
+    with open(os.path.join(project_path, "../difussionInpaintingVectorFields/data/rams_head/", "boundaries.yaml"), 'r') as f:
         boundaries_cfg = yaml.load(f.read(), Loader=yaml.SafeLoader)
 
     if boundaries == "full":

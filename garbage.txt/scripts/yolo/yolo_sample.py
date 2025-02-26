@@ -5,11 +5,11 @@ from dataloaders.dataloader import OceanImageDataset
 from example_nn.inPaintingNetwork import Net
 from utils.resize_tensor import resize
 from utils.tensors_to_png import generate_png
-from utils.image_noiser import generate_noised_tensor_single_step, generate_noised_tensor_iterative
+from utils.image_noiser import generate_noised_tensor_iterative
 
 
 data = OceanImageDataset(
-    mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+    mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
     boundaries="./data/rams_head/boundaries.yaml",
     num=10
 )

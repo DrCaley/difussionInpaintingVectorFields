@@ -1,21 +1,20 @@
 import math
-import os
 import random
-
 import numpy as np
+import matplotlib.pyplot as plt
+from tqdm.auto import tqdm
 import torch
-from matplotlib import pyplot as plt
-from torch import nn
+import torch.nn as nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose, Lambda
-from tqdm import tqdm
 
 from dataloaders.dataloader import OceanImageDataset
 from medium_ddpm.dir.ddpm import MyDDPM
 from medium_ddpm.dir.resize_tensor import resize
-from medium_ddpm.dir.unets.unet_xxl import MyUNet
-from medium_ddpm.dir.utils import show_images, generate_new_images
+from medium_ddpm.dir.unets.unet_resized_2_channel import MyUNet
+from medium_ddpm.dir.util import show_images, generate_new_images
+from utils.loss import flow_mse
 
 # Setting reproducibility
 SEED = 0
@@ -24,12 +23,13 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 
 # Definitions
+STORE_PATH_FASHION = "ddpm_model_fashion.pt"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 n_steps, min_beta, max_beta = 1000, 0.0001, 0.02
 ddpm = MyDDPM(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=device)
 
 no_train = False
-batch_size = 64
+batch_size = 1
 n_epochs = 1
 lr = 0.001
 
@@ -43,10 +43,10 @@ class ResizeTransform:
 # Initialize dataset with transformations
 transform = Compose([
     Lambda(lambda x: (x - 0.5) * 2),     # Normalize to range [-1, 1]
-    ResizeTransform((2, 64, 128))        # Resized to (2, 64, 128)
+    ResizeTransform((2, 64, 128))        # Resized to (1, 64, 128)
 ])
 
-store_path = "./ddpm_ocean_xxl.pt"
+store_path = "../../../models/ddpm_ocean_v0.pt"
 
 data = OceanImageDataset(
     mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
@@ -110,7 +110,8 @@ def evaluate(model, data_loader, device):
 
     return total_loss / count
 
-def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, store_path="ddpm_ocean_model.pt"):
+# Training loop function
+def training_loop(ddpm, loader, n_epochs, optim, device, display=False, include_stream_loss=False):
     custom_loss = CustomLoss()
     best_train_loss = float("inf")
     best_test_loss = float("inf")
@@ -119,19 +120,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     train_losses = []
     test_losses = []
 
-    start_epoch = 0
-    if os.path.exists(store_path):
-        checkpoint = torch.load(store_path)
-        ddpm.load_state_dict(checkpoint['model_state_dict'])
-        optim.load_state_dict(checkpoint['optimizer_state_dict'])
-        start_epoch = checkpoint['epoch'] + 1
-        train_losses = checkpoint['train_losses']
-        test_losses = checkpoint['test_losses']
-        best_train_loss = checkpoint['best_train_loss']
-        best_test_loss = checkpoint['best_test_loss']
-        print(f"Resuming training from epoch {start_epoch}")
-
-    for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="Training progress", colour="#00ff00"):
+    for epoch in tqdm(range(n_epochs), desc="Training progress", colour="#00ff00"):
         epoch_loss = 0.0
         ddpm.train()
         for step, batch in enumerate(tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{n_epochs}", colour="#005500")):
@@ -145,6 +134,20 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             eta_theta = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
             loss = custom_loss(eta_theta, eta, x0)
+
+            if include_stream_loss:
+                #change weight to customize how much the stream equations impact the loss
+                weight = 100
+                # Estimating noise to be removed
+                alpha_t = ddpm.alphas[t]
+                alpha_t_bar = ddpm.alpha_bars[t]
+                # Generating predicted and target images
+                predicted = (1 / alpha_t.sqrt()) * (noisy_imgs - (1 - alpha_t) / (1 - alpha_t_bar).sqrt() * eta_theta)
+                target = ddpm(x0, t-1, eta) #bug? based on noisy_imgs
+
+                flow_loss = flow_mse(predicted, target) * weight
+                loss += flow_loss
+
             optim.zero_grad()
             loss.backward()
             optim.step()
@@ -161,23 +164,17 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
 
         log_string = f"Loss at epoch {epoch + 1}: {epoch_loss:.3f}"
 
+        if best_train_loss > epoch_loss:
+            best_train_loss = epoch_loss
+            torch.save(ddpm.state_dict(), "ddpm_best_train_xl_wl.pt")
+            log_string += " --> Best model ever (stored based on training loss)"
+
         if best_test_loss > avg_test_loss:
             best_test_loss = avg_test_loss
-            torch.save(ddpm.state_dict(), store_path)
+            torch.save(ddpm.state_dict(), "ddpm_best_test_xl_wl.pt")
             log_string += " --> Best model ever (stored based on test loss)"
 
         print(log_string)
-
-        checkpoint = {
-            'epoch': epoch,
-            'model_state_dict': ddpm.state_dict(),
-            'optimizer_state_dict': optim.state_dict(),
-            'train_losses': train_losses,
-            'test_losses': test_losses,
-            'best_train_loss': best_train_loss,
-            'best_test_loss': best_test_loss
-        }
-        torch.save(checkpoint, store_path)
 
         if display:
             show_images(generate_new_images(ddpm, device=device), f"Images generated at epoch {epoch + 1}")
@@ -189,9 +186,11 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     plt.ylabel('Loss')
     plt.legend()
     plt.title('Training and Test Loss')
-    plt.savefig('train_test_loss_xxl.png')
+    plt.savefig('train_test_loss.png')
 
 optimizer = Adam(ddpm.parameters(), lr=lr)
 
 if not no_train:
-    training_loop(ddpm, train_loader, test_loader, n_epochs, optim=optimizer, device=device, store_path=store_path)
+    training_loop(ddpm, train_loader, test_loader, n_epochs,
+                  optim=optimizer, device=device, store_path=store_path,
+                  include_stream_loss=False)

@@ -6,14 +6,16 @@ import os
 
 # Input should be a 3 by n by m tensor
 # Outputs are normalized, so comparing the strength of currents between maps won't work
+# Unless you use the compare_to parameter
 def generate_png(tensors, scale=1, output_path="./results", filename="output.png", compare_to=None):
     shape = tensors.shape
     channels = shape[0]
-    dim_num = len(shape)
 
     if len(shape) > 3:
         for i, tensor in enumerate(tensors):
-            generate_png(tensor, scale, output_path, f"{i}_{filename}")
+            if compare_to is not None:
+                compare_to = compare_to[i]
+            generate_png(tensor, scale, output_path, f"{i}_{filename}", compare_to=compare_to)
         return
 
     if len(shape) < 3:
@@ -24,8 +26,6 @@ def generate_png(tensors, scale=1, output_path="./results", filename="output.png
     img = Image.new('RGB', (shape[2], shape[1]), color='white')
 
     vectors_arr = tensors.detach().numpy()
-    maxes, mins = [], []
-
 
     if compare_to is None:
         compare_to = vectors_arr
@@ -34,8 +34,6 @@ def generate_png(tensors, scale=1, output_path="./results", filename="output.png
 
     maxes = [np.nanmax(compare_to[i]) for i in range(channels)]
     mins = [np.nanmin(compare_to[i]) for i in range(channels)]
-
-
 
     for y in range(shape[1]):
         for x in range(shape[2]):
@@ -64,5 +62,3 @@ def generate_png(tensors, scale=1, output_path="./results", filename="output.png
 
     img.save(os.path.join(output_path, filename))
 
-# Example for testing
-#generate_png(torch.load("./../data/tensors/0.pt"),maxes=[0.7, 0.6, 1.0], mins=[0.2, 0.3, 0.0])

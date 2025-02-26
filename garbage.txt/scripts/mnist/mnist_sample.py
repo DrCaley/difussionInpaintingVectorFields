@@ -1,4 +1,3 @@
-from random import sample
 import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets
@@ -7,8 +6,6 @@ from yolo_net_64x128 import Net
 from utils.resize_tensor import resize
 from utils.tensors_to_png import generate_png
 from utils.image_noiser import generate_noised_tensor_iterative
-import torch.nn.functional as F
-import PIL
 
 test_data = datasets.FashionMNIST(
     root="data",

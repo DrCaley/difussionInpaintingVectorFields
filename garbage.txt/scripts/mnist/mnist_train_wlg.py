@@ -9,7 +9,6 @@ from torchvision import datasets
 from torchvision.transforms import ToTensor
 from tqdm import tqdm
 
-from utils.tensors_to_png import generate_png
 from yolo_net_64x128 import Net
 from utils.resize_tensor import resize
 from utils.image_noiser import generate_noised_tensor_single_step, generate_noised_tensor_iterative

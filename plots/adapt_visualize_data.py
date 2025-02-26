@@ -59,7 +59,7 @@ def plot_png(image_path, land_mask_path):
     plot_tensor(input_tensor, land_mask_tensor)
 
 
-def plot_tensor(input_tensor, land_mask_tensor=None):
+def plot_tensor(input_tensor, land_mask_tensor=None, filename = "results/plot.png"):
     """
     :param input_tensor: (3, 94, 44), where third channel is binary representation of land mask
     :param land_mask_tensor: Optional land mask tensor, default is third channel
@@ -89,7 +89,7 @@ def plot_tensor(input_tensor, land_mask_tensor=None):
                    u_component,  # ([94, 44])
                    v_component,  # ([94, 44])
                    quiver_stride=3)
-    plt.show()
+    plt.savefig(filename)
 
 
 # Example Usage
