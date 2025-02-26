@@ -10,10 +10,12 @@ from flow_observation import FlowObservation
 from gaussian_process.incompressible_gp.incompressible_gp_model import IncompressibleGP, CompressibleGP
 import csv
 
+
 def calculate_mse(true_u, true_v, pred_u, pred_v, mask):
     mse_u = np.nanmean((true_u[~mask] - pred_u[~mask]) ** 2)
     mse_v = np.nanmean((true_v[~mask] - pred_v[~mask]) ** 2)
     return mse_u, mse_v
+
 
 def lla2ned(lat, lon, alt, lat_ref, lon_ref, alt_ref):
     a = 6378137.0  # WGS-84 Earth semimajor axis (m)
@@ -37,6 +39,7 @@ def lla2ned(lat, lon, alt, lat_ref, lon_ref, alt_ref):
     d_down = alt_ref - alt
 
     return np.vstack((d_north, d_east, d_down)).T
+
 
 def main():
     project_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../..")
@@ -77,17 +80,20 @@ def main():
     dataset = [np.dstack([u, v]) for u, v in zip(current_u, current_v)]
 
     # 100 world test indexes
-    world_indexes = [5, 425, 805, 1406, 1622, 1790, 2013, 2637, 3512, 3543, 3623, 3692, 3828, 3876, 3927, 3996,
-                     4613, 4635, 4729, 5194, 5244, 5389, 5607, 5732, 5924, 6030, 6148, 6231, 6327, 6433, 6556,
-                     7127, 7261, 7284, 7387, 7631, 7747, 7987, 8047, 8115, 8298, 8670, 8754, 8788, 9035, 9135,
-                     9220, 9309, 9447, 9479, 9566, 9658, 9670, 10098, 10229, 10307, 10372, 10426, 10609, 10864,
-                     11091, 11201, 11351, 11371, 11421, 11523, 11562, 11568, 12143, 12162, 12307, 12443, 12568,
-                     12576, 12692, 13051, 13299, 13742, 14037, 14038, 14220, 14536, 14577, 14846, 15032, 15138,
-                     15287, 15685, 16032, 16076, 16315, 16374, 16748, 16750, 16952]
+    # world_indexes = [5, 425, 805, 1406, 1622, 1790, 2013, 2637, 3512, 3543, 3623, 3692, 3828, 3876, 3927, 3996,
+    #                  4613, 4635, 4729, 5194, 5244, 5389, 5607, 5732, 5924, 6030, 6148, 6231, 6327, 6433, 6556,
+    #                  7127, 7261, 7284, 7387, 7631, 7747, 7987, 8047, 8115, 8298, 8670, 8754, 8788, 9035, 9135,
+    #                  9220, 9309, 9447, 9479, 9566, 9658, 9670, 10098, 10229, 10307, 10372, 10426, 10609, 10864,
+    #                  11091, 11201, 11351, 11371, 11421, 11523, 11562, 11568, 12143, 12162, 12307, 12443, 12568,
+    #                  12576, 12692, 13051, 13299, 13742, 14037, 14038, 14220, 14536, 14577, 14846, 15032, 15138,
+    #                  15287, 15685, 16032, 16076, 16315, 16374, 16748, 16750, 16952]
+
+    world_index_file = pd.read_csv('./test_index_17040.csv')
+    world_indexes = world_index_file['world_idx']
 
     mse_results = []
 
-    for world_idx in world_indexes:
+    for world_idx in world_indexes[:99]:
         uu = dataset[world_idx][:, :, 0]
         vv = dataset[world_idx][:, :, 1]
 
@@ -158,10 +164,12 @@ def main():
         plt.quiver(xx_stride, yy_stride, uu_stride, vv_stride, color="white", scale=10)
         plt.xlabel("Easting (m)")
         plt.ylabel("Northing (m)")
-        plt.scatter([o.x for o in gp.observations], [o.y for o in gp.observations], marker="x", c='r', label="Observation")
+        plt.scatter([o.x for o in gp.observations], [o.y for o in gp.observations], marker="x", c='r',
+                    label="Observation")
         plt.legend()
 
-        plt.figtext(0.5, -0.05, f'Figure: Ground Truth with Observations and Vector Field for World Index {world_idx}', ha='center', fontsize=12)
+        plt.figtext(0.5, -0.05, f'Figure: Ground Truth with Observations and Vector Field for World Index {world_idx}',
+                    ha='center', fontsize=12)
         plt.tight_layout()
         plt.show()
 
@@ -173,13 +181,14 @@ def main():
         plt.imshow(mask.T, origin="lower", extent=[xmin, xmax, ymin, ymax], cmap=custom_cmap)
         plt.show()
 
-    # with open('mse_results.csv', 'w', newline='') as csvfile:
-    #     fieldnames = ['world_idx', 'mse_u', 'mse_v']
-    #     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-    #
-    #     writer.writeheader()
-    #     for row in mse_results:
-    #         writer.writerow(row)
+    with open('mse_results.csv', 'w', newline='') as csvfile:
+        fieldnames = ['world_idx', 'mse_u', 'mse_v']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()
+        for row in mse_results:
+            writer.writerow(row)
+
 
 if __name__ == '__main__':
     main()
