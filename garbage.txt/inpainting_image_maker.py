@@ -8,20 +8,15 @@ import logging
 import csv
 
 from dataloaders.dataloader import OceanImageDataset
-from medium_ddpm.dir.ddpm import MyDDPM
-from medium_ddpm.dir.inpainting_utils import inpaint_generate_new_images, calculate_mse
-from medium_ddpm.dir.masks import (generate_straight_line_mask, generate_robot_path_mask,
-                                   generate_squiggly_line_mask, generate_random_mask, generate_random_path_mask)
-from medium_ddpm.dir.resize_tensor import ResizeTransform
-from medium_ddpm.dir.unets.unet_xl import MyUNet
-
-#output goes to file, not console
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename="inpainting_log.txt")
+from medium_ddpm.ddpm import MyDDPM
+from medium_ddpm.inpainting_utils import inpaint_generate_new_images, calculate_mse
+from medium_ddpm.masks import (generate_random_path_mask)
+from medium_ddpm.resize_tensor import ResizeTransform
+from medium_ddpm.unets.unet_xl import MyUNet
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename="../DDPM/Testing/inpainting_model_test_log.txt")
 
 """Inpaints, records data about how well the model is doing"""
-"""This is the main file to test the model"""
 
-#Set seed
 SEED = 0
 random.seed(SEED)
 np.random.seed(SEED)
@@ -29,8 +24,7 @@ torch.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 
 n_steps, min_beta, max_beta = 1000, 1e-4, 0.02
-#change to the path to the model you want to test
-store_path = "../../../models/ddpm_ocean_xl_2999.pt"
+store_path = "../DDPM/Trained_Models/ddpm_ocean_good_normalized.pt"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 checkpoint = torch.load(store_path, map_location=device)
@@ -46,7 +40,7 @@ except Exception as e:
     logging.error(f"Error loading model: {e}")
     exit(1)
 
-transform = Compose([ #fixme wrong way to normalize
+transform = Compose([
     Lambda(lambda x: (x - 0.5) * 2),  # Normalize to range [-1, 1]
     ResizeTransform((2, 64, 128))  # Resized to (2, 64, 128)
 ])
@@ -54,9 +48,9 @@ transform = Compose([ #fixme wrong way to normalize
 try:
     logging.info("Preparing data")
     data = OceanImageDataset(
-        mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+        mat_file="../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
         boundaries="../../../data/rams_head/boundaries.yaml",
-        num=10, #number of ocean snapshots to load
+        num=17040,
         transform=transform
     )
 
@@ -76,33 +70,34 @@ except Exception as e:
     exit(1)
 
 
-def reverse_normalization(tensor): #fixme wrong way to denormalize
+def reverse_normalization(tensor):
     return (tensor + 1) / 2
 
 
-line_numbers = [10, 20, 40] #parameters of mask to test
-resample_nums = [5] #number of times to sample/resample
-masks_to_test = ["random_path_thin", "random_path_thick"]
+line_numbers = [40]
+resample_nums = [5]
+masks_to_test = ["random_path_thick"]
 mse_ddpm_list = []
 
-with open("inpainting-xl-data.csv", "w", newline="") as file:
+with open("../DDPM/Testing/inpainting-xl-data.csv", "w", newline="") as file:
     try:
-        #writes data to csv file
         writer = csv.writer(file)
-        header = ["image_num", "mask_type", "num_lines", "resample_steps", "mse"]
+        header = ["image_num", "mask_type", "num_lines" "resample_steps", "mse"]
         writer.writerow(header)
         logging.info("Processing data")
         image_counter = 0
-        num_images_to_process = 5
+        num_images_to_process = 1
         n_samples = 1
 
-        loader = train_loader #change to test_loader, val_loader depending on what you want to test
+        loader = val_loader
 
         for batch in loader:
             if image_counter >= num_images_to_process:
                 break
 
             input_image = batch[0].to(device)
+            torch.save(input_image, "../DDPM/Testing/results/myInput.pt")
+            print("i saved my input")
             input_image_original = reverse_normalization(input_image)
             land_mask = (input_image_original != 0).float()
 
@@ -115,25 +110,25 @@ with open("inpainting-xl-data.csv", "w", newline="") as file:
                         elif mask_type == "random_path_thick":
                             mask = generate_random_path_mask(input_image.shape, land_mask, num_lines=num_lines, line_thickness=5)
                         mask = mask.to(device)
-                        torch.save(mask, f"results/predicted/{mask_type}_{num_lines}.pt")
+                        torch.save(mask, "../DDPM/Testing/results/myMask.pt")
+
                         mse_ddpm_samples = []
                         for i in range(n_samples):
+                            print("hello?")
                             final_image_ddpm = inpaint_generate_new_images(
                                 best_model,
                                 input_image,
                                 mask,
-                                n_samples=1, #number of samples to generate. I think it doesn't work, not sure
+                                n_samples=1,
                                 device=device,
                                 resample_steps=resample
                             )
 
-                            #saves tensor and mask
-                            torch.save(final_image_ddpm, f"results/predicted/img{batch[1].item()}_{mask_type}_resample{resample}_num_lines_{num_lines}.pt")
-                            torch.save(mask, f"results/predicted/mask{batch[1].item()}_{mask_type}_resample{resample}_num_lines_{num_lines}.pt");
-                            #find mse
+                            torch.save(final_image_ddpm,
+                                       f"../Testing/results/predicted:img{batch[1].item()}_{mask_type}_resample{resample}.pt")
+
                             mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
                             mse_ddpm_samples.append(mse_ddpm.item())
-                            #print mse to
                             logging.info(
                                 f"MSE (DDPM Inpainting) with {num_lines} lines for image {image_counter}, sample {i}: {mse_ddpm.item()}")
 

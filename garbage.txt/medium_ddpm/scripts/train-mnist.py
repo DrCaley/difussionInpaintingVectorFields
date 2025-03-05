@@ -8,8 +8,8 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, ToTensor, Lambda
 from torchvision.datasets import FashionMNIST
 
-from medium_ddpm.dir.ddpm import MyDDPM
-from medium_ddpm.dir.resize_tensor import resize
+from medium_ddpm.ddpm import MyDDPM
+from medium_ddpm.resize_tensor import resize
 from medium_ddpm.dir.unets.unet_resized_2_channel import MyUNet
 from medium_ddpm.dir.util import show_images, generate_new_images
 
@@ -47,7 +47,7 @@ transform = Compose([
 ])
 
 # Select dataset and initialize DataLoader
-store_path = "../../../models/ddpm_fashion.pt"
+store_path = "../../../DDPM/Trained_Models/ddpm_fashion.pt"
 ds_fn = FashionMNIST
 dataset = ds_fn("../datasets", download=True, train=True, transform=transform)
 loader = DataLoader(dataset, batch_size, shuffle=True)

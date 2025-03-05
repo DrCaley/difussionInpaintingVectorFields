@@ -12,9 +12,9 @@ from torchvision.transforms import Compose, Lambda
 from tqdm import tqdm
 
 from dataloaders.dataloader import OceanImageDataset
-from medium_ddpm.dir.ddpm import MyDDPM
-from medium_ddpm.dir.resize_tensor import resize
-from medium_ddpm.dir.unets.unet_xxl import MyUNet
+from medium_ddpm.ddpm import MyDDPM
+from medium_ddpm.resize_tensor import resize
+from medium_ddpm.unets.unet_xxl import MyUNet
 from medium_ddpm.dir.util import show_images, generate_new_images
 
 """This file trains a model about twice the size of the xl model. It does not seem to have improved on the results, and
@@ -52,7 +52,7 @@ transform = Compose([
 store_path = "./ddpm_ocean_xxl.pt"
 
 data = OceanImageDataset(
-    mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+    mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
     boundaries="../../../data/rams_head/boundaries.yaml",
     num=10,
     transform=transform

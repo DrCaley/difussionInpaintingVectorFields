@@ -7,12 +7,12 @@ from torchvision.transforms import Compose, Lambda
 import logging
 
 from dataloaders.dataloader import OceanImageDataset
-from medium_ddpm.dir.ddpm import MyDDPM
-from medium_ddpm.dir.inpainting_utils import inpaint_generate_new_images, calculate_mse
-from medium_ddpm.dir.masks import generate_squiggly_line_mask, generate_random_mask, generate_straight_line_mask, \
+from medium_ddpm.ddpm import MyDDPM
+from medium_ddpm.inpainting_utils import inpaint_generate_new_images, calculate_mse
+from medium_ddpm.masks import generate_squiggly_line_mask, generate_random_mask, generate_straight_line_mask, \
     generate_robot_path_mask
-from medium_ddpm.dir.resize_tensor import ResizeTransform
-from medium_ddpm.dir.unets.unet_xl import MyUNet
+from medium_ddpm.resize_tensor import ResizeTransform
+from medium_ddpm.unets.unet_xl import MyUNet
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -26,7 +26,7 @@ torch.cuda.manual_seed_all(SEED)
 
 # Parameters
 n_steps, min_beta, max_beta = 1000, 1e-4, 0.02
-store_path = "../../../models/ddpm_ocean_xl.pt"
+store_path = "../../../DDPM/Trained_Models/ddpm_ocean_xl.pt"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load model

@@ -3,7 +3,7 @@ import random
 import numpy as np
 import torch
 
-from medium_ddpm.dir.ddpm import MyDDPM
+from medium_ddpm.ddpm import MyDDPM
 from medium_ddpm.dir.unets.unet_resized_2_channel_xl import MyUNet
 from medium_ddpm.dir.util import show_images, generate_new_images
 
@@ -15,7 +15,7 @@ torch.manual_seed(SEED)
 
 # Parameters
 n_steps, min_beta, max_beta = 1000, 1e-4, 0.02
-store_path = "../../../models/ddpm_ocean_2channel.pt"
+store_path = "../../../DDPM/Trained_Models/ddpm_ocean_2channel.pt"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -40,4 +40,4 @@ generated = generate_new_images(
 )
 show_images(generated, "Final result")
 
-Image(open('../../../medium_ddpm/dir/scripts/ocean.gif', 'rgb').read())
+Image(open('../../../DDPM/Helper_Functions/ocean.gif', 'rgb').read())

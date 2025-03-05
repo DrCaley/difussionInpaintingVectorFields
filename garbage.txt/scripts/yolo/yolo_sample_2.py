@@ -21,7 +21,7 @@ test_dataloader = DataLoader(test_data, batch_size=15, shuffle=True)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 model = Net().to(device)
-model_path = '../../models/mnist_model_ep_1.pth'
+model_path = '../../Trained_Models/mnist_model_ep_1.pth'
 model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval()
 

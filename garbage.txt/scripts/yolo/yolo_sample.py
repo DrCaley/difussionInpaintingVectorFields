@@ -30,7 +30,7 @@ test_loader = DataLoader(test_data, batch_size=batch_size)
 val_loader = DataLoader(validation_data, batch_size=batch_size)
 
 model = Net().to(device)
-model_path = '../../models/model_ep_149.pth'
+model_path = '../../Trained_Models/model_ep_149.pth'
 model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval()
 

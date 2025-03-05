@@ -204,3 +204,5 @@ def create_border_mask(image_shape, area_height=44, area_width=94, offset_top=0,
     border_mask = np.zeros((h, w), dtype=np.float32)
     border_mask[offset_top:offset_top + area_height, offset_left:offset_left + area_width] = 1.0
     return torch.tensor(border_mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+
+

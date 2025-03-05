@@ -12,12 +12,15 @@ from torchvision.transforms import Compose, Lambda
 from tqdm import tqdm
 
 from dataloaders.dataloader import OceanImageDataset
-from medium_ddpm.dir.ddpm import MyDDPM
-from medium_ddpm.dir.resize_tensor import resize
-from medium_ddpm.dir.unets.unet_xl import MyUNet
+from medium_ddpm.ddpm import MyDDPM
+from medium_ddpm.resize_tensor import resize
+from medium_ddpm.unets.unet_xl import MyUNet
 from medium_ddpm.dir.util import show_images, generate_new_images
+from utils.loss import flow_mse
 
-"""This file trains the most successful model as of Feb 2025."""
+"""This file trains the xl (best as of Feb 2025) model, with an attempt to include the stream flow equation in the loss function.
+The current implementation (Feb 2025) does not improve on the xl model"""
+
 
 # Setting reproducibility
 SEED = 0
@@ -31,10 +34,9 @@ n_steps, min_beta, max_beta = 1000, 0.0001, 0.02
 ddpm = MyDDPM(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=device)
 
 no_train = False
-batch_size = 35
-n_epochs = 100
+batch_size = 1
+n_epochs = 1
 lr = 0.001
-
 
 class ResizeTransform:
     def __init__(self, end_shape):
@@ -42,7 +44,6 @@ class ResizeTransform:
 
     def __call__(self, tensor):
         return resize(tensor, self.end_shape).float()
-
 
 # Initialize dataset with transformations
 # minU, maxU = -0.8973235906436031, 1.0859991093945718
@@ -54,10 +55,10 @@ transform = Compose([
     ResizeTransform((2, 64, 128))        # Resized to (2, 64, 128)
 ])
 
-store_path = "./ddpm_ocean_v0.pt"
+store_path = "../../../Trained_Models/ddpm_ocean_xl_wl.pt"
 
 data = OceanImageDataset(
-    mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+    mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
     boundaries="../../../data/rams_head/boundaries.yaml",
     num=100,
     transform=transform
@@ -97,7 +98,6 @@ class CustomLoss(nn.Module):
 
         return weighted_mse_loss + weighted_mae_loss
 
-
 def evaluate(model, data_loader, device):
     model.eval()
     total_loss = 0.0
@@ -120,9 +120,9 @@ def evaluate(model, data_loader, device):
 
     return total_loss / count
 
-
-def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, store_path="ddpm_ocean_model.pt"):
-    """Trains the xl model (1 more layer than the original). The xl model is the main one we use as of early August, 2024"""
+# Training loop function
+def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, include_stream_loss=False, store_path="ddpm_xl_wl.pt"):
+    """Trains the xl model (1 more layer than the original) with the stream flow equations as part of the loss"""
 
     custom_loss = CustomLoss()
     best_train_loss = float("inf")
@@ -144,25 +144,50 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
         best_test_loss = checkpoint['best_test_loss']
         print(f"Resuming training from epoch {start_epoch}")
 
-    for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="Training progress", colour="#00ff00"):
+
+    for epoch in tqdm(range(n_epochs), desc="Training progress", colour="#00ff00"):
         epoch_loss = 0.0
+        epoch_flow_loss = 0.0
         ddpm.train()
         for step, batch in enumerate(tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{n_epochs}", colour="#005500")):
             x0 = batch[0].to(device).float()
             n = len(x0)
 
+        #    if epoch == 0:
+                #show_images(x0.cpu(), "Original images before noising")
+                #tensors_to_png.generate_png(x0)
+
             eta = torch.randn_like(x0).to(device)  # Generate noise
             t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps
 
             noisy_imgs = ddpm(x0, t, eta)
+
             eta_theta = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
             loss = custom_loss(eta_theta, eta, x0)
+            flow_loss = 0.0
+
+            if include_stream_loss:
+                #change weight to customize how much the stream equation impacts the overall loss
+                weight = 1000
+                # added this for batch_size != 1
+                alpha_t = ddpm.alphas[t].unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+                alpha_t_bar = ddpm.alpha_bars[t].unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+                # Generating predicted and target images
+                predicted = (1 / alpha_t.sqrt()) * (noisy_imgs - (1 - alpha_t) / (1 - alpha_t_bar).sqrt() * eta_theta)
+                target = ddpm(x0, t-1, eta) #bug? based on noisy_imgs
+
+                flow_loss = flow_mse(predicted, target, weight=weight)
+
+            loss += flow_loss
+
+
             optim.zero_grad()
             loss.backward()
             optim.step()
 
             epoch_loss += loss.item() * len(x0) / len(train_loader.dataset)
+            epoch_flow_loss += flow_loss.item() * len(x0) / len(train_loader.dataset)
 
         ddpm.eval()
         avg_train_loss = evaluate(ddpm, train_loader, device)
@@ -172,7 +197,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
         train_losses.append(avg_train_loss)
         test_losses.append(avg_test_loss)
 
-        log_string = f"Loss at epoch {epoch + 1}: {epoch_loss:.3f}"
+        log_string = f"Loss at epoch {epoch + 1 + start_epoch}: {epoch_loss:.3f}, of which {epoch_flow_loss:.3f} was flow loss"
 
         if best_test_loss > avg_test_loss:
             best_test_loss = avg_test_loss
@@ -202,10 +227,10 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     plt.ylabel('Loss')
     plt.legend()
     plt.title('Training and Test Loss')
-    plt.savefig('train_test_loss_xl.png')
-
+    plt.savefig('train_test_loss_xl_wl.png')
 
 optimizer = Adam(ddpm.parameters(), lr=lr)
 
 if not no_train:
-    training_loop(ddpm, train_loader, test_loader, n_epochs, optim=optimizer, device=device, store_path=store_path)
+    training_loop(ddpm, train_loader, test_loader, n_epochs, optim=optimizer, device=device,
+                  store_path=store_path, include_stream_loss=True)

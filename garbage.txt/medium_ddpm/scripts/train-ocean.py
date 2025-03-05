@@ -10,8 +10,8 @@ from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose, Lambda
 
 from dataloaders.dataloader import OceanImageDataset
-from medium_ddpm.dir.ddpm import MyDDPM
-from medium_ddpm.dir.resize_tensor import resize
+from medium_ddpm.ddpm import MyDDPM
+from medium_ddpm.resize_tensor import resize
 from medium_ddpm.dir.unets.unet_resized_2_channel import MyUNet
 from medium_ddpm.dir.util import show_images, generate_new_images
 from utils.loss import flow_mse
@@ -46,7 +46,7 @@ transform = Compose([
     ResizeTransform((2, 64, 128))        # Resized to (1, 64, 128)
 ])
 
-store_path = "../../../models/ddpm_ocean_v0.pt"
+store_path = "../../../DDPM/Trained_Models/ddpm_ocean_v0.pt"
 
 data = OceanImageDataset(
     mat_file="../../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
