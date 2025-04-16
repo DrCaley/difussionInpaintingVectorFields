@@ -3,11 +3,13 @@ import random
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, random_split
-from torchvision.transforms import Compose, Lambda
+from torchvision.transforms import Compose, Lambda, Normalize
 import logging
 import csv
+import yaml
 
-from dataloaders.dataloader import OceanImageDataset
+
+from DataPrep.dataloader import OceanImageDataset
 from DDPM.Neural_Networks.ddpm import MyDDPM
 from DDPM.Helper_Functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from DDPM.Helper_Functions.masks import (generate_random_path_mask)
@@ -20,8 +22,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 """Inpaints, records data about how well the model is doing"""
 """This is the main file to test the model"""
 
+
+# Load the YAML file
+with open('../data.yaml', 'r') as file:
+    config = yaml.safe_load(file)
+
 #Set seed
-SEED = 0
+SEED = config['testSeed']
 random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
@@ -46,7 +53,6 @@ except Exception as e:
     exit(1)
 
 transform = Compose([ #fixme wrong way to normalize
-    Lambda(lambda x: (x - 0.5) * 2),  # Normalize to range [-1, 1]
     ResizeTransform((2, 64, 128))  # Resized to (2, 64, 128)
 ])
 
