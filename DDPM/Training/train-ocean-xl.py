@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from dataloaders.dataloader import OceanImageDataset
 from medium_ddpm.ddpm import MyDDPM
-from medium_ddpm.resize_tensor import resize
+from medium_ddpm.resize_tensor import resize,ResizeTransform
 from medium_ddpm.unets.unet_xl import MyUNet
 from medium_ddpm.dir.util import show_images, generate_new_images
 
@@ -35,13 +35,6 @@ batch_size = 35
 n_epochs = 100
 lr = 0.001
 
-
-class ResizeTransform:
-    def __init__(self, end_shape):
-        self.end_shape = end_shape
-
-    def __call__(self, tensor):
-        return resize(tensor, self.end_shape).float()
 
 
 # Initialize dataset with transformations

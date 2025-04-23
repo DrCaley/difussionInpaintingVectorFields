@@ -1,5 +1,5 @@
-minDataValueU: -0.8973235906436031 #do we trust this?
-maxDataValueU: 1.0859991093945718
-minDataValueV: -0.6647028130174489
-maxDataValueV: 0.5259408400292674
+u_training_mean: -0.0692955942994962
+u_training_std: 0.13580055497160493
+v_training_mean: -0.032393779611754124
+v_training_std: 0.08899177232117583
 testSeed: 0
