@@ -14,6 +14,7 @@ from DDPM.Neural_Networks.ddpm import MyDDPM
 from DDPM.Helper_Functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from DDPM.Helper_Functions.masks import (generate_random_path_mask)
 from DDPM.Helper_Functions.resize_tensor import ResizeTransform
+from DDPM.Helper_Functions.standardize_data import StandardizeData, reverseStandardization
 from DDPM.Neural_Networks.unets.unet_xl import MyUNet
 
 #output goes to file, not console
@@ -24,7 +25,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 # Load the YAML file
-with open('../data.yaml', 'r') as file:
+with open('../../data.yaml', 'r') as file:
     config = yaml.safe_load(file)
 
 #Set seed
@@ -52,8 +53,9 @@ except Exception as e:
     logging.error(f"Error loading model: {e}")
     exit(1)
 
-transform = Compose([ #fixme wrong way to normalize
-    ResizeTransform((2, 64, 128))  # Resized to (2, 64, 128)
+transform = Compose([
+    ResizeTransform((2, 64, 128)),
+    StandardizeData(config['u_training_mean'],config['u_training_std'],config['v_training_mean'],config['v_training_std'])# Resized to (2, 64, 128)
 ])
 
 try:
@@ -81,8 +83,6 @@ except Exception as e:
     exit(1)
 
 
-def reverse_normalization(tensor): #fixme wrong way to denormalize
-    return (tensor + 1) / 2
 
 
 line_numbers = [10, 20, 40] #parameters of mask to test
@@ -108,7 +108,7 @@ with open("inpainting-xl-data.csv", "w", newline="") as file:
                 break
 
             input_image = batch[0].to(device)
-            input_image_original = reverse_normalization(input_image)
+            input_image_original = reverseStandardization(input_image)
             land_mask = (input_image_original != 0).float()
 
             for mask_type in masks_to_test:
