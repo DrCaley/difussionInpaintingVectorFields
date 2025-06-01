@@ -73,11 +73,11 @@ class IncompressibleGP(object):
 
         return np.dstack([predicted_u, predicted_v]), predicted_cov
 
-    def addObs(self, new_obs):
+    def add_obs(self, new_obs):
         self.observations.append(new_obs)
 
     def update(self, new_obs):
-        self.addObs(new_obs)
+        self.add_obs(new_obs)
         self.fit()
 
 
@@ -112,9 +112,9 @@ class CompressibleGP(object):
 
         return np.dstack([predicted_u, predicted_v]), predicted_cov
 
-    def addObs(self, new_obs):
+    def add_obs(self, new_obs):
         self.observations.append(new_obs)
 
     def update(self, new_obs):
-        self.addObs(new_obs)
+        self.add_obs(new_obs)
         self.fit()

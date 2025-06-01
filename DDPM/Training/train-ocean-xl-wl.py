@@ -11,7 +11,8 @@ from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose, Lambda
 from tqdm import tqdm
 
-from dataloaders.dataloader import OceanImageDataset
+# All of these were broken in a previous file restructure not me I swear - Matt
+from DataPrep.dataloader import ocean_image_dataset
 from medium_ddpm.ddpm import MyDDPM
 from medium_ddpm.resize_tensor import resize
 from medium_ddpm.unets.unet_xl import MyUNet

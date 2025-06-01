@@ -22,9 +22,9 @@ def sinusoidal_embedding(n, d):
 
     return embedding
 
-class MyBlock(nn.Module):
+class my_block(nn.Module):
     def __init__(self, shape, in_c, out_c, kernel_size=3, stride=1, padding=1, activation=None, normalize=True):
-        super(MyBlock, self).__init__()
+        super(my_block, self).__init__()
         self.ln = nn.LayerNorm(shape)
         self.conv1 = nn.Conv2d(in_c, out_c, kernel_size, stride, padding)
         self.conv2 = nn.Conv2d(out_c, out_c, kernel_size, stride, padding)
@@ -54,36 +54,36 @@ class MyUNet(nn.Module):
         # First half of the network (down-sampling path)
         self.te1 = self._make_te(time_emb_dim, 1)
         self.b1 = nn.Sequential(
-            MyBlock((2, 64, 128), 2, 16),
-            MyBlock((16, 64, 128), 16, 16),
-            MyBlock((16, 64, 128), 16, 16)
+            my_block((2, 64, 128), 2, 16),
+            my_block((16, 64, 128), 16, 16),
+            my_block((16, 64, 128), 16, 16)
         )
         # (64x128) -> (32x64)
         self.down1 = nn.Conv2d(16, 16, 4, 2, 1)
 
         self.te2 = self._make_te(time_emb_dim, 16)
         self.b2 = nn.Sequential(
-            MyBlock((16, 32, 64), 16, 32),
-            MyBlock((32, 32, 64), 32, 32),
-            MyBlock((32, 32, 64), 32, 32)
+            my_block((16, 32, 64), 16, 32),
+            my_block((32, 32, 64), 32, 32),
+            my_block((32, 32, 64), 32, 32)
         )
         # (32x64) -> (16x32)
         self.down2 = nn.Conv2d(32, 32, 4, 2, 1)
 
         self.te3 = self._make_te(time_emb_dim, 32)
         self.b3 = nn.Sequential(
-            MyBlock((32, 16, 32), 32, 64),
-            MyBlock((64, 16, 32), 64, 64),
-            MyBlock((64, 16, 32), 64, 64)
+            my_block((32, 16, 32), 32, 64),
+            my_block((64, 16, 32), 64, 64),
+            my_block((64, 16, 32), 64, 64)
         )
         # (16x32) -> (8x16)
         self.down3 = nn.Conv2d(64, 64, 4, 2, 1)
 
         self.te4 = self._make_te(time_emb_dim, 64)
         self.b4 = nn.Sequential(
-            MyBlock((64, 8, 16), 64, 128),
-            MyBlock((128, 8, 16), 128, 128),
-            MyBlock((128, 8, 16), 128, 128)
+            my_block((64, 8, 16), 64, 128),
+            my_block((128, 8, 16), 128, 128),
+            my_block((128, 8, 16), 128, 128)
         )
         self.down4 = nn.Sequential(
             # (8x16) -> (4x8)
@@ -96,9 +96,9 @@ class MyUNet(nn.Module):
         # Bottleneck (middle part of the network)
         self.te_mid = self._make_te(time_emb_dim, 128)
         self.b_mid = nn.Sequential(
-            MyBlock((128, 2, 4), 128, 256),
-            MyBlock((256, 2, 4), 256, 256),
-            MyBlock((256, 2, 4), 256, 128)
+            my_block((128, 2, 4), 128, 256),
+            my_block((256, 2, 4), 256, 256),
+            my_block((256, 2, 4), 256, 128)
         )
 
         # Second half of the network (upsampling path)
@@ -112,33 +112,33 @@ class MyUNet(nn.Module):
 
         self.te5 = self._make_te(time_emb_dim, 256)
         self.b5 = nn.Sequential(
-            MyBlock((256, 8, 16), 256, 128),
-            MyBlock((128, 8, 16), 128, 64),
-            MyBlock((64, 8, 16), 64, 64)
+            my_block((256, 8, 16), 256, 128),
+            my_block((128, 8, 16), 128, 64),
+            my_block((64, 8, 16), 64, 64)
         )
         # (8x16) -> (16x32)
         self.up2 = nn.ConvTranspose2d(64, 64, 4, 2, 1)
         self.te6 = self._make_te(time_emb_dim, 128)
         self.b6 = nn.Sequential(
-            MyBlock((128, 16, 32), 128, 64),
-            MyBlock((64, 16, 32), 64, 32),
-            MyBlock((32, 16, 32), 32, 32)
+            my_block((128, 16, 32), 128, 64),
+            my_block((64, 16, 32), 64, 32),
+            my_block((32, 16, 32), 32, 32)
         )
         # (16x32) -> (32x64)
         self.up3 = nn.ConvTranspose2d(32, 32, 4, 2, 1)
         self.te7 = self._make_te(time_emb_dim, 64)
         self.b7 = nn.Sequential(
-            MyBlock((64, 32, 64), 64, 32),
-            MyBlock((32, 32, 64), 32, 16),
-            MyBlock((16, 32, 64), 16, 16)
+            my_block((64, 32, 64), 64, 32),
+            my_block((32, 32, 64), 32, 16),
+            my_block((16, 32, 64), 16, 16)
         )
         # (32x64) -> (64x128)
         self.up4 = nn.ConvTranspose2d(16, 16, 4, 2, 1)
         self.te_out = self._make_te(time_emb_dim, 32)
         self.b_out = nn.Sequential(
-            MyBlock((32, 64, 128), 32, 16),
-            MyBlock((16, 64, 128), 16, 16),
-            MyBlock((16, 64, 128), 16, 16, normalize=False)
+            my_block((32, 64, 128), 32, 16),
+            my_block((16, 64, 128), 16, 16),
+            my_block((16, 64, 128), 16, 16, normalize=False)
         )
 
         self.conv_out = nn.Conv2d(16, 2, 3, 1, 1)

@@ -1,7 +1,7 @@
 import datetime
 import numpy as np
 
-class FlowObservation(object):
+class flow_observation(object):
     """docstring for CurrentObs"""
     def __init__(self, x, y, u, v, t=None):
         self.x = x

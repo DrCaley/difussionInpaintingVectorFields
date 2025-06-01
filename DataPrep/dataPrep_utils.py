@@ -1,4 +1,4 @@
-def normalizeData(dataSet, globalMin,globalMax):
-    marginMin = globalMin - (globalMin*.2)
-    marginMax = globalMax + (globalMax*.2)
-    return (dataSet-marginMin) / (marginMax-marginMin)
+def normalize_data(data_set, global_min, global_max):
+    margin_min = global_min - (global_min*.2)
+    margin_max = global_max + (global_max*.2)
+    return (data_set - margin_min) / (margin_max - margin_min)

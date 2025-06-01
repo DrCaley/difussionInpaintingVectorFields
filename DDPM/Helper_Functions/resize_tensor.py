@@ -35,7 +35,7 @@ def resize(tensors, end_shape):
 
 #generate_png(resize(torch.load("../data/tensors/0.pt"), (2, 64, 128)), )
 
-class ResizeTransform:
+class resize_transform:
     def __init__(self, end_shape):
         self.end_shape = end_shape
 

@@ -4,8 +4,8 @@ import pickle
 import datetime
 
 mat_data = loadmat("../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat")
-u_tensors=mat_data['u']
-v_tensors=mat_data['v']
+u_tensors = mat_data['u']
+v_tensors = mat_data['v']
 
 u_tensors = np.expand_dims(u_tensors,axis=2)
 v_tensors = np.expand_dims(v_tensors,axis=2)
@@ -14,34 +14,34 @@ all_tensors = np.append(u_tensors,v_tensors,2)
 
 
 # Creating tensors for training, validating, testing subsets of data
-trainingData = np.zeros([len(all_tensors),len(all_tensors[0]),len(all_tensors[0][0]),1])
-validationData = np.zeros([len(all_tensors),len(all_tensors[0]),len(all_tensors[0][0]),1])
-testData = np.zeros([len(all_tensors),len(all_tensors[0]),len(all_tensors[0][0]),1])
+training_data = np.zeros([len(all_tensors),len(all_tensors[0]),len(all_tensors[0][0]),1])
+validation_data = np.zeros([len(all_tensors),len(all_tensors[0]),len(all_tensors[0][0]),1])
+test_data = np.zeros([len(all_tensors),len(all_tensors[0]),len(all_tensors[0][0]),1])
 
 for i in range(0,len(all_tensors[0][0][0]),130):
-    trainingData = np.append(trainingData,all_tensors[::,::,::,i:i+70],3)
-    validationData = np.append(validationData, all_tensors[::, ::,::, i+80:i + 95],3)
-    testData = np.append(testData, all_tensors[::, ::,::, i+105:i + 120],3)
+    training_data = np.append(training_data, all_tensors[::, ::, ::, i:i+70], 3)
+    validation_data = np.append(validation_data, all_tensors[::, ::, ::, i+80:i + 95], 3)
+    test_data = np.append(test_data, all_tensors[::, ::, ::, i+105:i + 120], 3)
 
-trainingData = trainingData[::,::,::,1:]
-validationData = validationData[::,::,::,1:]
-testData = testData[::,::,::,1:]
+training_data = training_data[::, ::, ::, 1:]
+validation_data = validation_data[::, ::, ::, 1:]
+test_data = test_data[::, ::, ::, 1:]
 
-metaData = {'dateMade':datetime.datetime.now(),
-            'dataSplitStrat':'Alternating chucks of 120 frames go into training, validation'
+meta_data = {'date_made':datetime.datetime.now(),
+            'data_split_strat':'Alternating chucks of 120 frames go into training, validation'
                              'and test. The first 70 go into training, space of 10, 15 in'
                              ' validation, space of 10, last 15 go into test, space of 10',
-            'DimensionData':'lat,long,<u><v>,time'}
+            'dimension_data':'lat,long,<u><v>,time'}
 
-this_is_a_dictionary = {'trainingData':trainingData,
-                        'validationData':validationData,
-                        'testData':testData,
-                        'metaData':metaData}
+this_is_a_dictionary = {'training_data':training_data,
+                        'validation_data':validation_data,
+                        'test_data':test_data,
+                        'meta_data':meta_data}
 
 
 # Matt: Added this
-u_values = this_is_a_dictionary['trainingData'][:, :, 0, :].reshape(-1)
-v_values = this_is_a_dictionary['trainingData'][:, :, 1, :].reshape(-1)
+u_values = this_is_a_dictionary['training_data'][:, :, 0, :].reshape(-1)
+v_values = this_is_a_dictionary['training_data'][:, :, 1, :].reshape(-1)
 
 u_training_mean = np.nanmean(u_values)
 u_training_std = np.nanstd(u_values)
@@ -62,6 +62,6 @@ v_training_std = np.nanstd(this_is_a_dictionary['trainingData'][::,::,1,::])
 """
 
 with open('../data.pickle', 'wb') as file:
-    pickle.dump([trainingData,validationData,testData], file)
+    pickle.dump([training_data, validation_data, test_data], file)
 
 print ("hello")

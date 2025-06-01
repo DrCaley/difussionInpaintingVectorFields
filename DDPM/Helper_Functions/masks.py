@@ -199,6 +199,7 @@ def generate_robot_path_mask(image_shape, land_mask, num_squares=10, square_size
     mask = mask * land_mask * border_mask
 
     return mask
+
 def create_border_mask(image_shape, area_height=44, area_width=94, offset_top=0, offset_left=0):
     _, _, h, w = image_shape
     border_mask = np.zeros((h, w), dtype=np.float32)

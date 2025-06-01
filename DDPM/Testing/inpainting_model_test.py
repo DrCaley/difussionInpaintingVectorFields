@@ -9,12 +9,12 @@ import csv
 import yaml
 
 
-from DataPrep.dataloader import OceanImageDataset
+from DataPrep.dataloader import ocean_image_dataset
 from DDPM.Neural_Networks.ddpm import MyDDPM
 from DDPM.Helper_Functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from DDPM.Helper_Functions.masks import (generate_random_path_mask)
-from DDPM.Helper_Functions.resize_tensor import ResizeTransform
-from DDPM.Helper_Functions.standardize_data import StandardizeData, reverseStandardization
+from DDPM.Helper_Functions.resize_tensor import resize_transform
+from DDPM.Helper_Functions.standardize_data import standardize_data
 from DDPM.Neural_Networks.unets.unet_xl import MyUNet
 
 #output goes to file, not console
@@ -54,13 +54,13 @@ except Exception as e:
     exit(1)
 
 transform = Compose([
-    ResizeTransform((2, 64, 128)),
-    StandardizeData(config['u_training_mean'],config['u_training_std'],config['v_training_mean'],config['v_training_std'])# Resized to (2, 64, 128)
+    resize_transform((2, 64, 128)),
+    standardize_data(config['u_training_mean'], config['u_training_std'], config['v_training_mean'], config['v_training_std']) # Resized to (2, 64, 128)
 ])
 
 try:
     logging.info("Preparing data")
-    data = OceanImageDataset(
+    data = ocean_image_dataset(
         mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
         boundaries="../../data/rams_head/boundaries.yaml",
         num=10, #number of ocean snapshots to load
@@ -108,7 +108,9 @@ with open("inpainting-xl-data.csv", "w", newline="") as file:
                 break
 
             input_image = batch[0].to(device)
-            input_image_original = reverseStandardization(input_image)
+
+            # THIS LINE MAY HAVE BROKEN WOOPS - Matt
+            input_image_original = standardize_data.unstandardize(input_image)
             land_mask = (input_image_original != 0).float()
 
             for mask_type in masks_to_test:
