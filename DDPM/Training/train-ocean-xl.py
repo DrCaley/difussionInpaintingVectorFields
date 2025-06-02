@@ -1,26 +1,32 @@
 import math
 import os
 import random
+import yaml
 
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
-from torch import nn
+from torch import nn, Tensor
 from torch.optim import Adam
 from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose, Lambda
 from tqdm import tqdm
 
-from dataloaders.dataloader import OceanImageDataset
-from medium_ddpm.ddpm import MyDDPM
-from medium_ddpm.resize_tensor import resize,ResizeTransform
-from medium_ddpm.unets.unet_xl import MyUNet
-from medium_ddpm.dir.util import show_images, generate_new_images
+from DataPrep.dataloader import ocean_image_dataset
+from DDPM.Neural_Networks.ddpm import MyDDPM
+from DDPM.Helper_Functions.resize_tensor import resize_transform
+from DDPM.Helper_Functions.standardize_data import standardize_data
+from DDPM.Neural_Networks.unets.unet_xl import MyUNet
+'''from medium_ddpm.dir.util import show_images, generate_new_images'''
 
 """This file trains the most successful model as of Feb 2025."""
 
+# Load the YAML file
+with open('../../data.yaml', 'r') as file:
+    config = yaml.safe_load(file)
+
 # Setting reproducibility
-SEED = 0
+SEED = config['testSeed']
 random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
@@ -30,28 +36,22 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 n_steps, min_beta, max_beta = 1000, 0.0001, 0.02
 ddpm = MyDDPM(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=device)
 
-no_train = False
+training_mode = True
 batch_size = 35
-n_epochs = 100
+n_epochs = 1000
 lr = 0.001
 
 
-
-# Initialize dataset with transformations
-# minU, maxU = -0.8973235906436031, 1.0859991093945718
-# minV, maxV = -0.6647028130174489, 0.5259408400292674
-min = -0.8973235906436031 * 1.2
-max = 1.0859991093945718 * 1.2
 transform = Compose([
-    Lambda(lambda x: (x - min) / (max - min) * 2),     # Normalize to range [-1, 1]
-    ResizeTransform((2, 64, 128))        # Resized to (2, 64, 128)
+    resize_transform((2, 64, 128)),        # Resized to (2, 64, 128)
+    standardize_data(config['u_training_mean'], config['u_training_std'], config['v_training_mean'], config['v_training_std'])
 ])
 
 store_path = "./ddpm_ocean_v0.pt"
 
-data = OceanImageDataset(
+data = ocean_image_dataset(
     mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
-    boundaries="../../../data/rams_head/boundaries.yaml",
+    boundaries="../../data/rams_head/boundaries.yaml",
     num=100,
     transform=transform
 )
@@ -66,7 +66,7 @@ train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=batch_size)
 val_loader = DataLoader(validation_data, batch_size=batch_size)
 
-
+'''
 class CustomLoss(nn.Module):
     def __init__(self, non_zero_weight=5.0, zero_weight=1.0):
         super(CustomLoss, self).__init__()
@@ -75,7 +75,7 @@ class CustomLoss(nn.Module):
         self.non_zero_weight = non_zero_weight
         self.zero_weight = zero_weight
 
-    def forward(self, eta_theta, eta, x0):
+    def forward(self, eta_theta, eta, x0 : Tensor):
         non_zero_mask = (x0 != 0).float()
         zero_mask = (x0 == 0).float()
 
@@ -89,7 +89,7 @@ class CustomLoss(nn.Module):
         weighted_mae_loss = weighted_mae_loss.sum() / (non_zero_mask.sum() * self.non_zero_weight + zero_mask.sum() * self.zero_weight)
 
         return weighted_mse_loss + weighted_mae_loss
-
+'''
 
 def evaluate(model, data_loader, device):
     model.eval()
@@ -117,7 +117,7 @@ def evaluate(model, data_loader, device):
 def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, store_path="ddpm_ocean_model.pt"):
     """Trains the xl model (1 more layer than the original). The xl model is the main one we use as of early August, 2024"""
 
-    custom_loss = CustomLoss()
+    loss_function = nn.MSELoss()
     best_train_loss = float("inf")
     best_test_loss = float("inf")
     n_steps = ddpm.n_steps
@@ -148,9 +148,9 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps
 
             noisy_imgs = ddpm(x0, t, eta)
-            eta_theta = ddpm.backward(noisy_imgs, t.reshape(n, -1))
+            predicted_value = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
-            loss = custom_loss(eta_theta, eta, x0)
+            loss = loss_function(predicted_value, eta)
             optim.zero_grad()
             loss.backward()
             optim.step()
@@ -200,5 +200,5 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
 
 optimizer = Adam(ddpm.parameters(), lr=lr)
 
-if not no_train:
+if training_mode:
     training_loop(ddpm, train_loader, test_loader, n_epochs, optim=optimizer, device=device, store_path=store_path)
