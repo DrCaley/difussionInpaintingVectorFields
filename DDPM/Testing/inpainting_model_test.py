@@ -9,7 +9,7 @@ import csv
 import yaml
 
 
-from DataPrep.dataloader import ocean_image_dataset
+from DataPrep.dataloader import OceanImageDataset
 from DDPM.Neural_Networks.ddpm import MyDDPM
 from DDPM.Helper_Functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from DDPM.Helper_Functions.masks import (generate_random_path_mask)
@@ -60,7 +60,7 @@ transform = Compose([
 
 try:
     logging.info("Preparing data")
-    data = ocean_image_dataset(
+    data = OceanImageDataset(
         mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
         boundaries="../../data/rams_head/boundaries.yaml",
         num=10, #number of ocean snapshots to load

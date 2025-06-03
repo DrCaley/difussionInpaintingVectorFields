@@ -5,7 +5,7 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from torch.utils.data.dataset import _T_co
 
-class ocean_image_dataset(Dataset):
+class OceanImageDataset(Dataset):
     """
     loads 'u' and 'v' velocity components from .mat file, aplues masking to handle NaNs and returns 3-channel tensors representing u, v, and a binary mask
 
@@ -49,7 +49,7 @@ class ocean_image_dataset(Dataset):
         """
         return len(self.tensor_arr)
 
-    def __getitem__(self, idx: object) -> _T_co:
+    def __getitem__(self, idx):
         """
         Retrieves a single tensor from the dataset at index. used for for-loop iterator and similar to
         next() from Iterable in Java.
