@@ -17,7 +17,7 @@ from DDPM.Neural_Networks.ddpm import MyDDPM
 from DDPM.Helper_Functions.resize_tensor import resize_transform
 from DDPM.Helper_Functions.standardize_data import standardize_data
 from DDPM.Neural_Networks.unets.unet_xl import MyUNet
-'''from medium_ddpm.dir.util import show_images, generate_new_images'''
+# from medium_ddpm.dir.util import show_images, generate_new_images
 
 """This file trains the most successful model as of Feb 2025."""
 

@@ -1,6 +1,32 @@
 import unittest
 
+from torchvision.transforms import Compose
+
+from DDPM.Helper_Functions.resize_tensor import resize_transform
+from DDPM.Helper_Functions.standardize_data import standardize_data
+from DDPM.Testing.inpainting_model_test import config
+from DataPrep.dataloader import ocean_image_dataset
+
+
 class TestDataPrep(unittest.TestCase):
+
+    def setUp(self):
+        transform = Compose([
+            resize_transform((2, 64, 128)),
+            standardize_data(config['u_training_mean'], config['u_training_std'], config['v_training_mean'],
+                             config['v_training_std'])  # Resized to (2, 64, 128)
+        ])
+        self.data = ocean_image_dataset(
+            mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+            boundaries="../../data/rams_head/boundaries.yaml",
+            num=10,
+            transform = transform
+        )
+        return
+
+    def test_get_item(self):
+        tensor = self.data.tensor_arr[0]
+
 
     def test_dataloader_load_array(self):
         self.assertTrue(False)
