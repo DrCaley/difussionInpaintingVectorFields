@@ -38,8 +38,6 @@ this_is_a_dictionary = {'training_data':training_data,
                         'test_data':test_data,
                         'meta_data':meta_data}
 
-
-# Matt: Added this
 u_values = this_is_a_dictionary['training_data'][:, :, 0, :].reshape(-1)
 v_values = this_is_a_dictionary['training_data'][:, :, 1, :].reshape(-1)
 
@@ -47,19 +45,6 @@ u_training_mean = np.nanmean(u_values)
 u_training_std = np.nanstd(u_values)
 v_training_mean = np.nanmean(v_values)
 v_training_std = np.nanstd(v_values)
-
-
-"""
-Matt: Here's what was originally under line 39:
-
-#This isn't right. fix it next time
-u_training_mean = np.nanmean(this_is_a_dictionary['trainingData'][::,::,0,::])
-u_training_std = np.nanstd(this_is_a_dictionary['trainingData'][::,::,0,::])
-
-v_training_mean = np.nanmean(this_is_a_dictionary['trainingData'][::,::,1,::])
-v_training_std = np.nanstd(this_is_a_dictionary['trainingData'][::,::,1,::])
-
-"""
 
 with open('../data.pickle', 'wb') as file:
     pickle.dump([training_data, validation_data, test_data], file)
