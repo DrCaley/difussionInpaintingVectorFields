@@ -9,7 +9,7 @@ import csv
 import yaml
 
 
-from DataPrep.dataloader import OceanImageDataset
+from DataPrep.ocean_image_dataset import OceanImageDataset
 from DDPM.Neural_Networks.ddpm import MyDDPM
 from DDPM.Helper_Functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from DDPM.Helper_Functions.masks import (generate_random_path_mask)

@@ -7,7 +7,7 @@ import os
 import itertools
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
-from dataloaders.dataloader import OceanImageDataset
+from DataPrep.ocean_image_dataset import OceanImageDataset
 from flow_observation import FlowObservation
 from gaussian_process.incompressible_gp.incompressible_gp_model import IncompressibleGP, CompressibleGP
 

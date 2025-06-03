@@ -3,7 +3,7 @@ import torch
 from PIL import Image
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
-from dataloaders.dataloader import OceanImageDataset
+from DataPrep.ocean_image_dataset import OceanImageDataset
 from plots.visualize_data import plotQuiverData
 
 """Adapted from WHOI. We use some of this to vizualize data."""

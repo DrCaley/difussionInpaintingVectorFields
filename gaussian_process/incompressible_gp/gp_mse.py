@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, random_split
-from dataloaders.dataloader import OceanImageDataset
+from DataPrep.ocean_image_dataset import OceanImageDataset
 
 SEED = 0
 random.seed(SEED)

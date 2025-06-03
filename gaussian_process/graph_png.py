@@ -4,7 +4,7 @@ from PIL import Image
 from torch.utils.data import DataLoader
 
 from plots.adapt_visualize_data import plot_png, plot_tensor
-from dataloaders.dataloader import OceanImageDataset
+from DataPrep.ocean_image_dataset import OceanImageDataset
 
 
 def normalize_image(img):
