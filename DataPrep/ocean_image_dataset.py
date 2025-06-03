@@ -7,7 +7,7 @@ from torch.utils.data.dataset import _T_co
 
 class OceanImageDataset(Dataset):
     """
-    loads 'u' and 'v' velocity components from .mat file, aplues masking to handle NaNs and returns 3-channel tensors representing u, v, and a binary mask
+    loads 'u' and 'v' velocity components from .mat file, applies masking to handle NaNs and returns 3-channel tensors representing u, v, and a binary mask
 
     Attributes:
         mat_data (dict): Dictionary loaded from the .mat file.
