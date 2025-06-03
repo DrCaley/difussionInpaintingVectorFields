@@ -1,5 +1,7 @@
 import unittest
 import torch
+import numpy as np
+from mpmath.calculus.extrapolation import standardize
 
 from DDPM.Helper_Functions.standardize_data import standardize_data
 
@@ -46,11 +48,55 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(False)
 
     def test_standardize(self):
-        shape = (2, 2, 2)
-        self.assertTrue(False)
+        tensor = torch.tensor([
+            [[1.0, 2.0],
+             [3.0, 4.0]],
+
+            [[5.0, 6.0],
+             [7.0, 8.0]]
+        ])
+
+        tensorU = tensor[0:1]
+        tensorV = tensor[1:2]
+
+        u_mean = np.nanmean(tensorU)
+        u_std = np.nanstd(tensorU)
+        v_mean = np.nanmean(tensorV)
+        v_std = np.nanstd(tensorV)
+
+        data_standardizer = standardize_data(u_mean, u_std, v_mean, v_std)
+        standardized_tensor = data_standardizer(tensor)
+
+        real_standardization = torch.tensor([
+            [[-1.341640786, -0.4472135955],
+             [0.4472135955, 1.341640786]],
+
+            [[-1.341640786, -0.4472135955],
+             [0.4472135955, 1.341640786]]
+        ])
+
+        self.assertTrue(torch.allclose(real_standardization, standardized_tensor, atol=1e-6))
 
     def test_unstandardize(self):
-        shape = (2, 64, 128)
-        tensor = torch.randn(shape)
-        standardized_tensor = standardize_data(tensor)
-        self.assertTrue(False)
+        tensor = torch.tensor([
+            [[1.0, 2.0],
+             [3.0, 4.0]],
+
+            [[5.0, 6.0],
+             [7.0, 8.0]]
+        ])
+
+        tensorU = tensor[0:1]
+        tensorV = tensor[1:2]
+
+        u_mean = np.nanmean(tensorU)
+        u_std = np.nanstd(tensorU)
+        v_mean = np.nanmean(tensorV)
+        v_std = np.nanstd(tensorV)
+
+        data_standardizer = standardize_data(u_mean, u_std, v_mean, v_std)
+        standardized_tensor = data_standardizer(tensor)
+        unstandardized_tensor = data_standardizer.unstandardize(standardized_tensor)
+
+        self.assertTrue(torch.allclose(unstandardized_tensor, tensor, atol=1e-6))
+

@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose, Lambda
 from tqdm import tqdm
 
-from DataPrep.dataloader import OceanImageDataset
+from DataPrep.ocean_image_dataset import ocean_image_dataset
 from DDPM.Neural_Networks.ddpm import MyDDPM
 from DDPM.Helper_Functions.resize_tensor import resize_transform
 from DDPM.Helper_Functions.standardize_data import standardize_data
@@ -49,7 +49,7 @@ transform = Compose([
 
 store_path = "./ddpm_ocean_v0.pt"
 
-data = OceanImageDataset(
+data = ocean_image_dataset(
     mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
     boundaries="../../data/rams_head/boundaries.yaml",
     num=100,
