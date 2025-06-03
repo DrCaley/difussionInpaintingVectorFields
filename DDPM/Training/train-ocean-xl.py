@@ -75,12 +75,12 @@ class CustomLoss(nn.Module):
         self.non_zero_weight = non_zero_weight
         self.zero_weight = zero_weight
 
-    def forward(self, eta_theta, eta, x0 : Tensor):
+    def forward(self, epsilon_theta, epsilon, x0 : Tensor):
         non_zero_mask = (x0 != 0).float()
         zero_mask = (x0 == 0).float()
 
-        mse_loss = self.mse(eta_theta, eta)
-        mae_loss = self.mae(eta_theta, eta)
+        mse_loss = self.mse(epsilon_theta, epsilon)
+        mae_loss = self.mae(epsilon_theta, epsilon)
 
         weighted_mse_loss = mse_loss * (self.non_zero_weight * non_zero_mask + self.zero_weight * zero_mask)
         weighted_mae_loss = mae_loss * (self.non_zero_weight * non_zero_mask + self.zero_weight * zero_mask)
@@ -102,12 +102,12 @@ def evaluate(model, data_loader, device):
             x0 = batch[0].to(device).float()
             n = len(x0)
 
-            eta = torch.randn_like(x0).to(device)
+            epsilon = torch.randn_like(x0).to(device)
             t = torch.randint(0, model.n_steps, (n,)).to(device)
 
-            noisy_imgs = model(x0, t, eta)
-            eta_theta = model.backward(noisy_imgs, t.reshape(n, -1))
-            loss = criterion(eta_theta, eta)
+            noisy_imgs = model(x0, t, epsilon)
+            epsilon_theta = model.backward(noisy_imgs, t.reshape(n, -1))
+            loss = criterion(epsilon_theta, epsilon)
             total_loss += loss.item() * n
             count += n
 
@@ -144,13 +144,13 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             x0 = batch[0].to(device).float()
             n = len(x0)
 
-            eta = torch.randn_like(x0).to(device)  # Generate noise
+            epsilon = torch.randn_like(x0).to(device)  # Generate noise
             t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps
 
-            noisy_imgs = ddpm(x0, t, eta)
+            noisy_imgs = ddpm(x0, t, epsilon)
             predicted_value = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
-            loss = loss_function(predicted_value, eta)
+            loss = loss_function(predicted_value, epsilon)
             optim.zero_grad()
             loss.backward()
             optim.step()
