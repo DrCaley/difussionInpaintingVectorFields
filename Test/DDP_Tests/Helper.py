@@ -1,45 +1,56 @@
 import unittest
+import torch
 
-class helper_functions_test(unittest.TestCase):
-    def inpaint_generate_new_images_test(self):
+from DDPM.Helper_Functions.standardize_data import standardize_data
+
+
+class TestHelperFunctions(unittest.TestCase):
+
+    def test_inpaint_generate_new_images(self):
         self.assertTrue(False)
 
-    def inpaint_generate_new_images_denoise_test(self):
+    def test_inpaint_generate_new_images_denoise(self):
         self.assertTrue(False)
 
-    def inpaint_generate_new_images_noise_test(self):
+    def test_inpaint_generate_new_images_noise(self):
         self.assertTrue(False)
 
-    def calculate_mse_test(self):
+    def test_calculate_mse(self):
         self.assertTrue(False)
 
-    def avg_pixel_value_test(self):
+    def test_avg_pixel_value(self):
         self.assertTrue(False)
 
-    def generate_random_mask_test(self):
+    def test_generate_random_mask(self):
         self.assertTrue(False)
 
-    def generate_straight_line_mask_test(self):
+    def test_generate_straight_line_mask(self):
         self.assertTrue(False)
 
-    def generate_random_path_mask(self):
+    def test_generate_random_path_mask(self):
         self.assertTrue(False)
 
-    def generate_squiggly_line_mask_test(self):
+    def test_generate_squiggly_line_mask(self):
         self.assertTrue(False)
 
-    def generate_robot_path_mask_test(self):
+    def test_generate_robot_path_mask(self):
         self.assertTrue(False)
 
-    def create_border_mask_test(self):
+    def test_create_border_mask(self):
         self.assertTrue(False)
 
-    def resize_test(self):
+    def test_resize(self):
         self.assertTrue(False)
 
-    def resize_transform_test(self):
+    def test_resize_transform(self):
         self.assertTrue(False)
 
-    def standardize_test(self):
+    def test_standardize(self):
+        shape = (2, 2, 2)
         self.assertTrue(False)
 
+    def test_unstandardize(self):
+        shape = (2, 64, 128)
+        tensor = torch.randn(shape)
+        standardized_tensor = standardize_data(tensor)
+        self.assertTrue(False)
