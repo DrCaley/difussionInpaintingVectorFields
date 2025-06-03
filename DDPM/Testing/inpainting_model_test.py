@@ -9,7 +9,7 @@ import csv
 import yaml
 
 
-from DataPrep.dataloader import ocean_image_dataset
+from DataPrep.ocean_image_dataset import ocean_image_dataset
 from DDPM.Neural_Networks.ddpm import MyDDPM
 from DDPM.Helper_Functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from DDPM.Helper_Functions.masks import (generate_random_path_mask)
@@ -53,9 +53,11 @@ except Exception as e:
     logging.error(f"Error loading model: {e}")
     exit(1)
 
+data_standardizer = standardize_data(config['u_training_mean'], config['u_training_std'], config['v_training_mean'], config['v_training_std'])
+
 transform = Compose([
-    resize_transform((2, 64, 128)),
-    standardize_data(config['u_training_mean'], config['u_training_std'], config['v_training_mean'], config['v_training_std']) # Resized to (2, 64, 128)
+    resize_transform((2, 64, 128)), # Resized to (2, 64, 128)
+    data_standardizer
 ])
 
 try:
@@ -110,7 +112,7 @@ with open("inpainting-xl-data.csv", "w", newline="") as file:
             input_image = batch[0].to(device)
 
             # THIS LINE MAY HAVE BROKEN WOOPS - Matt
-            input_image_original = standardize_data.unstandardize(input_image)
+            input_image_original = data_standardizer.unstandardize(input_image)
             land_mask = (input_image_original != 0).float()
 
             for mask_type in masks_to_test:

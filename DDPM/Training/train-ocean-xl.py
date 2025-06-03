@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose, Lambda
 from tqdm import tqdm
 
-from DataPrep.dataloader import ocean_image_dataset
+from DataPrep.ocean_image_dataset import ocean_image_dataset
 from DDPM.Neural_Networks.ddpm import MyDDPM
 from DDPM.Helper_Functions.resize_tensor import resize_transform
 from DDPM.Helper_Functions.standardize_data import standardize_data
