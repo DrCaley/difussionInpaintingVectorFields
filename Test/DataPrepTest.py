@@ -2,12 +2,12 @@ import unittest
 
 class TestDataPrep(unittest.TestCase):
 
-    def dataloader_load_array_test(self):
+    def test_dataloader_load_array(self):
         self.assertTrue(False)
 
-    def normalize_test(self):
+    def test_normalize(self):
         self.assertTrue(False)
 
-    def splid_data_test(self):
+    def test_split_data(self):
         self.assertTrue(False)
 
