@@ -1,93 +1,56 @@
 import torch
-import torch.nn.functional as F
 import matplotlib.pyplot as plt
-from perlin_noise import PerlinNoise
 
-# === Gaussian smoothing utilities ===
-def gaussian_kernel(kernel_size=5, sigma=1.0):
-    ax = torch.arange(-kernel_size // 2 + 1., kernel_size // 2 + 1.)
-    xx, yy = torch.meshgrid(ax, ax, indexing='ij')
-    kernel = torch.exp(-(xx**2 + yy**2) / (2. * sigma**2))
-    kernel = kernel / kernel.sum()
-    return kernel
 
-def apply_gaussian_blur(field, kernel):
-    field = field.unsqueeze(0).unsqueeze(0)  # (1, 1, H, W)
-    kernel = kernel.to(field.device).unsqueeze(0).unsqueeze(0)  # (1, 1, k, k)
-    blurred = F.conv2d(field, kernel, padding=kernel.shape[-1] // 2)
-    return blurred.squeeze()
+def divergence_free_noise(H=128, W=128, freq=100000, device='cpu'):
 
-# === Gradient and divergence ===
-def compute_gradient_2d(field):
-    grad_x = torch.zeros_like(field)
-    grad_y = torch.zeros_like(field)
-    grad_x[:-1, :] = field[1:, :] - field[:-1, :]
-    grad_y[:, :-1] = field[:, 1:] - field[:, :-1]
-    return grad_x, grad_y
+    SEED = 0
+    torch.random.manual_seed(SEED)
 
-def compute_divergence_2d(vx, vy):
-    div = torch.zeros_like(vx)
-    div[:-1, :] += vx[1:, :] - vx[:-1, :]
-    div[:, :-1] += vy[:, 1:] - vy[:, :-1]
-    return div
+    # Create a scalar stream function ψ with sinusoidal content
+    x = torch.linspace(0, 2 * torch.pi, W, device=device)
+    y = torch.linspace(0, 2 * torch.pi, H, device=device)
+    X, Y = torch.meshgrid(x, y, indexing='ij')
 
-# === Create 2D grid ===
-def create_grid(size):
-    coords = torch.linspace(-1, 1, size)
-    x, y = torch.meshgrid(coords, coords, indexing='ij')
-    return x, y
+    phase_x, phase_y = 2 * torch.pi * torch.rand(2)
+    psi = torch.sin(freq * X + phase_x) * torch.sin(freq * Y + phase_y)
 
-# === Generate φ and ψ using perlin-noise (pure Python) ===
-def generate_perlin_noise_fields(x, y, scale=4.0):
-    noise1 = PerlinNoise(octaves=3)
-    noise2 = PerlinNoise(octaves=3, seed=42)
-    shape = x.shape
-    phi = torch.zeros_like(x)
-    psi = torch.zeros_like(x)
-    for i in range(shape[0]):
-        for j in range(shape[1]):
-            xi = x[i, j].item() * scale
-            yi = y[i, j].item() * scale
-            phi[i, j] = noise1([xi, yi])
-            psi[i, j] = noise2([xi, yi])
-    return phi, psi
+    # Create vx = dψ/dy, vy = -dψ/dx using forward differences
+    vx = torch.zeros_like(psi)
+    vy = torch.zeros_like(psi)
 
-# === Main logic ===
-size = 128
-x, y = create_grid(size)
-phi, psi = generate_perlin_noise_fields(x, y, scale=6.0)
+    # Use forward difference for vx
+    vx[:, :-1] = psi[:, 1:] - psi[:, :-1]
+    vx[:, -1] = 0  # Optional: zero padding
 
-# Optional: smooth φ with Gaussian
-kernel = gaussian_kernel(kernel_size=7, sigma=1.5)
-phi_smooth = apply_gaussian_blur(phi, kernel)
+    # Use forward difference for vy
+    vy[:-1, :] = -(psi[1:, :] - psi[:-1, :])
+    vy[-1, :] = 0  # Optional: zero padding
 
-# Compute gradients
-grad_phi_x, grad_phi_y = compute_gradient_2d(phi_smooth)
-grad_psi_x, grad_psi_y = compute_gradient_2d(psi)
+    return vx, vy
 
-# Construct divergence-free vector field
-v_x = grad_phi_y * grad_psi_y - grad_phi_x * grad_psi_x
-v_y = grad_phi_x * grad_psi_y - grad_phi_y * grad_psi_x
 
-# Compute divergence to check
-div = compute_divergence_2d(v_x, v_y)
-print("Mean divergence:", div.abs().mean().item())
 
-# Normalize vectors for display
-magnitude = torch.sqrt(v_x**2 + v_y**2) + 1e-8
-v_x_norm = v_x / magnitude
-v_y_norm = v_y / magnitude
 
-# === Visualize ===
-skip = 4
-plt.figure(figsize=(8, 8))
-plt.quiver(
-    x[::skip, ::skip], y[::skip, ::skip],
-    v_x_norm[::skip, ::skip], v_y_norm[::skip, ::skip],
-    angles='xy', scale_units='xy', scale=20,
-    width=0.005, color='black'
-)
-plt.title("2D Divergence-Free Noise Field (Perlin-noise pure Python)")
+
+
+
+vx, vy = divergence_free_noise(H=128, W=128, freq=2.0)
+
+# Visualize
+X, Y = torch.meshgrid(torch.linspace(0, 1, vx.shape[1]), torch.linspace(0, 1, vx.shape[0]), indexing='ij')
+plt.figure(figsize=(6, 6))
+plt.quiver(X[::1, ::1], Y[::1, ::1], vx[::1, ::1], vy[::1, ::1], scale=20)
+plt.title("Exactly Divergence-Free Vector Field (Discrete)")
 plt.axis('equal')
 plt.grid(True)
 plt.show()
+
+vx, vy = divergence_free_noise(H=128, W=128, freq=4.0)
+
+total_vx = vx.sum()
+total_vy = vy.sum()
+
+print(f"Total vx: {total_vx.item():.6f}")
+print(f"Total vy: {total_vy.item():.6f}")
+

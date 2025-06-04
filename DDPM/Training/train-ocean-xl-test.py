@@ -17,6 +17,7 @@ from DDPM.Neural_Networks.ddpm import MyDDPM
 from DDPM.Helper_Functions.resize_tensor import resize_transform
 from DDPM.Helper_Functions.standardize_data import standardize_data
 from DDPM.Neural_Networks.unets.unet_xl import MyUNet
+from gaussian_process.incompressible_gp.adding_noise.gauss_divergence_free_noise import divergence_free_noise
 # from medium_ddpm.dir.util import show_images, generate_new_images
 
 """This file trains the most successful model as of Feb 2025."""
@@ -65,31 +66,6 @@ training_data, test_data, validation_data = random_split(data, [train_len, test_
 train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=batch_size)
 val_loader = DataLoader(validation_data, batch_size=batch_size)
-
-'''
-class CustomLoss(nn.Module):
-    def __init__(self, non_zero_weight=5.0, zero_weight=1.0):
-        super(CustomLoss, self).__init__()
-        self.mse = nn.MSELoss(reduction='none')
-        self.mae = nn.L1Loss(reduction='none')
-        self.non_zero_weight = non_zero_weight
-        self.zero_weight = zero_weight
-
-    def forward(self, epsilon_theta, epsilon, x0 : Tensor):
-        non_zero_mask = (x0 != 0).float()
-        zero_mask = (x0 == 0).float()
-
-        mse_loss = self.mse(epsilon_theta, epsilon)
-        mae_loss = self.mae(epsilon_theta, epsilon)
-
-        weighted_mse_loss = mse_loss * (self.non_zero_weight * non_zero_mask + self.zero_weight * zero_mask)
-        weighted_mae_loss = mae_loss * (self.non_zero_weight * non_zero_mask + self.zero_weight * zero_mask)
-
-        weighted_mse_loss = weighted_mse_loss.sum() / (non_zero_mask.sum() * self.non_zero_weight + zero_mask.sum() * self.zero_weight)
-        weighted_mae_loss = weighted_mae_loss.sum() / (non_zero_mask.sum() * self.non_zero_weight + zero_mask.sum() * self.zero_weight)
-
-        return weighted_mse_loss + weighted_mae_loss
-'''
 
 def evaluate(model, data_loader, device):
     model.eval()
