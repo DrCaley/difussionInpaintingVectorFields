@@ -3,9 +3,6 @@ import torch
 from gaussian_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise
 from gaussian_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
 
-from sympy.vector import divergence
-
-
 class GaussianTest(unittest.TestCase):
     def test_test(self):
         self.assertTrue(False)
@@ -49,3 +46,35 @@ class GaussianTest(unittest.TestCase):
         divergence = divergence_tensor.abs().mean().item()
 
         self.assertAlmostEqual(0, divergence, delta=0.01)
+
+    def test_compute_divergence_vortex(self):
+
+        vx = torch.tensor([[0.0, -1.0, 0.0],
+                           [1.0, 0.0, -1.0],
+                           [0.0, 1.0, 0.0]])
+
+        vy = torch.tensor([[0.0, 1.0, 0.0],
+                           [-1.0, 0.0, 1.0],
+                           [0.0, -1.0, 0.0]])
+
+        divergence_tensor = compute_divergence(vy, vx)
+        divergence = divergence_tensor.abs().mean().item()
+
+        self.assertAlmostEqual(0, divergence, delta=0.3)
+
+    def test_compute_divergence_alternating_signs(self):
+
+        vx = torch.tensor([[1, -1, 1],
+                           [-1, 1, -1],
+                           [1, -1, 1]], dtype=torch.float32)
+
+        vy = torch.tensor([[1, 1, 1],
+                           [-1, -1, -1],
+                           [1, 1, 1]], dtype=torch.float32)
+
+        divergence_tensor = compute_divergence(vy, vx)
+        divergence = divergence_tensor.abs().mean().item()
+
+        self.assertAlmostEqual(0, divergence, delta=0.0)
+
+
