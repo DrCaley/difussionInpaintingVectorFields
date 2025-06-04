@@ -1,6 +1,7 @@
 import unittest
+import numpy as np
 
-class GaussianTest(unittest.TestCase):
+class TestNoiseProcesses(unittest.TestCase):
     def test_test(self):
         self.assertTrue(False)
 
