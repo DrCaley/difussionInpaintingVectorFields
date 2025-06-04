@@ -1,5 +1,5 @@
 import torch
-from gaussian_process.incompressible_gp.adding_noise.divergence_free_noise_test import compute_divergence
+from gaussian_process.incompressible_gp.adding_noise.divergence_tester import compute_divergence
 
 def exact_div_free_field_from_stream(H, W, freq, device='cpu'):
     x = torch.linspace(0, 2 * torch.pi, W, device=device)
@@ -20,16 +20,20 @@ def exact_div_free_field_from_stream(H, W, freq, device='cpu'):
 
     return vx, vy
 
-def divergence_free_noise(tensor: torch.Tensor, t: torch.Tensor, device='cpu') -> torch.Tensor:
-    batch, _, height, width = tensor.shape
+def divergence_free_noise(data_set: torch.Tensor, t: torch.Tensor, device='cpu') -> torch.Tensor:
+
+    betas = torch.linspace(0.0001, 0.02, 1000)
+    alphas = 1 - betas
+    alpha_bars = torch.tensor([torch.prod(alphas[:i + 1]) for i in range(len(alphas))]).to(device)
+
+    batch, _, height, width = data_set.shape
     output = torch.zeros((batch, 2, height, width), device=device)
 
     for i in range(batch):
         for j in range(t[i]):
-            freq = torch.normal(torch.tensor(0.01),std=1)  # Not sure about this
+            freq = torch.normal(torch.tensor(0.0),std=alpha_bars[i].sqrt())  # Not sure about this
             vx, vy = exact_div_free_field_from_stream(width, height, freq, device=device)
             output[i, 0] += vx  # Accumulate vx
             output[i, 1] += vy  # Accumulate vy
-        print(compute_divergence(output[i, 0], output[i, 1]).sum())
 
     return output
