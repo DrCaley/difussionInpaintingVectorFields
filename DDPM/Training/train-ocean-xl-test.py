@@ -49,9 +49,9 @@ n_steps, min_beta, max_beta = 1000, 0.0001, 0.02
 ddpm = MyDDPM(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=device)
 
 training_mode = True
-batch_size = 35
-n_epochs = 2
-lr = 0.001
+batch_size = config['batch_size']
+n_epochs = config['n_epochs']
+lr = config['lr']
 
 
 transform = Compose([
