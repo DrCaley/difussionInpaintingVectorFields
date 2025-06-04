@@ -1,7 +1,7 @@
 data/
+/.venv/
 .idea/
 __pycache__/
 output/
 example_nn/
 util.py
-.env

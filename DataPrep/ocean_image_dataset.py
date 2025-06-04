@@ -3,7 +3,6 @@ import yaml
 from scipy.io import loadmat
 from torch import Tensor
 from torch.utils.data import Dataset
-from torch.utils.data.dataset import _T_co
 
 class OceanImageDataset(Dataset):
     """

@@ -38,7 +38,7 @@ ddpm = MyDDPM(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_
 
 training_mode = True
 batch_size = 35
-n_epochs = 100
+n_epochs = 2
 lr = 0.001
 
 
