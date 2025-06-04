@@ -33,6 +33,7 @@ torch.manual_seed(SEED)
 
 # Definitions
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("we are running on the:", device)
 n_steps, min_beta, max_beta = 1000, 0.0001, 0.02
 ddpm = MyDDPM(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=device)
 
