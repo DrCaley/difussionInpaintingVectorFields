@@ -17,7 +17,7 @@ from DDPM.Neural_Networks.ddpm import MyDDPM
 from DDPM.Helper_Functions.resize_tensor import resize_transform
 from DDPM.Helper_Functions.standardize_data import standardize_data
 from DDPM.Neural_Networks.unets.unet_xl import MyUNet
-from gaussian_process.incompressible_gp.adding_noise.gauss_divergence_free_noise import divergence_free_noise
+from gaussian_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise
 # from medium_ddpm.dir.util import show_images, generate_new_images
 
 """This file trains the most successful model as of Feb 2025."""
@@ -78,8 +78,8 @@ def evaluate(model, data_loader, device):
             x0 = batch[0].to(device).float()
             n = len(x0)
 
-            epsilon = torch.randn_like(x0).to(device)
             t = torch.randint(0, model.n_steps, (n,)).to(device)
+            epsilon = divergence_free_noise(x0, t, device).to(device)
 
             noisy_imgs = model(x0, t, epsilon)
             epsilon_theta = model.backward(noisy_imgs, t.reshape(n, -1))

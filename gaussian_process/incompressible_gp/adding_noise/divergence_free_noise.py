@@ -1,39 +1,35 @@
-import numpy as np
+import torch
+from gaussian_process.incompressible_gp.adding_noise.divergence_free_noise_test import compute_divergence
 
-def curl_of_gradient_noise(shape):
-    """Generates divergence-free noise using the curl of a gradient method.
-    Args:
-        shape (tuple): Shape of the noise field.
-    Returns:
-        numpy.ndarray: Divergence-free noise field.
-    """
-    if len(shape) == 2:  # 2D case
-        scalar_field_1 = np.random.rand(*shape)
-        scalar_field_2 = np.random.rand(*shape)
+def exact_div_free_field_from_stream(H, W, freq, device='cpu'):
+    x = torch.linspace(0, 2 * torch.pi, W, device=device)
+    y = torch.linspace(0, 2 * torch.pi, H, device=device)
+    X, Y = torch.meshgrid(x, y, indexing='ij')
 
-        grad_1_x, grad_1_y = np.gradient(scalar_field_1)
-        grad_2_x, grad_2_y = np.gradient(scalar_field_2)
+    phase_x, phase_y = 2 * torch.pi * torch.rand(2, device=device)
+    psi = torch.sin(freq * X + phase_x) * torch.sin(freq * Y + phase_y)
 
-        # Calculate curl (2D curl is a scalar)
-        curl = grad_2_x - grad_1_y
+    vx = torch.zeros_like(psi)
+    vy = torch.zeros_like(psi)
 
-        return curl
+    vx[:-1, :] = psi[1:, :] - psi[:-1, :]
+    vx[-1, :] = 0
 
-    elif len(shape) == 3:  # 3D case
-        scalar_field_1 = np.random.rand(*shape)
-        scalar_field_2 = np.random.rand(*shape)
-        scalar_field_3 = np.random.rand(*shape)
+    vy[:, :-1] = -(psi[:, 1:] - psi[:, :-1])
+    vy[:, -1] = 0
 
-        grad_1_x, grad_1_y, grad_1_z = np.gradient(scalar_field_1)
-        grad_2_x, grad_2_y, grad_2_z = np.gradient(scalar_field_2)
-        grad_3_x, grad_3_y, grad_3_z = np.gradient(scalar_field_3)
+    return vx, vy
 
-        # Calculate curl
-        curl_x = grad_2_z - grad_3_y
-        curl_y = grad_3_x - grad_1_z
-        curl_z = grad_1_y - grad_2_x
+def divergence_free_noise(tensor: torch.Tensor, t: torch.Tensor, device='cpu') -> torch.Tensor:
+    batch, _, height, width = tensor.shape
+    output = torch.zeros((batch, 2, height, width), device=device)
 
-        return np.stack([curl_x, curl_y, curl_z])
+    for i in range(batch):
+        for j in range(t[i]):
+            freq = torch.normal(torch.tensor(0.01),std=1)  # Not sure about this
+            vx, vy = exact_div_free_field_from_stream(width, height, freq, device=device)
+            output[i, 0] += vx  # Accumulate vx
+            output[i, 1] += vy  # Accumulate vy
+        print(compute_divergence(output[i, 0], output[i, 1]).sum())
 
-    else:
-         raise ValueError("Shape must be 2D or 3D")
+    return output
