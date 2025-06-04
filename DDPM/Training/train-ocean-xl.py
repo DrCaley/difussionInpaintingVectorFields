@@ -1,5 +1,6 @@
 import math
 import os
+import sys
 import random
 import yaml
 
@@ -11,6 +12,7 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose, Lambda
 from tqdm import tqdm
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from DataPrep.ocean_image_dataset import OceanImageDataset
 from DDPM.Neural_Networks.ddpm import MyDDPM
@@ -21,9 +23,17 @@ from DDPM.Neural_Networks.unets.unet_xl import MyUNet
 
 """This file trains the most successful model as of Feb 2025."""
 
+using_dumb_pycharm = True
 # Load the YAML file
-with open('../../data.yaml', 'r') as file:
-    config = yaml.safe_load(file)
+try:
+    with open('../../data.yaml', 'r') as file: ## <- if you are running it on pycharm
+        config = yaml.safe_load(file)
+    print ("Why are u sing pycharm??")
+except FileNotFoundError:
+    using_dumb_pycharm = False # <-- congrats on NOT using that dumb IDE!
+    print("I see you are using the Terminal")
+    with open('data.yaml', 'r') as file: ## <-- if you are running it on the terminal
+        config = yaml.safe_load(file)
 
 # Setting reproducibility
 SEED = config['testSeed']
@@ -50,12 +60,21 @@ transform = Compose([
 
 store_path = "./ddpm_ocean_v0.pt"
 
-data = OceanImageDataset(
-    mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
-    boundaries="../../data/rams_head/boundaries.yaml",
-    num=100,
-    transform=transform
-)
+if using_dumb_pycharm :
+    data = OceanImageDataset(
+        mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat", # <--
+        boundaries="../../data/rams_head/boundaries.yaml",
+        num=100,
+        transform=transform
+    )
+else:
+    data = OceanImageDataset(
+
+        mat_file="data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat", # <--
+        boundaries="data/rams_head/boundaries.yaml",
+        num=100,
+        transform=transform
+    )
 
 train_len = int(math.floor(len(data) * 0.7))
 test_len = int(math.floor(len(data) * 0.15))
