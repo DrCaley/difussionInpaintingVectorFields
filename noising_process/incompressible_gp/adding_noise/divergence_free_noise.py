@@ -1,3 +1,5 @@
+import math
+
 import torch
 from noising_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
 
@@ -37,3 +39,20 @@ def divergence_free_noise(data_set: torch.Tensor, t: torch.Tensor, device='cpu')
             output[i, 1] += vy  # Accumulate vy
 
     return output
+
+def normalized_divergence_free_noise(data_set: torch.Tensor, t: torch.Tensor, device='cpu') -> torch.Tensor:
+    unnormalized_noise = divergence_free_noise(data_set, t, device=device)  # shape: (B, 2, H, W)
+    normalized_batches = []
+
+    for batch in unnormalized_noise:
+        vx = batch[0]
+        vy = batch[1]
+
+        magnitude = torch.sqrt(vx**2 + vy**2)
+        max_val = torch.max(magnitude)
+
+        normalized_batch = batch / max_val
+        normalized_batches.append(normalized_batch)
+
+    normalized_noise = torch.stack(normalized_batches, dim=0)  # shape: (B, 2, H, W)
+    return normalized_noise
