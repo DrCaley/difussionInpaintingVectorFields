@@ -89,31 +89,37 @@ def gaussian_at_end_divergence_free_noise(data_set: torch.Tensor, t: torch.Tenso
 
     return normalized_noise
 
-import os
-
 def gaussian_each_step_divergence_free_noise(data_set: torch.Tensor, t: torch.Tensor, device='cpu') -> torch.Tensor:
-    # Ensure output directory exists
     os.makedirs("noise_images", exist_ok=True)
 
     batch, _, height, width = data_set.shape
     output = torch.zeros((batch, 2, height, width), device=device)
 
     for i in range(batch):
-        for j in range(int(t[i].item())):
-            freq = torch.normal(torch.tensor((u_mean + v_mean) / 2, device=device), std=torch.sqrt(alpha_bars[int(t[i])]))
+        t_i = int(t[i].item())  # Make this once and use below
+        alpha_bar_val = alpha_bars[t_i].to(device)  # Move to device if needed
+
+        for _ in range(t_i):
+            mean = torch.tensor((u_mean + v_mean) / 2, device=device)
+            std = torch.sqrt(alpha_bar_val)
+
+            freq = torch.normal(mean, std)
             vx, vy = exact_div_free_field_from_stream(width, height, freq, device=device)
 
             magnitude = torch.sqrt(vx ** 2 + vy ** 2)
             max_val = torch.max(magnitude)
-            vx /= max_val
-            vy /= max_val
 
-            magnitude = torch.normal(torch.tensor((u_mean + v_mean) / 2, device=device), std=torch.sqrt(alpha_bars[int(t[i])]))
-            vx *= magnitude
-            vy *= magnitude
+            if max_val > 0:
+                vx /= max_val
+                vy /= max_val
+
+            mag_scale = torch.normal(mean, std)
+            vx *= mag_scale
+            vy *= mag_scale
 
             output[i, 0] += vx
             output[i, 1] += vy
 
     return output
+
 
