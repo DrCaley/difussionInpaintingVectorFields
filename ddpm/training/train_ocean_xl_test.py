@@ -22,8 +22,8 @@ from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 from ddpm.helper_functions.loss_functions import CustomLoss
-from noising_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise
-
+from noising_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise, \
+    gaussian_divergence_free_noise
 
 """
 This file is being used to train the best model of all time baybee.
@@ -174,13 +174,12 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
         epoch_loss = 0.0
         ddpm.train()
-        # may be able to throw out "step" in "for step, batch in ... "
         for step, batch in enumerate(tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{n_epochs}", colour="#005500")):
             x0 = batch[0].to(device).float()
             n = len(x0)
 
             t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps
-            noise = divergence_free_noise(x0, t,device).to(device)  # Generate noise
+            noise = gaussian_divergence_free_noise(x0, t,device).to(device)  # Generate noise
 
             noisy_imgs = ddpm(x0, t, noise)
             predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))

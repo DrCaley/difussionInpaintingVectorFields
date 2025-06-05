@@ -130,7 +130,7 @@ with open("inpainting-xl-data.csv", "w", newline="") as file:
 
             input_image = batch[0].to(device)
 
-            # THIS LINE MAY HAVE BROKEN WOOPS - Matt
+            #TODO: Fix all this/make it nicer/sanity check
             input_image_original = standardizer.unstandardize(input_image)
             land_mask = (input_image_original != 0).float()
 
