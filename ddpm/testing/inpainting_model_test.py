@@ -1,4 +1,5 @@
 import math
+import os.path
 import random
 import numpy as np
 import torch
@@ -23,13 +24,19 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 """Inpaints, records data about how well the model is doing"""
 """This is the main file to test the model"""
 
-
 # Load the YAML file
-with open('../../data.yaml', 'r') as file:
-    config = yaml.safe_load(file)
+if not os.path.exists('../../data.yaml') :
+    using_pycharm = False
+    with open('data.yaml', 'r') as file:
+        config = yaml.safe_load(file)
+else :
+    using_pycharm = True
+    with open('../../data.yaml', 'r') as file:
+        config = yaml.safe_load(file)
 
 #Set seed
 SEED = config['testSeed']
+snapshots = config['snapshots']
 random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
@@ -37,7 +44,7 @@ torch.cuda.manual_seed_all(SEED)
 
 n_steps, min_beta, max_beta = 1000, 1e-4, 0.02
 #change to the path to the model you want to test
-store_path = "../trained_models/ddpm_ocean_v0_2025_JUN_4.pt"
+store_path = config['model_path']
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 checkpoint = torch.load(store_path, map_location=device)
@@ -62,12 +69,20 @@ transform = Compose([
 
 try:
     logging.info("Preparing data")
-    data = OceanImageDataset(
-        mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
-        boundaries="../../data/rams_head/boundaries.yaml",
-        num=10, #number of ocean snapshots to load
-        transform=transform
-    )
+    if using_pycharm :
+        data = OceanImageDataset(
+            mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+            boundaries="../../data/rams_head/boundaries.yaml",
+            num=snapshots, #number of ocean snapshots to load
+            transform=transform
+        )
+    else:
+        data = OceanImageDataset(
+            mat_file="./data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+            boundaries="./data/rams_head/boundaries.yaml",
+            num=snapshots,
+            transform=transform
+        )
 
     train_len = int(math.floor(len(data) * 0.7))
     test_len = int(math.floor(len(data) * 0.15))
@@ -83,8 +98,6 @@ try:
 except Exception as e:
     logging.error(f"Error loading data: {e}")
     exit(1)
-
-
 
 
 line_numbers = [10, 20, 40] #parameters of mask to test
