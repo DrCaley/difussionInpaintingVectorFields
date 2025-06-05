@@ -1,7 +1,8 @@
 import unittest
 import torch
-from noising_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise, normalized_divergence_free_noise
+from noising_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise, normalized_divergence_free_noise, gaussian_at_end_divergence_free_noise, gaussian_each_step_divergence_free_noise
 from noising_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
+from plots.plot_data_tool import plot_vector_field
 
 class GaussianTest(unittest.TestCase):
     def test_test(self):
@@ -95,6 +96,40 @@ class GaussianTest(unittest.TestCase):
         divergence = divergence_tensor.abs().mean().item()
 
         self.assertAlmostEqual(0, divergence, delta=0.3)
+
+    def test_gaussian_at_end_vector_field(self):
+        tensor = torch.zeros((50, 2, 128, 128))
+        t = torch.randint(0, 1000, (1000,))
+        noise = gaussian_at_end_divergence_free_noise(tensor, t)
+        plot_vector_field(noise[0][0], noise[0][1],2,3, title=f"{t[0].item()}")
+
+        divergence_tensor = compute_divergence(noise[1][0], noise[1][1])
+        divergence = divergence_tensor.abs().mean().item()
+
+        self.assertAlmostEqual(5, divergence, delta=0.3)
+
+    def test_gaussian_each_step(self):
+        tensor = torch.zeros((50, 2, 128, 128))
+        t = torch.randint(0, 1000, (1000,))
+        noise = gaussian_each_step_divergence_free_noise(tensor, t)
+        plot_vector_field(noise[0][0], noise[0][1],2,3, title=f"{t[0].item()}", file=f"{t[0].item()}.png")
+
+        divergence_tensor = compute_divergence(noise[1][0], noise[1][1])
+        divergence = divergence_tensor.abs().mean().item()
+
+        self.assertAlmostEqual(5, divergence, delta=0.3)
+
+    def test_plotting_test(self):
+        tensor = torch.zeros((1, 2, 128, 128))
+        t = torch.tensor([999])
+        noise = gaussian_each_step_divergence_free_noise(tensor, t)
+
+        divergence_tensor = compute_divergence(noise[0][0], noise[0][1])
+        divergence = divergence_tensor.abs().mean().item()
+
+        self.assertAlmostEqual(5, divergence, delta=0.3)
+
+
 
 
 

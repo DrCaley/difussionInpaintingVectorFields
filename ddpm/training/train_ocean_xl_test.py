@@ -22,8 +22,7 @@ from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 from ddpm.helper_functions.loss_functions import CustomLoss
-from noising_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise, \
-    gaussian_divergence_free_noise
+from noising_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise, gaussian_each_step_divergence_free_noise
 
 """
 This file is being used to train the best model of all time baybee.
@@ -49,7 +48,7 @@ model_file = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}.pt")
 
 
 # CHANGE DESCRIPTION HERE, IT WILL ATTACH TO THE OUTPUT CSV:
-description = 'This is a description :D'
+description = 'Using physical loss along with non divergent noise that has the gaussian applied at each step'
 
 
 
@@ -180,7 +179,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             n = len(x0)
 
             t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps
-            noise = gaussian_divergence_free_noise(x0, t,device).to(device)  # Generate noise
+            noise = gaussian_each_step_divergence_free_noise(x0, t,device).to(device)  # Generate noise
 
             noisy_imgs = ddpm(x0, t, noise)
             predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))
