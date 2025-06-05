@@ -57,7 +57,7 @@ class GaussianTest(unittest.TestCase):
                            [-1.0, 0.0, 1.0],
                            [0.0, -1.0, 0.0]])
 
-        divergence_tensor = compute_divergence(vy, vx)
+        divergence_tensor = compute_divergence(vx, vy)
         divergence = divergence_tensor.abs().mean().item()
 
         self.assertAlmostEqual(0, divergence, delta=0.3)
@@ -72,9 +72,19 @@ class GaussianTest(unittest.TestCase):
                            [-1, -1, -1],
                            [1, 1, 1]], dtype=torch.float32)
 
-        divergence_tensor = compute_divergence(vy, vx)
+        divergence_tensor = compute_divergence(vx, vy)
         divergence = divergence_tensor.abs().mean().item()
 
         self.assertAlmostEqual(0, divergence, delta=0.0)
+
+    def test_divergence_free_noise(self):
+
+        tensor = torch.zeros((1,2,64,128))
+        noise = divergence_free_noise(tensor, torch.tensor([1000]))
+
+        divergence_tensor = compute_divergence(noise[0][0], noise[0][1])
+        divergence = divergence_tensor.abs().mean().item()
+
+        self.assertAlmostEqual(0, divergence, delta=0.3)
 
 

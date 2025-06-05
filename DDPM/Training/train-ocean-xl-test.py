@@ -161,13 +161,13 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             n = len(x0)
 
             t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps
-            epsilon = divergence_free_noise(x0, t,device).to(device)  # Generate noise
+            noise = divergence_free_noise(x0, t,device).to(device)  # Generate noise
 
-            noisy_imgs = ddpm(x0, t, epsilon)
+            noisy_imgs = ddpm(x0, t, noise)
             predicted_value = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
             # Hacky, should refactor to put all definitions in same place I think - Matt
-            loss = w1 * loss_function(predicted_value, epsilon) + w2 * physical_loss(predicted_value)
+            loss = w1 * loss_function(predicted_value, noise) + w2 * physical_loss(predicted_value)
 
             optim.zero_grad()
             loss.backward()

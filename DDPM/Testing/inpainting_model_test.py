@@ -37,7 +37,7 @@ torch.cuda.manual_seed_all(SEED)
 
 n_steps, min_beta, max_beta = 1000, 1e-4, 0.02
 #change to the path to the model you want to test
-store_path = "../Trained_Models/ddpm_ocean_good_normalized.pt"
+store_path = "../Trained_Models/ddpm_ocean_v0_2025_JUN_4.pt"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 checkpoint = torch.load(store_path, map_location=device)
