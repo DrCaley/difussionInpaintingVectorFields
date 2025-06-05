@@ -13,6 +13,9 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose, Lambda
 from tqdm import tqdm
+
+from ddpm.training.model_evaluation import evaluate
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from data_prep.ocean_image_dataset import OceanImageDataset
@@ -20,7 +23,8 @@ from ddpm.neural_networks.ddpm import MyDDPM
 from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
 from ddpm.neural_networks.unets.unet_xl import MyUNet
-# from medium_ddpm.dir.util import show_images, generate_new_images
+from ddpm.helper_functions.loss_functions import CustomLoss
+from noising_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise
 
 """This file trains the most successful model as of Feb 2025."""
 
@@ -44,14 +48,15 @@ torch.manual_seed(SEED)
 # Definitions
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("we are running on the:", device)
-n_steps, min_beta, max_beta = 1000, 0.0001, 0.02
+n_steps, min_beta, max_beta = config['n_steps'], config['min_beta'], config['max_beta']
 ddpm = MyDDPM(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=device)
 
-training_mode = True
+training_mode = config['training_mode']
 batch_size = config['batch_size']
 n_epochs = config['n_epochs']
 lr = config['lr']
 
+optimizer = Adam(ddpm.parameters(), lr=lr)
 
 transform = Compose([
     resize_transform((2, 64, 128)),        # Resized to (2, 64, 128)
@@ -91,33 +96,11 @@ train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=batch_size)
 val_loader = DataLoader(validation_data, batch_size=batch_size)
 
-def evaluate(model, data_loader, device):
-    model.eval()
-    total_loss = 0.0
-    count = 0
-    criterion = nn.MSELoss()
-
-    with torch.no_grad():
-        for batch in data_loader:
-            x0 = batch[0].to(device).float()
-            n = len(x0)
-
-            epsilon = torch.randn_like(x0).to(device)
-            t = torch.randint(0, model.n_steps, (n,)).to(device)
-
-            noisy_imgs = model(x0, t, epsilon)
-            epsilon_theta = model.backward(noisy_imgs, t.reshape(n, -1))
-            loss = criterion(epsilon_theta, epsilon)
-            total_loss += loss.item() * n
-            count += n
-
-    return total_loss / count
-
-
 def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, store_path="ddpm_ocean_model.pt"):
     """Trains the xl model (1 more layer than the original). The xl model is the main one we use as of early August, 2024"""
 
-    loss_function = nn.MSELoss()
+    loss_function = CustomLoss()
+
     best_train_loss = float("inf")
     best_test_loss = float("inf")
     n_steps = ddpm.n_steps
@@ -145,13 +128,14 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             x0 = batch[0].to(device).float()
             n = len(x0)
 
-            epsilon = torch.randn_like(x0).to(device)  # Generate noise
             t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps
+            noise = divergence_free_noise(x0, t,device).to(device)  # Generate noise
 
-            noisy_imgs = ddpm(x0, t, epsilon)
-            predicted_value = ddpm.backward(noisy_imgs, t.reshape(n, -1))
+            noisy_imgs = ddpm(x0, t, noise)
+            predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
-            loss = loss_function(predicted_value, epsilon)
+            loss = loss_function(predicted_noise, noise)
+
             optim.zero_grad()
             loss.backward()
             optim.step()
@@ -191,7 +175,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             show_images(generate_new_images(ddpm, device=device), f"Images generated at epoch {epoch + 1}")
         """
 
-    plt.figure(figsize=(20, 10))
+    plt.figure(figsize=(10, 5))
     plt.plot(train_losses, label='Train Loss')
     plt.plot(test_losses, label='Test Loss')
     plt.xlabel('Epoch')
