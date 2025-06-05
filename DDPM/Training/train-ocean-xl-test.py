@@ -24,7 +24,17 @@ from gaussian_process.incompressible_gp.adding_noise.compute_divergence import c
 
 # from medium_ddpm.dir.util import show_images, generate_new_images
 
-"""This file is being used to train the best model of all time baybee."""
+"""
+This file is being used to train the best model of all time baybee.
+There's never been a model better than this one, we got he best epsilons, 
+our loss function becomes our win function, truly remarkable stuff. 
+Absolute model 
+    | o |
+    \ | /
+      |
+     / \
+    |   |
+"""
 
 using_dumb_pycharm = True
 # Load the YAML file
