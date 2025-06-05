@@ -20,9 +20,11 @@ from DDPM.Helper_Functions.resize_tensor import resize_transform
 from DDPM.Helper_Functions.standardize_data import standardize_data
 from DDPM.Neural_Networks.unets.unet_xl import MyUNet
 from gaussian_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise
+from gaussian_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
+
 # from medium_ddpm.dir.util import show_images, generate_new_images
 
-"""This file trains the most successful model as of Feb 2025."""
+"""This file is being used to train the best model of all time baybee."""
 
 using_dumb_pycharm = True
 # Load the YAML file
@@ -91,6 +93,7 @@ def evaluate(model, data_loader, device):
     model.eval()
     total_loss = 0.0
     count = 0
+    # KEEP THIS LINE BELOW (or not, idk) - Matt
     criterion = nn.MSELoss()
 
     with torch.no_grad():
@@ -109,11 +112,27 @@ def evaluate(model, data_loader, device):
 
     return total_loss / count
 
+# ChatGPT, should probably check - Matt
+def physical_loss(predicted: Tensor) -> Tensor:
+    """
+    Computes the mean squared divergence across a batch of predicted vector fields.
+    `predicted` shape: (batch_size, 2, H, W) — where 2 corresponds to (u,v).
+    """
+    batch_divs = []
+    for field in predicted:
+        u, v = field[0], field[1]  # Get components
+        div = compute_divergence(u, v)  # Shape (H, W)
+        batch_divs.append(div.pow(2).mean())  # MSE of divergence for one field
+    return torch.stack(batch_divs).mean()
+
 
 def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, store_path="ddpm_ocean_model.pt"):
     """Trains the xl model (1 more layer than the original). The xl model is the main one we use as of early August, 2024"""
-
+    # building loss function
+    w1 = 0.5
+    w2 = 0.5
     loss_function = nn.MSELoss()
+
     best_train_loss = float("inf")
     best_test_loss = float("inf")
     n_steps = ddpm.n_steps
@@ -136,17 +155,20 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="Training progress", colour="#00ff00"):
         epoch_loss = 0.0
         ddpm.train()
+        # may be able to throw out "step" in "for step, batch in ... "
         for step, batch in enumerate(tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{n_epochs}", colour="#005500")):
             x0 = batch[0].to(device).float()
             n = len(x0)
 
             t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps
-            epsilon = divergence_free_noise(x0 ,t ,device).to(device)  # Generate noise
+            epsilon = divergence_free_noise(x0, t,device).to(device)  # Generate noise
 
             noisy_imgs = ddpm(x0, t, epsilon)
             predicted_value = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
-            loss = loss_function(predicted_value, epsilon)
+            # Hacky, should refactor to put all definitions in same place I think - Matt
+            loss = w1 * loss_function(predicted_value, epsilon) + w2 * physical_loss(predicted_value)
+
             optim.zero_grad()
             loss.backward()
             optim.step()
