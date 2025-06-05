@@ -8,8 +8,9 @@ from torchvision.transforms import Compose
 import logging
 import csv
 import yaml
+import sys
 
-
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from data_prep.ocean_image_dataset import OceanImageDataset
 from ddpm.neural_networks.ddpm import MyDDPM
 from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
@@ -33,6 +34,13 @@ else :
     using_pycharm = True
     with open('../../data.yaml', 'r') as file:
         config = yaml.safe_load(file)
+print("loaded yaml file.")
+
+if len(sys.argv) < 2 :
+    print("Usage: python3 inpainting_model_test.py <model file ending with .pt>")
+    store_path = config['model_path']
+else :
+    store_path = sys.argv[1]
 
 #Set seed
 SEED = config['testSeed']
@@ -43,8 +51,6 @@ torch.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 
 n_steps, min_beta, max_beta = 1000, 1e-4, 0.02
-#change to the path to the model you want to test
-store_path = config['model_path']
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 checkpoint = torch.load(store_path, map_location=device)

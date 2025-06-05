@@ -4,6 +4,7 @@ from scipy.io import loadmat
 from torch import Tensor
 from torch.utils.data import Dataset
 
+
 class OceanImageDataset(Dataset):
     """
     loads 'u' and 'v' velocity components from .mat file, applies masking to handle NaNs and returns 3-channel tensors representing u, v, and a binary mask
@@ -16,7 +17,9 @@ class OceanImageDataset(Dataset):
         transform (callable, optional): Optional transform to apply to each tensor.
     """
 
-    def __init__(self, num : int, transform=None, mat_file="../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat", boundaries="../data/rams_head/boundaries.yaml"):
+    def __init__(self, num: int, transform=None,
+                 mat_file="../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
+                 boundaries="../data/rams_head/boundaries.yaml"):
         """
         Initializes the coean_image_dataset
         Args:
@@ -81,20 +84,27 @@ class OceanImageDataset(Dataset):
                 torch.Tensor: A 3xHxW tensor of u, v, and mask components.
         """
         u_tensors = torch.from_numpy(self.mat_data['u'])
-        u_tensors = u_tensors.permute(*torch.arange(u_tensors.ndim - 1, -1, -1))[tensor_num]
+        u_tensors = u_tensors.permute(
+            *torch.arange(u_tensors.ndim - 1, -1, -1))[
+            tensor_num]
         v_tensors = torch.from_numpy(self.mat_data['v'])
-        v_tensors = v_tensors.permute(*torch.arange(v_tensors.ndim - 1, -1, -1))[tensor_num]
-        time = torch.from_numpy(self.mat_data['ocean_time'].squeeze())
+        v_tensors = v_tensors.permute(
+            *torch.arange(v_tensors.ndim - 1, -1, -1))[
+            tensor_num]
+        time = torch.from_numpy(
+            self.mat_data['ocean_time'].squeeze())
 
         mask = u_tensors.clone().detach()
         for x in range(94):
             for y in range(44):
-                if u_tensors[y][x].isnan() or v_tensors[y][x].isnan():
+                if u_tensors[y][x].isnan() or v_tensors[y][
+                    x].isnan():
                     mask[y][x] = 0
                     u_tensors[y][x] = 0
                     v_tensors[y][x] = 0
                 else:
                     mask[y][x] = 1
 
-        combined_tensor = torch.stack((u_tensors, v_tensors, mask))
+        combined_tensor = torch.stack(
+            (u_tensors, v_tensors, mask))
         return combined_tensor
