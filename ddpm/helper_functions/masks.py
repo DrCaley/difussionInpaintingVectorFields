@@ -1,6 +1,7 @@
 import random
 import torch
 import numpy as np
+from matplotlib import pyplot as plt
 
 """Code that generates the masks"""
 
@@ -207,3 +208,35 @@ def create_border_mask(image_shape, area_height=44, area_width=94, offset_top=0,
     return torch.tensor(border_mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
 
 
+
+
+""" Messing with stuff down here. - Matt """
+
+# Image shape: (B, C, H, W)
+image_shape = (1, 1, 64, 128)
+
+# Dummy input image: All ones except a fake landmask (e.g. zeros in top 10 rows)
+input_image_original = torch.ones(image_shape)
+input_image_original[:, :, 0:10, :] = 0.0
+
+# Dummy land mask (no land excluded)
+land_mask = torch.ones((1, 1, 64, 128))
+
+# Generate masks
+masks = {
+    "random": generate_random_mask(image_shape, input_image_original),
+    "straight_line": generate_straight_line_mask(image_shape, land_mask),
+    "random_path": generate_random_path_mask(image_shape, land_mask),
+    "squiggly_line": generate_squiggly_line_mask(image_shape, input_image_original),
+    "robot_path": generate_robot_path_mask(image_shape, land_mask),
+}
+
+# Plot masks
+plt.figure(figsize=(15, 5))
+for i, (name, mask) in enumerate(masks.items()):
+    plt.subplot(1, len(masks), i+1)
+    plt.imshow(mask.squeeze().numpy(), cmap="gray")
+    plt.title(name)
+    plt.axis('off')
+plt.tight_layout()
+plt.show()

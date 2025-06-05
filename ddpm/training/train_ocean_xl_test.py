@@ -174,7 +174,6 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
         epoch_loss = 0.0
         ddpm.train()
-        # may be able to throw out "step" in "for step, batch in ... "
         for step, batch in enumerate(tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{n_epochs}", colour="#005500")):
             x0 = batch[0].to(device).float()
             n = len(x0)
