@@ -8,6 +8,10 @@ from ddpm.testing.inpainting_model_test import config
 from data_prep.ocean_image_dataset import OceanImageDataset
 
 
+# MUST DO SOMETHING MORE REASONABLE WITH THIS SOON.
+# CURRENTLY WE DON'T EVEN HAVE splitting_data_sets.py
+# HOOKED UP TO ANYTHING. - Matt
+
 class TestDataPrep(unittest.TestCase):
 
     def setUp(self):

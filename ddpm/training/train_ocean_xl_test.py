@@ -3,9 +3,11 @@ import os
 import sys
 import random
 import yaml
-
+import csv
 import numpy as np
 import torch
+
+from datetime import datetime
 from matplotlib import pyplot as plt
 from torch import nn, Tensor
 from torch.optim import Adam
@@ -22,7 +24,6 @@ from ddpm.neural_networks.unets.unet_xl import MyUNet
 from ddpm.helper_functions.loss_functions import CustomLoss
 from noising_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise
 
-# from medium_ddpm.dir.util import show_images, generate_new_images
 
 """
 This file is being used to train the best model of all time baybee.
@@ -35,6 +36,22 @@ Absolute model
      / \
     |   |
 """
+
+
+
+output_dir = os.path.join(os.path.dirname(__file__), "training_output")
+os.makedirs(output_dir, exist_ok=True)
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+csv_file = os.path.join(output_dir, f"training_log_{timestamp}.csv")
+plot_file = os.path.join(output_dir, f"train_test_loss_xl_{timestamp}.png")
+model_file = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}.pt")
+
+
+
+# CHANGE DESCRIPTION HERE, IT WILL ATTACH TO THE OUTPUT CSV:
+description = 'This is a description :D'
+
+
 
 using_dumb_pycharm = True
 # Load the YAML file
@@ -70,8 +87,6 @@ transform = Compose([
     resize_transform((2, 64, 128)),        # Resized to (2, 64, 128)
     standardize_data(config['u_training_mean'], config['u_training_std'], config['v_training_mean'], config['v_training_std'])
 ])
-
-store_path = "./ddpm_ocean_v0.pt"
 
 if using_dumb_pycharm :
     data = OceanImageDataset(
@@ -123,7 +138,7 @@ def evaluate(model, data_loader, device):
     return total_loss / count
 
 
-def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, store_path="ddpm_ocean_model.pt"):
+def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False):
     """Trains the xl model (1 more layer than the original). The xl model is the main one we use as of early August, 2024"""
     # building loss function
 
@@ -137,8 +152,8 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     test_losses = []
 
     start_epoch = 0
-    if os.path.exists(store_path):
-        checkpoint = torch.load(store_path)
+    if os.path.exists(model_file):
+        checkpoint = torch.load(model_file)
         ddpm.load_state_dict(checkpoint['model_state_dict'])
         optim.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = checkpoint['epoch'] + 1
@@ -148,6 +163,14 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
         best_test_loss = checkpoint['best_test_loss']
         print(f"Resuming training from epoch {start_epoch}")
 
+    # CSV output setup
+    csv_file = os.path.join(output_dir, f"training_log_{timestamp}.csv")
+    with open(csv_file, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow([description])
+        writer.writerow(['Epoch', 'Train Loss', 'Test Loss'])
+
+    # Training arc (the ankle weights are coming off)
     for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
         epoch_loss = 0.0
         ddpm.train()
@@ -180,12 +203,16 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
 
         log_string = f"Loss at epoch {epoch + 1}: {epoch_loss:.3f}"
 
-        #TODO: Save values to CSV file spit out at end, and sanity check each losses above
-        
+        #TODO: Sanity check each losses above
+
+        # Append current epoch results to CSV
+        with open(csv_file, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow([epoch + 1, avg_train_loss, avg_test_loss])
 
         if best_test_loss > avg_test_loss:
             best_test_loss = avg_test_loss
-            torch.save(ddpm.state_dict(), store_path)
+            torch.save(ddpm.state_dict(), model_file)
             log_string += " --> Best model ever (stored based on test loss)"
 
         print(log_string)
@@ -199,7 +226,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             'best_train_loss': best_train_loss,
             'best_test_loss': best_test_loss
         }
-        torch.save(checkpoint, store_path)
+        torch.save(checkpoint, model_file)
 
         """
         if display:
@@ -213,10 +240,11 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     plt.ylabel('Loss')
     plt.legend()
     plt.title('training and Test Loss')
-    plt.savefig('train_test_loss_xl.png')
+    plt.savefig(plot_file)
+
 
 
 optimizer = Adam(ddpm.parameters(), lr=lr)
 
 if training_mode:
-    training_loop(ddpm, train_loader, test_loader, n_epochs, optim=optimizer, device=device, store_path=store_path)
+    training_loop(ddpm, train_loader, test_loader, n_epochs, optim=optimizer, device=device)
