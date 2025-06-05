@@ -49,7 +49,7 @@ model_file = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}.pt")
 
 
 # CHANGE DESCRIPTION HERE, IT WILL ATTACH TO THE OUTPUT CSV:
-description = 'This is a description :D'
+description = 'ONLY PHYSICAL LOSS (threw out MSE during training)'
 
 
 

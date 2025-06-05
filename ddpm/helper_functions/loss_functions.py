@@ -3,8 +3,8 @@ import torch.nn as nn
 
 from noising_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
 
-w1 = 0.5
-w2 = 0.5
+w1 = 0
+w2 = 1
 
 mean_square_error = nn.MSELoss()
 
