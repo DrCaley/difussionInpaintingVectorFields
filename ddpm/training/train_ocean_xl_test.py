@@ -56,13 +56,13 @@ description = 'This is a description :D'
 using_dumb_pycharm = True
 # Load the YAML file
 if not os.path.exists('../../data.yaml') :
-    print ("--> ALL HAIL PYCHARM!!!! PYCHARM IS THE BEST <--")
-    with open('../../data.yaml', 'r') as file: ## <- if you are running it on pycharm
-        config = yaml.safe_load(file)
-else :
     using_dumb_pycharm = False # <-- congrats on NOT using that dumb IDE!
     print("I see you are using the Terminal")
     with open('data.yaml', 'r') as file: ## <-- if you are running it on the terminal
+        config = yaml.safe_load(file)
+else :
+    print ("--> ALL HAIL PYCHARM!!!! PYCHARM IS THE BEST <--")
+    with open('../../data.yaml', 'r') as file: ## <- if you are running it on pycharm
         config = yaml.safe_load(file)
 
 # Setting reproducibility
