@@ -2,9 +2,9 @@ import unittest
 
 from torchvision.transforms import Compose
 
-from ddpm.Helper_Functions.resize_tensor import resize_transform
-from ddpm.Helper_Functions.standardize_data import standardize_data
-from ddpm.Testing.inpainting_model_test import config
+from ddpm.helper_functions.resize_tensor import resize_transform
+from ddpm.helper_functions.standardize_data import standardize_data
+from ddpm.testing.inpainting_model_test import config
 from data_prep.ocean_image_dataset import OceanImageDataset
 
 

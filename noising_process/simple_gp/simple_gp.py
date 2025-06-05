@@ -51,7 +51,7 @@ likelihood_g = gpytorch.likelihoods.GaussianLikelihood()
 model_g = GPModel_2D(coords, values_g, likelihood_g)
 
 
-# Training
+# training
 def train_gp_model(model, likelihood, coords, values):
     model.train()
     likelihood.train()
@@ -99,7 +99,7 @@ output_image.save('./gp_image.png')
 expanded_mask = torch.from_numpy(np.repeat(missing_pixel_mask[..., np.newaxis], 3, axis=2))
 generate_png(expanded_mask, filename='expanded_mask.png')
 
-# Testing
+# testing
 def calculate_mse(original_image, reconstructed_image, mask):
     masked_original = original_image * mask
     masked_reconstructed = reconstructed_image * mask

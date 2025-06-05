@@ -35,7 +35,7 @@ model_r = GPModel_2D(coords, values_r, likelihood_r)
 likelihood_g = gpytorch.likelihoods.GaussianLikelihood()
 model_g = GPModel_2D(coords, values_g, likelihood_g)
 
-# Training
+# training
 train_gp_model(model_r, likelihood_r, coords, values_r)
 train_gp_model(model_g, likelihood_g, coords, values_g)
 

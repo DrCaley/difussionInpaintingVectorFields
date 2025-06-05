@@ -10,12 +10,12 @@ import yaml
 
 
 from data_prep.ocean_image_dataset import OceanImageDataset
-from ddpm.Neural_Networks.ddpm import MyDDPM
-from ddpm.Helper_Functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
-from ddpm.Helper_Functions.masks import (generate_random_path_mask)
-from ddpm.Helper_Functions.resize_tensor import resize_transform
-from ddpm.Helper_Functions.standardize_data import standardize_data
-from ddpm.Neural_Networks.unets.unet_xl import MyUNet
+from ddpm.neural_networks.ddpm import MyDDPM
+from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
+from ddpm.helper_functions.masks import (generate_random_path_mask)
+from ddpm.helper_functions.resize_tensor import resize_transform
+from ddpm.helper_functions.standardize_data import standardize_data
+from ddpm.neural_networks.unets.unet_xl import MyUNet
 
 #output goes to file, not console
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename="inpainting_model_test_log.txt")
@@ -37,7 +37,7 @@ torch.cuda.manual_seed_all(SEED)
 
 n_steps, min_beta, max_beta = 1000, 1e-4, 0.02
 #change to the path to the model you want to test
-store_path = "../Trained_Models/ddpm_ocean_v0_2025_JUN_4.pt"
+store_path = "../trained_models/ddpm_ocean_v0_2025_JUN_4.pt"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 checkpoint = torch.load(store_path, map_location=device)
