@@ -4,6 +4,8 @@ v_training_mean: -0.032393779611754124
 v_training_std: 0.08899177232117583
 
 testSeed: 0
-n_epochs: 2
+n_epochs: 10
 batch_size: 35
 lr: 0.001
+snapshots: 10
+model_path: "../trained_models/ddpm_ocean_v0_2025_JUN_4.pt"

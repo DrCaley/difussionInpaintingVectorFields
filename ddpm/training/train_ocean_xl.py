@@ -6,6 +6,7 @@ import yaml
 
 import numpy as np
 import torch
+import datetime
 from matplotlib import pyplot as plt
 from torch import nn, Tensor
 from torch.optim import Adam
@@ -57,7 +58,12 @@ transform = Compose([
     standardize_data(config['u_training_mean'], config['u_training_std'], config['v_training_mean'], config['v_training_std'])
 ])
 
-store_path = "./ddpm_ocean_v0.pt"
+now = datetime.datetime.now()
+date = now.strftime("%h_%d")
+
+store_path = "./ddpm_ocean_" + date +".pt"
+
+print(store_path)
 
 if using_dumb_pycharm :
     data = OceanImageDataset(
@@ -84,31 +90,6 @@ training_data, test_data, validation_data = random_split(data, [train_len, test_
 train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=batch_size)
 val_loader = DataLoader(validation_data, batch_size=batch_size)
-
-'''
-class CustomLoss(nn.Module):
-    def __init__(self, non_zero_weight=5.0, zero_weight=1.0):
-        super(CustomLoss, self).__init__()
-        self.mse = nn.MSELoss(reduction='none')
-        self.mae = nn.L1Loss(reduction='none')
-        self.non_zero_weight = non_zero_weight
-        self.zero_weight = zero_weight
-
-    def forward(self, epsilon_theta, epsilon, x0 : Tensor):
-        non_zero_mask = (x0 != 0).float()
-        zero_mask = (x0 == 0).float()
-
-        mse_loss = self.mse(epsilon_theta, epsilon)
-        mae_loss = self.mae(epsilon_theta, epsilon)
-
-        weighted_mse_loss = mse_loss * (self.non_zero_weight * non_zero_mask + self.zero_weight * zero_mask)
-        weighted_mae_loss = mae_loss * (self.non_zero_weight * non_zero_mask + self.zero_weight * zero_mask)
-
-        weighted_mse_loss = weighted_mse_loss.sum() / (non_zero_mask.sum() * self.non_zero_weight + zero_mask.sum() * self.zero_weight)
-        weighted_mae_loss = weighted_mae_loss.sum() / (non_zero_mask.sum() * self.non_zero_weight + zero_mask.sum() * self.zero_weight)
-
-        return weighted_mse_loss + weighted_mae_loss
-'''
 
 def evaluate(model, data_loader, device):
     model.eval()
@@ -156,6 +137,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
         best_test_loss = checkpoint['best_test_loss']
         print(f"Resuming training from epoch {start_epoch}")
 
+    # tqdm is for the progress bar and shi
     for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
         epoch_loss = 0.0
         ddpm.train()
@@ -209,14 +191,16 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             show_images(generate_new_images(ddpm, device=device), f"Images generated at epoch {epoch + 1}")
         """
 
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(20, 10))
     plt.plot(train_losses, label='Train Loss')
     plt.plot(test_losses, label='Test Loss')
     plt.xlabel('Epoch')
+    plt.ylim(0,3)
+    plt.locator_params(axis='x', integer=True)
     plt.ylabel('Loss')
     plt.legend()
     plt.title('training and Test Loss')
-    plt.savefig('train_test_loss_xl.png')
+    plt.savefig('train_test_loss_xl_' + date + '.png')
 
 
 optimizer = Adam(ddpm.parameters(), lr=lr)
