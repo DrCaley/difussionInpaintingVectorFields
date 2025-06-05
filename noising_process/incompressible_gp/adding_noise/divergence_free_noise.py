@@ -1,5 +1,5 @@
 import torch
-from gaussian_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
+from noising_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
 
 def exact_div_free_field_from_stream(H, W, freq, device='cpu'):
     x = torch.linspace(0, 2 * torch.pi, W, device=device)

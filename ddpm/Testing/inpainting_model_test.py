@@ -9,13 +9,13 @@ import csv
 import yaml
 
 
-from DataPrep.ocean_image_dataset import OceanImageDataset
-from DDPM.Neural_Networks.ddpm import MyDDPM
-from DDPM.Helper_Functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
-from DDPM.Helper_Functions.masks import (generate_random_path_mask)
-from DDPM.Helper_Functions.resize_tensor import resize_transform
-from DDPM.Helper_Functions.standardize_data import standardize_data
-from DDPM.Neural_Networks.unets.unet_xl import MyUNet
+from data_prep.ocean_image_dataset import OceanImageDataset
+from ddpm.Neural_Networks.ddpm import MyDDPM
+from ddpm.Helper_Functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
+from ddpm.Helper_Functions.masks import (generate_random_path_mask)
+from ddpm.Helper_Functions.resize_tensor import resize_transform
+from ddpm.Helper_Functions.standardize_data import standardize_data
+from ddpm.Neural_Networks.unets.unet_xl import MyUNet
 
 #output goes to file, not console
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename="inpainting_model_test_log.txt")

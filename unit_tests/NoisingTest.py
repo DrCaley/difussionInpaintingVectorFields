@@ -1,7 +1,7 @@
 import unittest
 import torch
-from gaussian_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise
-from gaussian_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
+from noising_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise
+from noising_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
 
 class GaussianTest(unittest.TestCase):
     def test_test(self):

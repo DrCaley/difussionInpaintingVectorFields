@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from mpmath.calculus.extrapolation import standardize
 
-from DDPM.Helper_Functions.standardize_data import standardize_data
+from ddpm.Helper_Functions.standardize_data import standardize_data
 
 
 class TestHelperFunctions(unittest.TestCase):

@@ -4,7 +4,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import gpytorch
 
-from gaussian_process.simple_gp.simple_gp_model import GPModel_2D
+from noising_process.simple_gp.simple_gp_model import GPModel_2D
 from plots.adapt_visualize_data import plot_png
 from utils.tensors_to_png import generate_png
 

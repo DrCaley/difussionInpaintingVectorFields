@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 from skimage import data
 from skimage.color import rgb2gray
 import gpytorch
-from gaussian_process.simple_gp.simple_gp_model import GPModel
+from noising_process.simple_gp.simple_gp_model import GPModel
 
 # DATA PREP
 image = rgb2gray(data.astronaut())

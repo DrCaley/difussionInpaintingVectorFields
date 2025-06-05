@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import gpytorch
 from torch.utils.data import DataLoader
 from dataloaders.dataloader import OceanImageDataset
-from gaussian_process.simple_gp.simple_gp import prepare_data, train_gp_model, predict_gp_model
-from gaussian_process.simple_gp.simple_gp_model import GPModel_2D
+from noising_process.simple_gp.simple_gp import prepare_data, train_gp_model, predict_gp_model
+from noising_process.simple_gp.simple_gp_model import GPModel_2D
 
 # TODO: Make script to test gp model against ddpm on similar masks
 # TODO: Test if can make from OceanImageDataset
