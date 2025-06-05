@@ -133,7 +133,7 @@ with open("inpainting-xl-data.csv", "w", newline="") as file:
             if image_counter >= num_images_to_process:
                 break
 
-            input_image = batch[0].to(device) # (B, C, H, W)
+            input_image = batch[0].to(device) # (Batch size, Channels, Height, Width)
 
             # Convert back to unstandardized form for land masking
             #TODO: Fix all this/make it nicer/sanity check
