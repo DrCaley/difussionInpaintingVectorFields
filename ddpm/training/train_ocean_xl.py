@@ -28,6 +28,7 @@ using_dumb_pycharm = True
 try:
     with open('../../data.yaml', 'r') as file: ## <- if you are running it on pycharm
         config = yaml.safe_load(file)
+    print("--> ALL HAIL PYCHARM!!!! PYCHARM IS THE BEST <--")
 except FileNotFoundError:
     using_dumb_pycharm = False # <-- congrats on NOT using that dumb IDE!
     with open('data.yaml', 'r') as file: ## <-- if you are running it on the terminal

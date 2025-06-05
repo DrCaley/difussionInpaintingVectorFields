@@ -12,7 +12,7 @@ import yaml
 from data_prep.ocean_image_dataset import OceanImageDataset
 from ddpm.neural_networks.ddpm import MyDDPM
 from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
-from ddpm.helper_functions.masks import (generate_random_path_mask)
+from ddpm.helper_functions.masks import generate_random_path_mask
 from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
 from ddpm.neural_networks.unets.unet_xl import MyUNet
@@ -83,9 +83,6 @@ try:
 except Exception as e:
     logging.error(f"Error loading data: {e}")
     exit(1)
-
-
-
 
 line_numbers = [10, 20, 40] #parameters of mask to test
 resample_nums = [5] #number of times to sample/resample

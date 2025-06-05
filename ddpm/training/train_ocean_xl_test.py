@@ -19,8 +19,8 @@ from ddpm.neural_networks.ddpm import MyDDPM
 from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
 from ddpm.neural_networks.unets.unet_xl import MyUNet
+from ddpm.helper_functions.loss_functions import CustomLoss
 from noising_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise
-from noising_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
 
 # from medium_ddpm.dir.util import show_images, generate_new_images
 
@@ -41,7 +41,7 @@ using_dumb_pycharm = True
 try:
     with open('../../data.yaml', 'r') as file: ## <- if you are running it on pycharm
         config = yaml.safe_load(file)
-    print ("Why are u sing pycharm??")
+    print ("--> ALL HAIL PYCHARM!!!! PYCHARM IS THE BEST <--")
 except FileNotFoundError:
     using_dumb_pycharm = False # <-- congrats on NOT using that dumb IDE!
     print("I see you are using the Terminal")
@@ -122,26 +122,12 @@ def evaluate(model, data_loader, device):
 
     return total_loss / count
 
-# ChatGPT, should probably check - Matt
-def physical_loss(predicted: Tensor) -> Tensor:
-    """
-    Computes the mean squared divergence across a batch of predicted vector fields.
-    `predicted` shape: (batch_size, 2, H, W) — where 2 corresponds to (u,v).
-    """
-    batch_divs = []
-    for field in predicted:
-        u, v = field[0], field[1]  # Get components
-        div = compute_divergence(u, v)  # Shape (H, W)
-        batch_divs.append(div.pow(2).mean())  # MSE of divergence for one field
-    return torch.stack(batch_divs).mean()
-
 
 def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, store_path="ddpm_ocean_model.pt"):
     """Trains the xl model (1 more layer than the original). The xl model is the main one we use as of early August, 2024"""
     # building loss function
-    w1 = 0.5
-    w2 = 0.5
-    loss_function = nn.MSELoss()
+
+    loss_function = CustomLoss()
 
     best_train_loss = float("inf")
     best_test_loss = float("inf")
@@ -174,10 +160,9 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             noise = divergence_free_noise(x0, t,device).to(device)  # Generate noise
 
             noisy_imgs = ddpm(x0, t, noise)
-            predicted_value = ddpm.backward(noisy_imgs, t.reshape(n, -1))
+            predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
-            # Hacky, should refactor to put all definitions in same place I think - Matt
-            loss = w1 * loss_function(predicted_value, noise) + w2 * physical_loss(predicted_value)
+            loss = loss_function(predicted_noise, noise)
 
             optim.zero_grad()
             loss.backward()
