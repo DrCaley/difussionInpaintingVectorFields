@@ -195,6 +195,9 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
 
         log_string = f"Loss at epoch {epoch + 1}: {epoch_loss:.3f}"
 
+        #TODO: Save values to CSV file spit out at end, and sanity check each losses above
+        
+
         if best_test_loss > avg_test_loss:
             best_test_loss = avg_test_loss
             torch.save(ddpm.state_dict(), store_path)
