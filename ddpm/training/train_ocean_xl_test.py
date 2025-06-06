@@ -23,8 +23,7 @@ from ddpm.neural_networks.ddpm import MyDDPM
 from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
 from ddpm.neural_networks.unets.unet_xl import MyUNet
-from ddpm.helper_functions.loss_functions import CustomLoss
-from noising_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise, gaussian_each_step_divergence_free_noise
+from ddpm.training.model_evaluation import evaluate
 
 """
 This file is being used to train the best model of all time baybee.
@@ -120,44 +119,6 @@ validation_data = OceanImageDataset(
 train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=batch_size)
 val_loader = DataLoader(validation_data, batch_size=batch_size)
-
-def evaluate(model, data_loader, device):
-    """
-        Evaluates a trained diffusion model using Mean Squared Error (MSE) loss.
-
-        This function computes the average MSE loss over all batches in the given data loader.
-        It performs a forward and backward diffusion process to compare the predicted noise with the true noise.
-
-        Args:
-           model (MyDDPM): The trained DDPM model.
-           data_loader (DataLoader): PyTorch DataLoader containing the dataset to evaluate (train, test, or val).
-           device (torch.device): The device to run the model on ('cuda' or 'cpu').
-
-        Returns:
-           float: The average loss across the dataset.
-   """
-    model.eval()
-    total_loss = 0.0
-    count = 0
-    # KEEP THIS LINE BELOW (or not, idk) - Matt
-    criterion = nn.MSELoss()
-
-    with torch.no_grad():
-        for batch in data_loader:
-            x0 = batch[0].to(device).float()
-            n = len(x0)
-
-            epsilon = torch.randn_like(x0).to(device)
-            t = torch.randint(0, model.n_steps, (n,)).to(device)
-
-            noisy_imgs = model(x0, t, epsilon)
-            epsilon_theta = model.backward(noisy_imgs, t.reshape(n, -1))
-            loss = criterion(epsilon_theta, epsilon)
-            total_loss += loss.item() * n
-            count += n
-
-    return total_loss / count
-
 
 def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, loss_function = None):
     """
