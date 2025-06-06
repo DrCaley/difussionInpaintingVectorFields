@@ -14,6 +14,7 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose, Lambda
 from tqdm import tqdm
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from data_prep.ocean_image_dataset import OceanImageDataset
@@ -36,9 +37,9 @@ Absolute model
     |   |
 """
 
-output_dir = os.path.join(os.path.dirname(__file__), "training_output")
-os.makedirs(output_dir, exist_ok=True)
 timestamp = datetime.now().strftime("%h%d_%H%M")
+output_dir = os.path.join(os.path.dirname(__file__), f"training_output")
+os.makedirs(output_dir, exist_ok=True)
 csv_file = os.path.join(output_dir, f"training_log_{timestamp}.csv")
 plot_file = os.path.join(output_dir, f"train_test_loss_xl_{timestamp}.png")
 model_file = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}.pt")
@@ -48,11 +49,11 @@ description = 'Using 0 physical loss, 1 MSE along with non divergent noise that 
 
 using_dumb_pycharm = True
 # Load the YAML file
-try:
+if os.path.exists('../../data.yaml'):
     with open('../../data.yaml', 'r') as file: ## <- if you are running it on pycharm
         config = yaml.safe_load(file)
     print ("--> ALL HAIL PYCHARM!!!! PYCHARM IS THE BEST <--")
-except FileNotFoundError:
+else :
     using_dumb_pycharm = False # <-- congrats on NOT using that dumb IDE!
     print("I see you are using the Terminal")
     with open('data.yaml', 'r') as file: ## <-- if you are running it on the terminal
@@ -67,14 +68,13 @@ torch.manual_seed(SEED)
 # Definitions
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("we are running on the:", device)
-n_steps, min_beta, max_beta = 1000, 0.0001, 0.02
+n_steps, min_beta, max_beta = config['n_steps'], config['min_beta'], config['max_beta']
 ddpm = MyDDPM(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=device)
 
-training_mode = True
+training_mode = config['training_mode']
 batch_size = config['batch_size']
 n_epochs = config['n_epochs']
 lr = config['lr']
-
 
 transform = Compose([
     resize_transform((2, 64, 128)),        # Resized to (2, 64, 128)
@@ -82,19 +82,18 @@ transform = Compose([
 ])
 
 if using_dumb_pycharm :
-    data = OceanImageDataset(
-        mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat", # <--
-        boundaries="../../data/rams_head/boundaries.yaml",
-        num=100,
-        transform=transform
-    )
+    the_mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat"
+    boundaries_file="../../data/rams_head/boundaries.yaml"
 else:
-    data = OceanImageDataset(
-        mat_file="data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat", # <--
-        boundaries="data/rams_head/boundaries.yaml",
-        num=100,
-        transform=transform
-    )
+    the_mat_file="data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat"
+    boundaries_file="data/rams_head/boundaries.yaml"
+
+data = OceanImageDataset(
+    mat_file=the_mat_file,
+    boundaries=boundaries_file,
+    num=100,
+    transform=transform
+)
 
 train_len = int(math.floor(len(data) * 0.7))
 test_len = int(math.floor(len(data) * 0.15))
@@ -107,6 +106,20 @@ test_loader = DataLoader(test_data, batch_size=batch_size)
 val_loader = DataLoader(validation_data, batch_size=batch_size)
 
 def evaluate(model, data_loader, device):
+    """
+        Evaluates a trained diffusion model using Mean Squared Error (MSE) loss.
+
+        This function computes the average MSE loss over all batches in the given data loader.
+        It performs a forward and backward diffusion process to compare the predicted noise with the true noise.
+
+        Args:
+           model (MyDDPM): The trained DDPM model.
+           data_loader (DataLoader): PyTorch DataLoader containing the dataset to evaluate (train, test, or val).
+           device (torch.device): The device to run the model on ('cuda' or 'cpu').
+
+        Returns:
+           float: The average loss across the dataset.
+   """
     model.eval()
     total_loss = 0.0
     count = 0
@@ -130,12 +143,30 @@ def evaluate(model, data_loader, device):
     return total_loss / count
 
 
-def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False):
-    """Trains the xl model (1 more layer than the original). The xl model is the main one we use as of early August, 2024"""
-    # building loss function
+def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, loss_function = None):
+    """
+        Trains the xl model (1 more layer than the original). The xl model is the main one we use as of early August, 2024
+        Trains a DDPM model over a specified number of epochs.
 
-    loss_function = CustomLoss()
+        This function handles loading from a checkpoint (if available), training the model using a custom
+        or default loss function, logging losses to CSV, saving the best model by test loss, and optionally plotting loss curves.
 
+        Args:
+            ddpm (MyDDPM): The diffusion model to train.
+            train_loader (DataLoader): PyTorch DataLoader for the training data.
+            test_loader (DataLoader): PyTorch DataLoader for the test data.
+            n_epochs (int): Number of epochs to train for.
+            optim (torch.optim.Optimizer): The optimizer for training.
+            device (torch.device): The device to run the model on ('cuda' or 'cpu').
+            display (bool, optional): Whether to display/generated images per epoch (not currently implemented). Defaults to False.
+            loss_function (Callable, optional): The loss function to use (e.g. nn.MSELoss). Required.
+
+        Side Effects:
+            - Writes a CSV file with training and test loss history.
+            - Saves model checkpoints to disk.
+            - Updates global model and optimizer states.
+            - Plots and saves a loss curve PNG file after training completes.
+    """
     best_train_loss = float("inf")
     best_test_loss = float("inf")
     n_steps = ddpm.n_steps
@@ -156,7 +187,6 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
         print(f"Resuming training from epoch {start_epoch}")
 
     # CSV output setup
-    csv_file = os.path.join(output_dir, f"training_log_{timestamp}.csv")
     with open(csv_file, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow([description])
@@ -195,7 +225,6 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
 
         log_string = f"\nepoch {epoch + 1}: \n" + f"Loss: {epoch_loss:.3f}"
 
-
         #TODO: Sanity check each losses above
 
         # Append current epoch results to CSV
@@ -211,7 +240,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
         log_string += (f"\nAverage test loss: {avg_test_loss:.3f} -> best: {best_test_loss:.3f}\n"
                        + f"Average train loss: {avg_train_loss:.3f}")
 
-        print(log_string)
+        tqdm.write(log_string)
 
         checkpoint = {
             'epoch': epoch,
@@ -229,7 +258,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             show_images(generate_new_images(ddpm, device=device), f"Images generated at epoch {epoch + 1}")
         """
 
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(20, 10))
     plt.plot(train_losses, label='Train Loss')
     plt.plot(test_losses, label='Test Loss')
     plt.xlabel('Epoch')
@@ -243,4 +272,4 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
 optimizer = Adam(ddpm.parameters(), lr=lr)
 
 if training_mode:
-    training_loop(ddpm, train_loader, test_loader, n_epochs, optim=optimizer, device=device)
+    training_loop(ddpm, train_loader, test_loader, n_epochs, optim=optimizer, device=device, loss_function=nn.MSELoss())
