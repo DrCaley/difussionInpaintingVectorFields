@@ -5,15 +5,16 @@ import numpy as np
 import pickle
 import datetime
 
+pycharm_dumb_flag = False
+# pickle file is found in the project directory if you run it in pycharm, otherwise it might be in your desktop!
+
 if(os.path.exists("../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat")):
+    pycharm_dumb_flag = True
     file_name = "../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat"
     mat_data = loadmat(file_name)
-    pycharm_dumb_flag = True
 else :
     file_name = "data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat"
     mat_data = loadmat(file_name)
-    pycharm_dumb_flag = False
-
 
 print("splitting:", file_name)
 
@@ -59,11 +60,12 @@ u_training_std = np.nanstd(u_values)
 v_training_mean = np.nanmean(v_values)
 v_training_std = np.nanstd(v_values)
 
-if pycharm_dumb_flag:
-    with open('../data.pickle', 'wb') as file:
+try:
+    path = '../data.pickle' if pycharm_dumb_flag else 'data.pickle'
+    with open(path, 'wb') as file:
         pickle.dump([training_data, validation_data, test_data], file)
-else:
-    with open('data.pickle', 'wb') as file:
-        pickle.dump([training_data, validation_data, test_data], file)
+    print(f"Pickle saved to: {path}")
+except Exception as e:
+    print("Failed to pickle:", e)
 
 print ("you've been pickle'd")

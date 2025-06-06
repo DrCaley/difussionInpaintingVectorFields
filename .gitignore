@@ -6,4 +6,4 @@ output/
 example_nn/
 /training_output/
 util.py
-.pickle
+data.pickle

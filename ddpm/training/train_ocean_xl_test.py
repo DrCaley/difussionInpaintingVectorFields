@@ -95,43 +95,27 @@ transform = Compose([
 ])
 
 # This is nasty
-if using_dumb_pycharm :
-    training_data = OceanImageDataset(
-        data_tensor=training_tensor,
-        boundaries="../../data/rams_head/boundaries.yaml",
-        transform=transform,
-        max_size=40
-    )
-    test_data = OceanImageDataset(
-        data_tensor=test_tensor,
-        boundaries="../../data/rams_head/boundaries.yaml",
-        transform=transform,
-        max_size=40
-    )
-    validation_data = OceanImageDataset(
-        data_tensor=validation_tensor,
-        boundaries="../../data/rams_head/boundaries.yaml",
-        transform=transform
-    )
-else:
-    training_data = OceanImageDataset(
-        data_tensor=training_tensor,
-        boundaries="data/rams_head/boundaries.yaml",
-        transform=transform,
-        max_size=40
-    )
-    test_data = OceanImageDataset(
-        data_tensor=test_tensor,
-        boundaries="data/rams_head/boundaries.yaml",
-        transform=transform,
-        max_size=40
-    )
-    validation_data = OceanImageDataset(
-        data_tensor=validation_tensor,
-        boundaries="data/rams_head/boundaries.yaml",
-        transform=transform,
-        max_size=40
-    )
+boundaries_file = "../../data/rams_head/boundaries.yaml" if using_dumb_pycharm else "data/rams_head/boundaries.yaml"
+size = config['max_size']
+
+training_data = OceanImageDataset(
+    data_tensor=training_tensor,
+    boundaries=boundaries_file,
+    transform=transform,
+    max_size=size
+)
+test_data = OceanImageDataset(
+    data_tensor=test_tensor,
+    boundaries=boundaries_file,
+    transform=transform,
+    max_size=size
+)
+validation_data = OceanImageDataset(
+    data_tensor=validation_tensor,
+    boundaries=boundaries_file,
+    transform=transform,
+    max_size=size
+)
 
 train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=batch_size)
