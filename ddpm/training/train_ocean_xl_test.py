@@ -116,7 +116,7 @@ train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=batch_size)
 val_loader = DataLoader(validation_data, batch_size=batch_size)
 
-def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, loss_function = None):
+def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, display=False, loss_function = None, noise_function = None):
     """
         Trains the xl model (1 more layer than the original). The xl model is the main one we use as of early August, 2024
         Trains a DDPM model over a specified number of epochs.
@@ -133,6 +133,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             device (torch.device): The device to run the model on ('cuda' or 'cpu').
             display (bool, optional): Whether to display/generated images per epoch (not currently implemented). Defaults to False.
             loss_function (Callable, optional): The loss function to use (e.g. nn.MSELoss). Required.
+            noise_function (Callable, optional): The noise function to use (e.g gaussian). Defaults to Gaussian (torch.randn_like).
 
         Side Effects:
             - Writes a CSV file with training and test loss history.
@@ -148,6 +149,11 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     test_losses = []
 
     start_epoch = 0
+
+    """ 
+    TODO: since each model has its own unique file name with timestamp, we are not able to train the same model
+    more than once, we need to implement a way to train the same model again. I'm talking to you future me!
+    """
     if os.path.exists(model_file):
         checkpoint = torch.load(model_file)
         ddpm.load_state_dict(checkpoint['model_state_dict'])
@@ -175,7 +181,11 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             n = len(x0)
 
             t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps
-            noise = torch.randn_like(x0).to(device)  # Generate noise
+
+            if noise_function is not None: # Generate noise
+                noise = noise_function(x0, t).to(device)
+            else:
+                noise = torch.randn_like(x0).to(device)
 
             noisy_imgs = ddpm(x0, t, noise)
             predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))
@@ -243,4 +253,6 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
 optimizer = Adam(ddpm.parameters(), lr=lr)
 
 if training_mode:
-    training_loop(ddpm, train_loader, test_loader, n_epochs, optim=optimizer, device=device, loss_function=nn.MSELoss())
+    training_loop(ddpm, train_loader, test_loader, n_epochs,
+                  optim=optimizer, device=device,
+                  loss_function=nn.MSELoss())

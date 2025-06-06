@@ -7,12 +7,13 @@ testSeed: 0
 n_epochs: 100
 batch_size: 35
 lr: 0.001
+loss_function: mse
+noise_function: gaussian
 
 n_steps: 1000
 min_beta: 0.0001
 max_beta: 0.02
 training_mode: True
-max_size: 100
 
 snapshots: 10
 model_path: "../trained_models/ddpm_ocean_v0_2025_JUN_4.pt"
