@@ -44,7 +44,7 @@ plot_file = os.path.join(output_dir, f"train_test_loss_xl_{timestamp}.png")
 model_file = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}.pt")
 
 # CHANGE DESCRIPTION HERE, IT WILL ATTACH TO THE OUTPUT CSV:
-description = 'Using physical loss along with non divergent noise that has the gaussian applied at each step'
+description = 'Using 0 physical loss, 1 MSE along with non divergent noise that has the gaussian applied at each step'
 
 using_dumb_pycharm = True
 # Load the YAML file

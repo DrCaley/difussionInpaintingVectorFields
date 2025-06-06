@@ -120,6 +120,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
         best_test_loss = checkpoint['best_test_loss']
         print(f"Resuming training from epoch {start_epoch}")
 
+
     # tqdm is for the progress bar and shi
     for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
         epoch_loss = 0.0

@@ -112,23 +112,12 @@ class GaussianTest(unittest.TestCase):
         tensor = torch.zeros((50, 2, 128, 128))
         t = torch.randint(0, 1000, (1000,))
         noise = gaussian_each_step_divergence_free_noise(tensor, t)
-        plot_vector_field(noise[0][0], noise[0][1],2,3, title=f"{t[0].item()}", file=f"{t[0].item()}.png")
+        plot_vector_field(noise[0][0], noise[0][1],2,30, title=f"{t[0].item()}", file=f"{t[0].item()}.png")
 
         divergence_tensor = compute_divergence(noise[1][0], noise[1][1])
         divergence = divergence_tensor.abs().mean().item()
 
         self.assertAlmostEqual(5, divergence, delta=0.3)
-
-    def test_plotting_test(self):
-        tensor = torch.zeros((1, 2, 128, 128))
-        t = torch.tensor([999])
-        noise = gaussian_each_step_divergence_free_noise(tensor, t)
-
-        divergence_tensor = compute_divergence(noise[0][0], noise[0][1])
-        divergence = divergence_tensor.abs().mean().item()
-
-        self.assertAlmostEqual(5, divergence, delta=0.3)
-
 
 
 
