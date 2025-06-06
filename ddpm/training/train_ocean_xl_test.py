@@ -48,7 +48,7 @@ model_file = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}.pt")
 
 
 # CHANGE DESCRIPTION HERE, IT WILL ATTACH TO THE OUTPUT CSV:
-description = 'Using 0.5 physical loss, 0.5 MSE along with non divergent noise that has the gaussian applied at each step'
+description = 'Using 0 physical loss, 1 MSE along with non divergent noise that has the gaussian applied at each step'
 
 
 
