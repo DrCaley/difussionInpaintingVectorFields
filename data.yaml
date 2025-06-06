@@ -4,7 +4,7 @@ v_training_mean: -0.032393779611754124
 v_training_std: 0.08899177232117583
 
 testSeed: 0
-n_epochs: 2
+n_epochs: 100
 batch_size: 35
 lr: 0.001
 
