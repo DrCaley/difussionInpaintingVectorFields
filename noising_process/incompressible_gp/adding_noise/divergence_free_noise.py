@@ -1,6 +1,8 @@
 import torch
 import yaml
 import os
+import torch.nn.functional as F
+import torchvision.transforms as T
 
 from noising_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
 from plots.plot_data_tool import plot_vector_field
@@ -55,7 +57,7 @@ def divergence_free_noise(data_set: torch.Tensor, t: torch.Tensor, device='cpu')
 
     for i in range(batch):
         for j in range(t[i]):
-            freq = torch.normal(torch.tensor( (u_mean + v_mean) / 2, device=device), std=torch.sqrt(alpha_bars[t[i]]))
+            freq = torch.normal(torch.tensor(0.0, device=device), std=1.0)
             vx, vy = exact_div_free_field_from_stream(width, height, freq, device=device)
             output[i, 0] += vx  # Accumulate vx
             output[i, 1] += vy  # Accumulate vy
@@ -121,5 +123,36 @@ def gaussian_each_step_divergence_free_noise(data_set: torch.Tensor, t: torch.Te
             output[i, 1] += vy
 
     return output
+
+
+import torch
+import torch.nn.functional as F
+
+
+def stream_function_noise(input_tensor: torch.Tensor, sigma=1.5) -> torch.Tensor:
+
+    assert input_tensor.dim() == 4 and input_tensor.size(1) == 2, \
+        "Input must have shape (B, 2, H, W)"
+
+    B, _, H, W = input_tensor.shape
+    device = input_tensor.device
+
+    psi = torch.randn(B, 1, H, W, device=device)
+
+    blur = T.GaussianBlur(kernel_size=7, sigma=sigma)
+    psi = blur(psi)
+
+    kernel_x = torch.tensor([[-0.5, 0, 0.5]], device=device).reshape(1, 1, 1, 3)
+    kernel_y = torch.tensor([[-0.5], [0], [0.5]], device=device).reshape(1, 1, 3, 1)
+
+    dpsi_dx = F.conv2d(psi, kernel_x, padding=(0, 1))
+    dpsi_dy = F.conv2d(psi, kernel_y, padding=(1, 0))
+
+    vx = dpsi_dy
+    vy = -dpsi_dx
+
+    divergence_free = torch.cat([vx, vy], dim=1)
+    return divergence_free
+
 
 
