@@ -95,25 +95,21 @@ transform = Compose([
 
 # This is nasty
 boundaries_file = "../../data/rams_head/boundaries.yaml" if using_dumb_pycharm else "data/rams_head/boundaries.yaml"
-size = config['max_size']
 
 training_data = OceanImageDataset(
     data_tensor=training_tensor,
     boundaries=boundaries_file,
-    transform=transform,
-    max_size=size
+    transform=transform
 )
 test_data = OceanImageDataset(
     data_tensor=test_tensor,
     boundaries=boundaries_file,
-    transform=transform,
-    max_size=size
+    transform=transform
 )
 validation_data = OceanImageDataset(
     data_tensor=validation_tensor,
     boundaries=boundaries_file,
-    transform=transform,
-    max_size=size
+    transform=transform
 )
 
 train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)

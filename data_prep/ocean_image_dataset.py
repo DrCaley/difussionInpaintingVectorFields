@@ -5,7 +5,7 @@ import yaml
 from typing import Optional
 
 
-class OceanImageTensorDataset(Dataset):
+class OceanImageDataset(Dataset):
     """
     Loads u and v velocity components from a provided tensor (not a .mat file), applies masking to handle NaNs,
     and returns 3-channel tensors representing u, v, and a binary mask.
