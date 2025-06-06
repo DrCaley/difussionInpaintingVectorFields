@@ -17,30 +17,40 @@ class OceanImageDataset(Dataset):
         transform (callable, optional): Optional transform to apply to each tensor.
     """
 
-    def __init__(self, num: int, transform=None,
-                 mat_file="../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat",
-                 boundaries="../data/rams_head/boundaries.yaml"):
+    def __init__(self, data_tensor: Tensor, transform=None, boundaries="../data/rams_head/boundaries.yaml", max_size = None):
         """
-        Initializes the coean_image_dataset
+        Initializes the dataset.
+
         Args:
-            num (int) : Number of time steps to load
+            data_tensor (Tensor): Tensor with shape (94, 44, 2, n)
             transform (callable, optional): Optional transform to apply to each tensor.
-            mat_file: the MATLAB file for which we are getting the 'u', 'v', and 'ocean_time' arrays
-            boundaries : path to YAML file that defines our boundaries.
+            boundaries (str, optional): Path to YAML file with boundary info.
+            max_size (int, optional): Max number of time steps to load.
         """
-        self.mat_data = loadmat(mat_file)
-        self.tensor_labels = []
-        self.tensor_arr = []
+        assert data_tensor.ndim == 4 and data_tensor.shape[2] == 2, "Expected shape (94, 44, 2, n)"
+        self.raw_tensor = data_tensor  # shape: (94, 44, 2, n)
+        total_timesteps = data_tensor.shape[3]
+
+        if max_size is not None:
+            if max_size > total_timesteps:
+                print(f"Warning: Requested max_size {max_size} exceeds available timesteps {total_timesteps}. Using all data.")
+                max_size = total_timesteps
+        else:
+            max_size = total_timesteps
+
+        self.tensor_labels = list(range(max_size))
         self.transform = transform
 
-        with open(boundaries, 'r') as file:
-            self.boundaries = yaml.safe_load(file)
-        print(f"Loaded {boundaries}")
+        # Load boundaries if provided
+        self.boundaries = None
+        if boundaries:
+            with open(boundaries, 'r') as file:
+                self.boundaries = yaml.safe_load(file)
+            print(f"Loaded {boundaries}")
 
-        for n in range(num):
-            self.tensor_arr.append(self.load_array(n))
-            self.tensor_labels.append(n)
-        print(f"Loaded tensor_arr")
+        # Preprocess only selected time steps
+        self.tensor_arr = [self.load_array(n) for n in self.tensor_labels]
+        print(f"Loaded {len(self.tensor_arr)} of {total_timesteps} available time steps.")
 
     def __len__(self) -> int:
         """
@@ -67,44 +77,17 @@ class OceanImageDataset(Dataset):
             tensor = self.transform(tensor)
         return tensor, idx
 
-    def load_array(self, tensor_num: object) -> Tensor:
+    def load_array(self, n: int) -> Tensor:
         """
-            Loads and processes a single timestep from the MATLAB file.
-
-            - Extracts the u and v velocity fields.
-            - Reorders dimensions to match PyTorch format.
-            - Replaces NaNs with 0s.
-            - Builds a binary mask for valid data.
-            - Stacks u, v, and mask into a 3-channel tensor.
-
-            Args:
-                tensor_num (int): The index of the timestep to load.
-
-            Returns:
-                torch.Tensor: A 3xHxW tensor of u, v, and mask components.
+        Process and return the (u, v, mask) tensor for time index n.
         """
-        u_tensors = torch.from_numpy(self.mat_data['u'])
-        u_tensors = u_tensors.permute(
-            *torch.arange(u_tensors.ndim - 1, -1, -1))[
-            tensor_num]
-        v_tensors = torch.from_numpy(self.mat_data['v'])
-        v_tensors = v_tensors.permute(
-            *torch.arange(v_tensors.ndim - 1, -1, -1))[
-            tensor_num]
-        time = torch.from_numpy(
-            self.mat_data['ocean_time'].squeeze())
+        # Extract single time step
+        u = self.raw_tensor[..., n][..., 0].T  # shape: (44, 94)
+        v = self.raw_tensor[..., n][..., 1].T  # shape: (44, 94)
 
-        mask = u_tensors.clone().detach()
-        for x in range(94):
-            for y in range(44):
-                if u_tensors[y][x].isnan() or v_tensors[y][
-                    x].isnan():
-                    mask[y][x] = 0
-                    u_tensors[y][x] = 0
-                    v_tensors[y][x] = 0
-                else:
-                    mask[y][x] = 1
+        # Handle NaNs and build mask
+        mask = (~(u.isnan() | v.isnan())).float()
+        u = torch.nan_to_num(u, nan=0.0)
+        v = torch.nan_to_num(v, nan=0.0)
 
-        combined_tensor = torch.stack(
-            (u_tensors, v_tensors, mask))
-        return combined_tensor
+        return torch.stack((u, v, mask), dim=0)  # shape: (3, 44, 94)

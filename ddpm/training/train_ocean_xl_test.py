@@ -1,5 +1,6 @@
 import math
 import os
+import pickle
 import sys
 import random
 import yaml
@@ -59,6 +60,14 @@ else :
     with open('data.yaml', 'r') as file: ## <-- if you are running it on the terminal
         config = yaml.safe_load(file)
 
+# Load the pickle
+with open('../../data.pickle', 'rb') as f:
+    training_data_np, validation_data_np, test_data_np = pickle.load(f)
+
+training_tensor = torch.from_numpy(training_data_np).float()
+validation_tensor = torch.from_numpy(validation_data_np).float()
+test_tensor = torch.from_numpy(test_data_np).float()
+
 # Setting reproducibility
 SEED = config['testSeed']
 random.seed(SEED)
@@ -81,25 +90,45 @@ transform = Compose([
     standardize_data(config['u_training_mean'], config['u_training_std'], config['v_training_mean'], config['v_training_std'])
 ])
 
+# This is nasty
 if using_dumb_pycharm :
-    the_mat_file="../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat"
-    boundaries_file="../../data/rams_head/boundaries.yaml"
+    training_data = OceanImageDataset(
+        data_tensor=training_tensor,
+        boundaries="../../data/rams_head/boundaries.yaml",
+        transform=transform,
+        max_size=40
+    )
+    test_data = OceanImageDataset(
+        data_tensor=test_tensor,
+        boundaries="../../data/rams_head/boundaries.yaml",
+        transform=transform,
+        max_size=40
+    )
+    validation_data = OceanImageDataset(
+        data_tensor=validation_tensor,
+        boundaries="../../data/rams_head/boundaries.yaml",
+        num=100,
+        transform=transform
+    )
 else:
-    the_mat_file="data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat"
-    boundaries_file="data/rams_head/boundaries.yaml"
-
-data = OceanImageDataset(
-    mat_file=the_mat_file,
-    boundaries=boundaries_file,
-    num=100,
-    transform=transform
-)
-
-train_len = int(math.floor(len(data) * 0.7))
-test_len = int(math.floor(len(data) * 0.15))
-val_len = len(data) - train_len - test_len
-
-training_data, test_data, validation_data = random_split(data, [train_len, test_len, val_len])
+    training_data = OceanImageDataset(
+        data_tensor=training_tensor,
+        boundaries="data/rams_head/boundaries.yaml",
+        transform=transform,
+        max_size=40
+    )
+    test_data = OceanImageDataset(
+        data_tensor=test_tensor,
+        boundaries="data/rams_head/boundaries.yaml",
+        transform=transform,
+        max_size=40
+    )
+    validation_data = OceanImageDataset(
+        data_tensor=validation_tensor,
+        boundaries="data/rams_head/boundaries.yaml",
+        transform=transform,
+        max_size=40
+    )
 
 train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=batch_size)
@@ -202,7 +231,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             n = len(x0)
 
             t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps
-            noise = gaussian_each_step_divergence_free_noise(x0, t,device).to(device)  # Generate noise
+            noise = torch.randn_like(x0).to(device)  # Generate noise
 
             noisy_imgs = ddpm(x0, t, noise)
             predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))
