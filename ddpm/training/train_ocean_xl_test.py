@@ -61,8 +61,12 @@ else :
         config = yaml.safe_load(file)
 
 # Load the pickle
-with open('../../data.pickle', 'rb') as f:
-    training_data_np, validation_data_np, test_data_np = pickle.load(f)
+if using_dumb_pycharm :
+    with open('../../data.pickle', 'rb') as f:
+        training_data_np, validation_data_np, test_data_np = pickle.load(f)
+else:
+    with open('data.pickle', 'rb') as f:
+        training_data_np, validation_data_np, test_data_np = pickle.load(f)
 
 training_tensor = torch.from_numpy(training_data_np).float()
 validation_tensor = torch.from_numpy(validation_data_np).float()
@@ -107,7 +111,6 @@ if using_dumb_pycharm :
     validation_data = OceanImageDataset(
         data_tensor=validation_tensor,
         boundaries="../../data/rams_head/boundaries.yaml",
-        num=100,
         transform=transform
     )
 else:
@@ -295,8 +298,6 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     plt.legend()
     plt.title('training and Test Loss')
     plt.savefig(plot_file)
-
-
 
 optimizer = Adam(ddpm.parameters(), lr=lr)
 

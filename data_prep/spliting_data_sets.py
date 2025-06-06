@@ -1,9 +1,17 @@
+import os.path
+
 from scipy.io import loadmat
 import numpy as np
 import pickle
 import datetime
 
-mat_data = loadmat("../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat")
+if(os.path.exists("../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat")):
+    mat_data = loadmat("../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat")
+else :
+    mat_data = loadmat("data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat")
+
+print("splitting:", mat_data)
+
 u_tensors = mat_data['u']
 v_tensors = mat_data['v']
 
@@ -49,4 +57,4 @@ v_training_std = np.nanstd(v_values)
 with open('../data.pickle', 'wb') as file:
     pickle.dump([training_data, validation_data, test_data], file)
 
-print ("hello")
+print ("you've been pickle'd")
