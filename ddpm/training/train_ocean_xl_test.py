@@ -37,11 +37,9 @@ Absolute model
     |   |
 """
 
-
-
 output_dir = os.path.join(os.path.dirname(__file__), "training_output")
 os.makedirs(output_dir, exist_ok=True)
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+timestamp = datetime.now().strftime("%h%d_%H%M")
 csv_file = os.path.join(output_dir, f"training_log_{timestamp}.csv")
 plot_file = os.path.join(output_dir, f"train_test_loss_xl_{timestamp}.png")
 model_file = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}.pt")
@@ -63,10 +61,6 @@ except FileNotFoundError:
     using_dumb_pycharm = False # <-- congrats on NOT using that dumb IDE!
     print("I see you are using the Terminal")
     with open('data.yaml', 'r') as file: ## <-- if you are running it on the terminal
-        config = yaml.safe_load(file)
-else :
-    print ("--> ALL HAIL PYCHARM!!!! PYCHARM IS THE BEST <--")
-    with open('../../data.yaml', 'r') as file: ## <- if you are running it on pycharm
         config = yaml.safe_load(file)
 
 # Load the pickle
@@ -117,8 +111,8 @@ if using_dumb_pycharm :
     validation_data = OceanImageDataset(
         data_tensor=validation_tensor,
         boundaries="../../data/rams_head/boundaries.yaml",
-        transform=transform,
-        max_size=40
+        num=100,
+        transform=transform
     )
 else:
     training_data = OceanImageDataset(
