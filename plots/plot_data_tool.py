@@ -8,29 +8,26 @@ import matplotlib.pyplot as plt
 import torch
 
 def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: float = 1.0, title: str = "Vector Field", file: str = "vector_field.png"):
-    """
-    Plots a 2D quiver plot from vx and vy tensors.
-
-    Args:
-        vx (torch.Tensor): X-component of the vector field (2D).
-        vy (torch.Tensor): Y-component of the vector field (2D).
-        step (int): Step size for downsampling vectors (for clarity).
-        scale (float): Scale factor for arrows.
-        title (str): Title of the plot.
-        file (str): File path to save the plot.
-    """
     assert vx.shape == vy.shape, "vx and vy must be the same shape"
     H, W = vx.shape
 
-    vx = torch.nan_to_num(vx, nan=0.0)
-    vy = torch.nan_to_num(vy, nan=0.0)
+    # Explicitly clone and replace NaNs with 0
+    vx = vx.clone()
+    vy = vy.clone()
+    vx[torch.isnan(vx)] = 0.0
+    vy[torch.isnan(vy)] = 0.0
+
+    print("Any NaNs in vx:", torch.isnan(vx).any().item())
+    print("Any NaNs in vy:", torch.isnan(vy).any().item())
 
     # Create meshgrid
     x = torch.arange(0, W)
     y = torch.arange(0, H)
     X, Y = torch.meshgrid(x, y, indexing='ij')
 
-    # Plot using matplotlib
+    print("Any NaNs in X:", torch.isnan(X).any().item())
+    print("Any NaNs in Y:", torch.isnan(Y).any().item())
+
     plt.figure(figsize=(6, 6))
     plt.quiver(
         X[::step, ::step],
@@ -48,7 +45,4 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
 
     output_path = os.path.join(my_path, 'outputs', os.path.basename(file))
     plt.savefig(output_path)
-    
-
     plt.close()
-

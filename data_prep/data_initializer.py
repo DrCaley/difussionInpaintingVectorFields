@@ -94,9 +94,11 @@ class DDInitializer:
 
     def _setup_loss_strategy(self):
         loss_type = self._config.get("loss_function", "mse")
+        w1 = self._config.get("w1", 1.0)
+        w2 = self._config.get("w2", 0.0)
         try:
-            self.loss_strategy: LossStrategy = get_loss_strategy(loss_type)
-            print(f"Loaded loss strategy: {loss_type}")
+            self.loss_strategy: LossStrategy = get_loss_strategy(loss_type, w1=w1, w2=w2)
+            print(f"Loaded loss strategy: {loss_type} (w1={w1}, w2={w2})")
         except KeyError:
             raise ValueError(f"Unknown loss strategy: {loss_type}")
 

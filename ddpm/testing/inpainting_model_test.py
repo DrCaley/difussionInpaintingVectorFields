@@ -44,6 +44,7 @@ try:
 except Exception as e:
     logging.error(f"Error loading model: {e}")
     exit(1)
+
 # ======== Dataset Loading & Splitting ========
 try:
     logging.info("Preparing data")
