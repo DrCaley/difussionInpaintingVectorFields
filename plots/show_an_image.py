@@ -7,14 +7,9 @@ from data_prep.ocean_image_dataset import OceanImageDataset
 from data_prep.data_initializer import DDInitializer
 
 
-import pickle
-with open("C:\\Users\\Matthew\\Documents\\GitHub\\difussionInpaintingVectorFields\\data.pickle", "rb") as f:
-    train_np, val_np, test_np = pickle.load(f)
-print(train_np.shape)
-
-
 data_init = DDInitializer()
 
-tensor_to_draw_x = data_init.training_tensor[:,:,0,:]
-
-print(tensor_to_draw_x.shape)
+for i in range(100):
+    tensor_to_draw_x = data_init.training_tensor[:,:,0,0]
+    tensor_to_draw_y = data_init.training_tensor[:,:,1,0]
+    plot_vector_field(tensor_to_draw_x, tensor_to_draw_y, scale=25, file = f"vector_field{i}.png")
