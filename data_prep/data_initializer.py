@@ -1,4 +1,5 @@
 import os
+import sys
 import math
 import pickle
 
@@ -9,6 +10,7 @@ import yaml
 from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), './../')))
 from data_prep.ocean_image_dataset import OceanImageDataset
 from ddpm.helper_functions.noise import NoiseStrategy, get_noise_strategy
 from ddpm.helper_functions.resize_tensor import resize_transform
@@ -76,7 +78,7 @@ class DDInitializer:
             )
 
     def _setup_noise_strategy(self):
-        noise_type = self.config.get("noise_type", "gaussian")  # default to Gaussian
+        noise_type = self._config.get("noise_type", "gaussian")  # default to Gaussian
         try:
             self.noise_strategy: NoiseStrategy = get_noise_strategy(noise_type)
             print(f"Loaded noise strategy: {noise_type}")

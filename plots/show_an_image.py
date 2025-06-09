@@ -15,7 +15,6 @@ print(train_np.shape)
 
 data_init = DDInitializer()
 
-training_tensor, test_tensor, validation_tensor = data_init.get_tensors()
-tensor_to_draw = test_tensor[0]
+tensor_to_draw_x = data_init.training_tensor[:,:,0,:]
 
-print(tensor_to_draw.shape)
+print(tensor_to_draw_x.shape)
