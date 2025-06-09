@@ -1,5 +1,4 @@
 import os
-import pickle
 import sys
 import random
 import yaml
@@ -17,11 +16,8 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-from data_prep.ocean_image_dataset import OceanImageDataset
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm_gaussian import MyDDPMGaussian
-from ddpm.helper_functions.resize_tensor import resize_transform
-from ddpm.helper_functions.standardize_data import standardize_data
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 from ddpm.helper_functions.model_evaluation import evaluate
 
@@ -54,6 +50,7 @@ min_beta = data_init.get_attribute('min_beta')
 max_beta = data_init.get_attribute('max_beta')
 
 ddpm = MyDDPMGaussian(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=data_init.get_device())
+noise_strategy = data_init.get_noise_strategy()
 
 training_mode = data_init.get_attribute('training_mode')
 batch_size = data_init.get_attribute('batch_size')
@@ -212,4 +209,4 @@ optimizer = Adam(ddpm.parameters(), lr=lr)
 if training_mode:
     training_loop(ddpm, train_loader, test_loader, n_epochs,
                   optim=optimizer, device=data_init.get_device(),
-                  loss_function=nn.MSELoss())
+                  loss_function=nn.MSELoss(), noise_function=noise_strategy)

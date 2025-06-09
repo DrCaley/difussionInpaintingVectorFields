@@ -1,27 +1,16 @@
 import torch
-import yaml
 import os
 import torchvision.transforms as T
+
+from data_prep.data_initializer import DDInitializer
 
 # Get the directory where this script lives
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Construct possible config file paths
-possible_paths = [
-    os.path.join(base_dir, '../../../data.yaml'),
-    os.path.join(base_dir, 'data.yaml')
-]
-
-for path in possible_paths:
-    if os.path.exists(path):
-        with open(path, 'r') as file:
-            config = yaml.safe_load(file)
-        break
-else:
-    raise FileNotFoundError(f"Could not find data.yaml in any expected location: {possible_paths}")
-
-n_steps, min_beta, max_beta = config['n_steps'], config['min_beta'], config['max_beta']
-u_mean, v_mean = config['u_training_mean'], config['v_training_mean']
+data_init = DDInitializer()
+n_steps, min_beta, max_beta = data_init.get_attribute('n_steps'), data_init.get_attribute('min_beta'), data_init.get_attribute('max_beta')
+u_mean, v_mean = data_init.get_attribute('u_training_mean'), data_init.get_training_data('v_training_mean')
 
 betas = torch.linspace(min_beta, max_beta, n_steps)
 alphas = (1 - betas)

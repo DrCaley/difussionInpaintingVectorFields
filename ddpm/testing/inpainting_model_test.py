@@ -11,6 +11,8 @@ import yaml
 import sys
 import pickle
 
+from data_prep.data_initializer import DDInitializer
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from data_prep.ocean_image_dataset import OceanImageDataset
 from ddpm.neural_networks.ddpm_gaussian import MyDDPMGaussian
@@ -19,6 +21,8 @@ from ddpm.helper_functions.masks import generate_random_path_mask
 from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
 from ddpm.neural_networks.unets.unet_xl import MyUNet
+
+data_initializer = DDInitializer()
 
 # Output goes to file, not console
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename="inpainting_model_test_log.txt")
@@ -114,12 +118,6 @@ try:
         boundaries=boundaries_file,
         transform=transform
     )
-
-    # 70% train, 15% test, 15% validation
-    train_len = int(math.floor(len(data) * 0.7))
-    test_len = int(math.floor(len(data) * 0.15))
-    val_len = len(data) - train_len - test_len
-    training_data, test_data, validation_data = random_split(data, [train_len, test_len, val_len])
 
     # Set up dataloaders
     batch_size = config['batch_size']
