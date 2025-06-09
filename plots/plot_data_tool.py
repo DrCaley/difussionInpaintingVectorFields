@@ -11,29 +11,32 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
     assert vx.shape == vy.shape, "vx and vy must be the same shape"
     H, W = vx.shape
 
-    # Explicitly clone and replace NaNs with 0
-    vx = vx.clone()
-    vy = vy.clone()
-    vx[torch.isnan(vx)] = 0.0
-    vy[torch.isnan(vy)] = 0.0
-
-    print("Any NaNs in vx:", torch.isnan(vx).any().item())
-    print("Any NaNs in vy:", torch.isnan(vy).any().item())
-
     # Create meshgrid
     x = torch.arange(0, W)
     y = torch.arange(0, H)
     X, Y = torch.meshgrid(x, y, indexing='ij')
 
-    print("Any NaNs in X:", torch.isnan(X).any().item())
-    print("Any NaNs in Y:", torch.isnan(Y).any().item())
+    # Downsample for plotting clarity
+    Xs = X[::step, ::step]
+    Ys = Y[::step, ::step]
+    vxs = vx[::step, ::step]
+    vys = vy[::step, ::step]
+
+    # Create mask for valid (non-NaN) vectors
+    valid_mask = (~torch.isnan(vxs)) & (~torch.isnan(vys))
+
+    # Only keep valid vectors & positions
+    Xs = Xs[valid_mask]
+    Ys = Ys[valid_mask]
+    vxs = vxs[valid_mask]
+    vys = vys[valid_mask]
 
     plt.figure(figsize=(6, 6))
     plt.quiver(
-        X[::step, ::step],
-        Y[::step, ::step],
-        vx[::step, ::step],
-        vy[::step, ::step],
+        Xs.cpu(),
+        Ys.cpu(),
+        vxs.cpu(),
+        vys.cpu(),
         scale=scale,
         color='blue'
     )
