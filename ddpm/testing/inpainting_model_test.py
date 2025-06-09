@@ -15,7 +15,7 @@ from ddpm.training.train_ocean_xl_test import batch_size
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from data_prep.ocean_image_dataset import OceanImageDataset
-from ddpm.neural_networks.ddpm_gaussian import MyDDPM
+from ddpm.neural_networks.ddpm_gaussian import MyDDPMGaussian
 from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from ddpm.helper_functions.masks import generate_random_path_mask
 from ddpm.helper_functions.resize_tensor import resize_transform

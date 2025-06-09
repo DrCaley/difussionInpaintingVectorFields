@@ -19,6 +19,7 @@ from tqdm import tqdm
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from data_prep.ocean_image_dataset import OceanImageDataset
+from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm_gaussian import MyDDPMGaussian
 from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
@@ -44,73 +45,25 @@ csv_file = os.path.join(output_dir, f"training_log_{timestamp}.csv")
 plot_file = os.path.join(output_dir, f"train_test_loss_xl_{timestamp}.png")
 model_file = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}.pt")
 
+data_init = DDInitializer()
+
 # CHANGE DESCRIPTION HERE, IT WILL ATTACH TO THE OUTPUT CSV:
 description = 'Using 0 physical loss, 1 MSE along with non divergent noise that has the gaussian applied at each step'
 
-using_dumb_pycharm = True
-# Load the YAML file
-if os.path.exists('../../data.yaml'):
-    with open('../../data.yaml', 'r') as file: ## <- if you are running it on pycharm
-        config = yaml.safe_load(file)
-    print ("--> ALL HAIL PYCHARM!!!! PYCHARM IS THE BEST <--")
-else :
-    using_dumb_pycharm = False # <-- congrats on NOT using that dumb IDE!
-    print("I see you are using the Terminal")
-    with open('data.yaml', 'r') as file: ## <-- if you are running it on the terminal
-        config = yaml.safe_load(file)
+n_steps = data_init.get_attribute('n_steps')
+min_beta = data_init.get_attribute('min_beta')
+max_beta = data_init.get_attribute('max_beta')
 
-# Load the pickle
-if using_dumb_pycharm :
-    with open('../../data.pickle', 'rb') as f:
-        training_data_np, validation_data_np, test_data_np = pickle.load(f)
-else:
-    with open('data.pickle', 'rb') as f:
-        training_data_np, validation_data_np, test_data_np = pickle.load(f)
+ddpm = MyDDPMGaussian(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=data_init.get_device())
 
-training_tensor = torch.from_numpy(training_data_np).float()
-validation_tensor = torch.from_numpy(validation_data_np).float()
-test_tensor = torch.from_numpy(test_data_np).float()
+training_mode = data_init.get_attribute('training_mode')
+batch_size = data_init.get_attribute('batch_size')
+n_epochs = data_init.get_attribute('n_epochs')
+lr = data_init.get_attribute('lr')
 
-# Setting reproducibility
-SEED = config['testSeed']
-random.seed(SEED)
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-
-# Definitions
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("we are running on the:", device)
-n_steps, min_beta, max_beta = config['n_steps'], config['min_beta'], config['max_beta']
-ddpm = MyDDPMGaussian(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=device)
-
-training_mode = config['training_mode']
-batch_size = config['batch_size']
-n_epochs = config['n_epochs']
-lr = config['lr']
-
-transform = Compose([
-    resize_transform((2, 64, 128)),        # Resized to (2, 64, 128)
-    standardize_data(config['u_training_mean'], config['u_training_std'], config['v_training_mean'], config['v_training_std'])
-])
-
-# This is nasty
-boundaries_file = "../../data/rams_head/boundaries.yaml" if using_dumb_pycharm else "data/rams_head/boundaries.yaml"
-
-training_data = OceanImageDataset(
-    data_tensor=training_tensor,
-    boundaries=boundaries_file,
-    transform=transform
-)
-test_data = OceanImageDataset(
-    data_tensor=test_tensor,
-    boundaries=boundaries_file,
-    transform=transform
-)
-validation_data = OceanImageDataset(
-    data_tensor=validation_tensor,
-    boundaries=boundaries_file,
-    transform=transform
-)
+training_data = data_init.get_training_data()
+test_data = data_init.get_test_data()
+validation_data = data_init.get_validation_data()
 
 train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=batch_size)
@@ -254,5 +207,5 @@ optimizer = Adam(ddpm.parameters(), lr=lr)
 
 if training_mode:
     training_loop(ddpm, train_loader, test_loader, n_epochs,
-                  optim=optimizer, device=device,
+                  optim=optimizer, device=data_init.get_device(),
                   loss_function=nn.MSELoss())
