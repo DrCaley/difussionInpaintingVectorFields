@@ -63,7 +63,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
             device = ddpm.device
 
         input_img = input_image.clone().to(device)
-        noise = torch.randn_like(input_img).to(device)
+        noise = torch.randn_like(input_img).to(device) # TODO: Another noise place
 
         # Adding noise step by step
         noised_images[0] = input_img

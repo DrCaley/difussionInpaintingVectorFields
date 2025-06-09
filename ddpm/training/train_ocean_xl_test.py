@@ -1,4 +1,3 @@
-import math
 import os
 import pickle
 import sys
@@ -23,7 +22,7 @@ from ddpm.neural_networks.ddpm_gaussian import MyDDPMGaussian
 from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
 from ddpm.neural_networks.unets.unet_xl import MyUNet
-from ddpm.training.model_evaluation import evaluate
+from ddpm.helper_functions.model_evaluation import evaluate
 
 """
 This file is being used to train the best model of all time baybee.
