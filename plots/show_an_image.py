@@ -12,7 +12,7 @@ import matplotlib.image as mpimg
 
 data_init = DDInitializer()
 
-for i in range(1000):
+for i in range(100):
     tensor_to_draw_x = data_init.training_tensor[:,:,0,0]
     tensor_to_draw_y = data_init.training_tensor[:,:,1,0]
     plot_vector_field(tensor_to_draw_x, tensor_to_draw_y, scale=25, file = f"vector_field{i}.png")
