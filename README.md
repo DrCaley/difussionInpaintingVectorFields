@@ -1,11 +1,39 @@
 # difussionInpaintingVectorFields
-Notes for future researchers in case I get hit by a bus or a better offer next summer. As of early August 2024:
-- Most of the exciting and functional code is in the medium_ddpm folder
-- We've been mostly using models trained by train-ocean-xl.py, which is the extra large model that is between okay and good at predicting currents
-- The script train-ocean-xl-wl.py (extra large with stream equation loss function) is functional but we haven't determined how good it is yet.
-- All the other code for training is outdated and may or may not work.
-- We use inpainting-model-test.py for data collection and inpainting.
-- Everything in the "scripts" folder is failed early attempts
-- A promising next step that we haven't done yet would be making each "image" follow the incompressible flow equation at every diffusion step. 
-
-Happy Coding! - Ember McEwen
+```
+________                       .__       .__                
+\______ \   ____   ____   ____ |__| _____|__| ____    ____  
+ |    |  \_/ __ \ /    \ /  _ \|  |/  ___/  |/    \  / ___\ 
+ |    `   \  ___/|   |  (  <_> )  |\___ \|  |   |  \/ /_/  >
+/_______  /\___  >___|  /\____/|__/____  >__|___|  /\___  / 
+        \/     \/     \/               \/        \//_____/  
+________  .__  _____  _____            .__                 
+\______ \ |__|/ ____\/ ____\_ __  _____|__| ____   ____    
+ |    |  \|  \   __\\   __\  |  \/  ___/  |/  _ \ /    \   
+ |    `   \  ||  |   |  | |  |  /\___ \|  (  <_> )   |  \  
+/_______  /__||__|   |__| |____//____  >__|\____/|___|  /  
+        \/                           \/               \/
+__________              ___.         ___.   .__.__  .__          __  .__        
+\______   \_______  ____\_ |__ _____ \_ |__ |__|  | |__| _______/  |_|__| ____  
+ |     ___/\_  __ \/  _ \| __ \\__  \ | __ \|  |  | |  |/  ___/\   __\  |/ ___\ 
+ |    |     |  | \(  <_> ) \_\ \/ __ \| \_\ \  |  |_|  |\___ \  |  | |  \  \___ 
+ |____|     |__|   \____/|___  (____  /___  /__|____/__/____  > |__| |__|\___  >
+                             \/     \/    \/                \/               \/ 
+   _____             .___     .__                                               
+  /     \   ____   __| _/____ |  |                                              
+ /  \ /  \ /  _ \ / __ |/ __ \|  |                                              
+/    Y    (  <_> ) /_/ \  ___/|  |__                                            
+\____|__  /\____/\____ |\___  >____/                                            
+        \/            \/    \/                                                  
+________                                                                        
+\_____  \   ____  ____ _____    ____                                            
+ /   |   \_/ ___\/ __ \\__  \  /    \                                           
+/    |    \  \__\  ___/ / __ \|   |  \                                          
+\_______  /\___  >___  >____  /___|  /                                          
+        \/     \/    \/     \/     \/                                           
+.___                    .__        __  .__                                      
+|   | ____ ___________  |__| _____/  |_|__| ____    ____                        
+|   |/    \\____ \__  \ |  |/    \   __\  |/    \  / ___\                       
+|   |   |  \  |_> > __ \|  |   |  \  | |  |   |  \/ /_/  >                      
+|___|___|  /   __(____  /__|___|  /__| |__|___|  /\___  /                       
+         \/|__|       \/        \/             \//_____/                           
+```

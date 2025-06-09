@@ -106,7 +106,5 @@ def main():
         plt.show()
         plt.close("all")
 
-
-
 if __name__ == '__main__':
     main()
