@@ -18,6 +18,8 @@ max_beta = dd.get_attribute('max_beta')
 u_mean = dd.get_attribute('u_mean')
 v_mean = dd.get_attribute('v_mean')
 
+betas = dd.get_betas()
+alphas = dd.get_alphas()
 alpha_bars = dd.get_alpha_bars()
 
 def exact_div_free_field_from_stream(H, W, freq, device='cpu'):
