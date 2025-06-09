@@ -1,15 +1,43 @@
 import os
 import sys
-from plot_data_tool import plot_vector_field
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), './../')))
-from data_prep.ocean_image_dataset import OceanImageDataset
 from data_prep.data_initializer import DDInitializer
 
-
+# Load data
 data_init = DDInitializer()
+tensor = data_init.training_tensor[:100]  # shape: (100, H, W, 2)
+tensor_np = tensor.numpy()
 
-for i in range(100):
-    tensor_to_draw_x = data_init.training_tensor[:,:,0,0]
-    tensor_to_draw_y = data_init.training_tensor[:,:,1,0]
-    plot_vector_field(tensor_to_draw_x, tensor_to_draw_y, scale=25, file = f"vector_field{i}.png")
+# Extract u and v fields from last dimension (component axis)
+u_stack = tensor_np[:, :, 0, 0]  # shape: (100, H, W)
+v_stack = tensor_np[:, :, 1, 0]  # shape: (100, H, W)
+
+H, W = u_stack.shape[1:]
+x = np.arange(W)
+y = np.arange(H)
+X, Y = np.meshgrid(x, y)
+
+# Setup plot
+fig, ax = plt.subplots(figsize=(10, 5))
+q = ax.quiver(X, Y, u_stack[0], v_stack[0], scale=25)
+ax.invert_yaxis()
+ax.set_title("Vector Field Frame 0")
+
+# Update function
+def update(frame):
+    q.set_UVC(u_stack[frame], v_stack[frame])
+    ax.set_title(f"Vector Field Frame {frame}")
+    return q,
+
+# Create animation
+ani = animation.FuncAnimation(fig, update, frames=u_stack.shape[0], interval=100)
+
+# Display
+plt.show()
+
+# Save
+ani.save("vector_field.gif", writer="pillow", fps=10)
