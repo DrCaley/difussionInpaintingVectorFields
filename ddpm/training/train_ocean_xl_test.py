@@ -141,7 +141,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             - Updates global model and optimizer states.
             - Plots and saves a loss curve PNG file after training completes.
     """
-    best_train_loss = float("inf")
+
     best_test_loss = float("inf")
     n_steps = ddpm.n_steps
 
@@ -163,7 +163,6 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
         epoch_losses = checkpoint['epoch_losses']
         train_losses = checkpoint['train_losses']
         test_losses = checkpoint['test_losses']
-        best_train_loss = checkpoint['best_train_loss']
         best_test_loss = checkpoint['best_test_loss']
         print(f"Resuming training from epoch {start_epoch}")
 
@@ -237,7 +236,6 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             'epoch_losses': epoch_losses,
             'train_losses': train_losses,
             'test_losses': test_losses,
-            'best_train_loss': best_train_loss,
             'best_test_loss': best_test_loss
         }
         torch.save(checkpoint, model_file)

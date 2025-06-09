@@ -210,7 +210,7 @@ def create_border_mask(image_shape, area_height=44, area_width=94, offset_top=0,
 
 
 
-""" Messing with stuff down here. - Matt """
+""" Messing with stuff down here."""
 
 # Image shape: (B, C, H, W)
 image_shape = (1, 1, 64, 128)

@@ -31,13 +31,13 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
             Slightly less noised image.
         """
         time_tensor = (torch.ones(n_samples, 1) * t).to(device).long()
-        eta_theta = ddpm.backward(noisy_img, time_tensor)
+        epsilon_theta = ddpm.backward(noisy_img, time_tensor)
 
         alpha_t = ddpm.alphas[t]
         alpha_t_bar = ddpm.alpha_bars[t]
 
         # Partially denoising the image
-        less_noised_img = (1 / alpha_t.sqrt()) * (noisy_img - (1 - alpha_t) / (1 - alpha_t_bar).sqrt() * eta_theta)
+        less_noised_img = (1 / alpha_t.sqrt()) * (noisy_img - (1 - alpha_t) / (1 - alpha_t_bar).sqrt() * epsilon_theta)
 
         if t > 0:
             z = torch.randn(n_samples, channels, height, width).to(device)
@@ -54,8 +54,8 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         Returns:
             Slightly more noised image.
         """
-        eta = torch.randn_like(unnoised_img).to(device)
-        noised_img = ddpm(unnoised_img, t, eta, one_step=True)
+        epsilon = torch.randn_like(unnoised_img).to(device)
+        noised_img = ddpm(unnoised_img, t, epsilon, one_step=True)
         return noised_img
 
     with torch.no_grad():
