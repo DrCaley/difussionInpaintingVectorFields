@@ -72,7 +72,6 @@ except Exception as e:
     logging.error(f"Error loading data: {e}")
     exit(1)
 
-
 # ======== Inpainting Evaluation Parameters ========
 line_numbers = [10, 20, 40]          # Number of lines in the mask
 resample_nums = [5]                 # Number of resampling steps

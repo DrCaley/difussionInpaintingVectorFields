@@ -35,6 +35,7 @@ os.makedirs(output_dir, exist_ok=True)
 csv_file = os.path.join(output_dir, f"training_log_{timestamp}.csv")
 plot_file = os.path.join(output_dir, f"train_test_loss_xl_{timestamp}.png")
 model_file = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}.pt")
+best_model_file = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}_best.pt")
 
 data_init = DDInitializer()
 
@@ -166,7 +167,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
 
         if best_test_loss > avg_test_loss:
             best_test_loss = avg_test_loss
-            torch.save(ddpm.state_dict(), model_file)
+            torch.save(ddpm.state_dict(), best_model_file)
             log_string += " --> Best model ever (stored based on test loss)"
 
         log_string += (f"\nAverage test loss: {avg_test_loss:.3f} -> best: {best_test_loss:.3f}\n"
