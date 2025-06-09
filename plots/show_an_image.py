@@ -12,7 +12,7 @@ from data_prep.data_initializer import DDInitializer
 data_init = DDInitializer()
 
 # Directory to save images
-output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Outputs')
+output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'outputs')
 
 # Generate vector field images
 filenames = []
@@ -25,4 +25,4 @@ for i in range(1000):
 
 # Create GIF
 images = [imageio.imread(f) for f in sorted(filenames)]
-imageio.mimsave("vector_fields.gif", images, fps=30)  # Adjust fps as needed
+imageio.mimsave(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'outputs'), images, fps=20)  # Adjust fps as needed
