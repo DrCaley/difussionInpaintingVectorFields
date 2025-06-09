@@ -11,10 +11,9 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
     assert vx.shape == vy.shape, "vx and vy must be the same shape"
     H, W = vx.shape
 
-    # Create meshgrid
     x = torch.arange(0, W)
     y = torch.arange(0, H)
-    X, Y = torch.meshgrid(x, y, indexing='ij')
+    X, Y = torch.meshgrid(y, x, indexing='ij')  # (H, W) shapes to match vx, vy
 
     # Downsample for plotting clarity
     Xs = X[::step, ::step]
@@ -22,10 +21,8 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
     vxs = vx[::step, ::step]
     vys = vy[::step, ::step]
 
-    # Create mask for valid (non-NaN) vectors
     valid_mask = (~torch.isnan(vxs)) & (~torch.isnan(vys))
 
-    # Only keep valid vectors & positions
     Xs = Xs[valid_mask]
     Ys = Ys[valid_mask]
     vxs = vxs[valid_mask]
@@ -49,3 +46,4 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
     output_path = os.path.join(my_path, 'outputs', os.path.basename(file))
     plt.savefig(output_path)
     plt.close()
+
