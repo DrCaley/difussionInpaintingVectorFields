@@ -94,10 +94,11 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             - Updates global model and optimizer states.
             - Plots and saves a loss curve PNG file after training completes.
     """
-    best_train_loss = float("inf")
+
     best_test_loss = float("inf")
     n_steps = ddpm.n_steps
 
+    epoch_losses = []
     train_losses = []
     test_losses = []
 
@@ -112,9 +113,9 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
         ddpm.load_state_dict(checkpoint['model_state_dict'])
         optim.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = checkpoint['epoch'] + 1
+        epoch_losses = checkpoint['epoch_losses']
         train_losses = checkpoint['train_losses']
         test_losses = checkpoint['test_losses']
-        best_train_loss = checkpoint['best_train_loss']
         best_test_loss = checkpoint['best_test_loss']
         print(f"Resuming training from epoch {start_epoch}")
 
@@ -122,13 +123,12 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     with open(csv_file, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow([description])
-        writer.writerow(['Epoch', 'Train Loss', 'Test Loss'])
+        writer.writerow(['Epoch', 'Epoch Loss', 'Train Loss', 'Test Loss'])
 
-    # Training arc (the ankle weights are coming off)
+    # Training arc
     for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
         epoch_loss = 0.0
         ddpm.train()
-        # may be able to throw out "step" in "for step, batch in ... "
         for step, batch in enumerate(tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{n_epochs}", colour="#005500")):
             x0 = batch[0].to(device).float()
             n = len(x0)
@@ -151,22 +151,26 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
 
             epoch_loss += loss.item() * len(x0) / len(train_loader.dataset)
 
+        # What is all of this doing? Do we want evaluate(...) ONLY, instead of epoch_loss?
+        # I figure we may just want to toss epoch_loss.
         ddpm.eval()
         avg_train_loss = evaluate(ddpm, train_loader, device)
         avg_test_loss = evaluate(ddpm, test_loader, device)
 
         ddpm.train()
+
+        epoch_losses.append(epoch_loss)
         train_losses.append(avg_train_loss)
         test_losses.append(avg_test_loss)
 
-        log_string = f"\nepoch {epoch + 1}: \n" + f"Loss: {epoch_loss:.3f}"
+        log_string = f"\nepoch {epoch + 1}: \n" + f"EPOCH Loss: {epoch_loss:.3f}\n" + f"TRAIN Loss: {avg_train_loss:.3f}\n" + f"TEST Loss: {avg_test_loss:.3f}\n"
 
-        #TODO: Sanity check each losses above
+        #TODO: Sanity check each of the above losses
 
         # Append current epoch results to CSV
         with open(csv_file, mode='a', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow([epoch + 1, avg_train_loss, avg_test_loss])
+            writer.writerow([epoch + 1, epoch_loss, avg_train_loss, avg_test_loss])
 
         if best_test_loss > avg_test_loss:
             best_test_loss = avg_test_loss
@@ -182,9 +186,9 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             'epoch': epoch,
             'model_state_dict': ddpm.state_dict(),
             'optimizer_state_dict': optim.state_dict(),
+            'epoch_losses': epoch_losses,
             'train_losses': train_losses,
             'test_losses': test_losses,
-            'best_train_loss': best_train_loss,
             'best_test_loss': best_test_loss
         }
         torch.save(checkpoint, model_file)
@@ -195,6 +199,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
         """
 
     plt.figure(figsize=(20, 10))
+    plt.plot(epoch_losses, label='Epoch Loss')
     plt.plot(train_losses, label='Train Loss')
     plt.plot(test_losses, label='Test Loss')
     plt.xlabel('Epoch')
