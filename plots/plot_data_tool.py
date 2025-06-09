@@ -22,6 +22,9 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
     assert vx.shape == vy.shape, "vx and vy must be the same shape"
     H, W = vx.shape
 
+    vx = torch.nan_to_num(vx, nan=0.0)
+    vy = torch.nan_to_num(vy, nan=0.0)
+
     # Create meshgrid
     x = torch.arange(0, W)
     y = torch.arange(0, H)
