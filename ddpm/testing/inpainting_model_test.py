@@ -24,6 +24,8 @@ from ddpm.neural_networks.unets.unet_xl import MyUNet
 dd = DDInitializer()
 
 (training_tensor, validation_tensor, test_tensor) = dd.get_tensors()
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename="inpainting_model_test_log.txt")
+
 # ======== Model Configuration ========
 n_steps = dd.get_attribute("n_steps")
 min_beta = dd.get_attribute("min_beta")
@@ -94,11 +96,11 @@ def Testing():
         if image_counter >= num_images_to_process:
             break
 
-            input_image = batch[0].to(dd.get_device()) # (Batch size, Channels, Height, Width)
+        input_image = batch[0].to(dd.get_device()) # (Batch size, Channels, Height, Width)
 
         # Convert back to unstandardized form for land masking
             #TODO: Fix all this/make it nicer/sanity check
-            input_image_original = dd.get_standardizer().unstandardize(input_image)
+        input_image_original = dd.get_standardizer().unstandardize(input_image)
         land_mask = (input_image_original != 0).float()
 
         # ======== Masking and Inpainting Loops ========
@@ -159,9 +161,6 @@ def Testing():
     # ======== Log Final Averages ========
     mean_mse_ddpm = np.mean(mse_ddpm_list)
     logging.info(f"Mean MSE (DDPM Inpainting): {mean_mse_ddpm}")
-
-
-
 
 # ======== CSV Output File for Results ========
 with open("inpainting-xl-data.csv", "w", newline="") as file:
