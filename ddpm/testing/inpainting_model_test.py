@@ -9,10 +9,13 @@ import logging
 import csv
 import yaml
 import sys
+import pickle
+
+from ddpm.training.train_ocean_xl_test import batch_size
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from data_prep.ocean_image_dataset import OceanImageDataset
-from ddpm.neural_networks.ddpm import MyDDPM
+from ddpm.neural_networks.ddpm_gaussian import MyDDPM
 from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from ddpm.helper_functions.masks import generate_random_path_mask
 from ddpm.helper_functions.resize_tensor import resize_transform
@@ -33,6 +36,18 @@ else :
         config = yaml.safe_load(file)
 print("loaded yaml file.")
 
+using_dumb_pycharm = True
+# Load the pickle
+if using_dumb_pycharm :
+    with open('../../data.pickle', 'rb') as f:
+        training_data_np, validation_data_np, test_data_np = pickle.load(f)
+else:
+    with open('data.pickle', 'rb') as f:
+        training_data_np, validation_data_np, test_data_np = pickle.load(f)
+
+training_tensor = torch.from_numpy(training_data_np).float()
+validation_tensor = torch.from_numpy(validation_data_np).float()
+test_tensor = torch.from_numpy(test_data_np).float()
 
 # ======== Random Seed Initialization ========
 SEED = config['testSeed']
@@ -80,13 +95,27 @@ try:
     logging.info("Preparing data")
 
     mat_file_path = "../../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat" if using_pycharm else "./data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat"
-    boundaries_path = "../../data/rams_head/boundaries.yaml" if using_pycharm else "./data/rams_head/boundaries.yaml"
+    boundaries_file = "../../data/rams_head/boundaries.yaml" if using_pycharm else "./data/rams_head/boundaries.yaml"
 
-    # Initialize the dataset
-    data = OceanImageDataset(
-        mat_file=mat_file_path,
-        boundaries=boundaries_path,
-        num=snapshots,
+    training_tensor = torch.from_numpy(training_data_np).float()
+    validation_tensor = torch.from_numpy(validation_data_np).float()
+    test_tensor = torch.from_numpy(test_data_np).float()
+
+    batch_size = 1
+
+    training_data = OceanImageDataset(
+        data_tensor=training_tensor,
+        boundaries=boundaries_file,
+        transform=transform
+    )
+    test_data = OceanImageDataset(
+        data_tensor=test_tensor,
+        boundaries=boundaries_file,
+        transform=transform
+    )
+    validation_data = OceanImageDataset(
+        data_tensor=validation_tensor,
+        boundaries=boundaries_file,
         transform=transform
     )
 

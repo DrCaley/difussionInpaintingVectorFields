@@ -10,16 +10,16 @@ import torch
 
 from datetime import datetime
 from matplotlib import pyplot as plt
-from torch import nn, Tensor
+from torch import nn
 from torch.optim import Adam
-from torch.utils.data import DataLoader, random_split
-from torchvision.transforms import Compose, Lambda
+from torch.utils.data import DataLoader
+from torchvision.transforms import Compose
 from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from data_prep.ocean_image_dataset import OceanImageDataset
-from ddpm.neural_networks.ddpm import MyDDPM
+from ddpm.neural_networks.ddpm_gaussian import MyDDPMGaussian
 from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
 from ddpm.neural_networks.unets.unet_xl import MyUNet
@@ -81,7 +81,7 @@ torch.manual_seed(SEED)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("we are running on the:", device)
 n_steps, min_beta, max_beta = config['n_steps'], config['min_beta'], config['max_beta']
-ddpm = MyDDPM(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=device)
+ddpm = MyDDPMGaussian(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=device)
 
 training_mode = config['training_mode']
 batch_size = config['batch_size']
@@ -204,6 +204,7 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
         ddpm.eval()
         avg_train_loss = evaluate(ddpm, train_loader, device)
         avg_test_loss = evaluate(ddpm, test_loader, device)
+
         ddpm.train()
 
         epoch_losses.append(epoch_loss)
