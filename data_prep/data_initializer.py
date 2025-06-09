@@ -76,7 +76,7 @@ class DDInitializer:
             )
 
     def _setup_noise_strategy(self):
-        noise_type = self.config.get("noise_type", "gaussian")  # default to Gaussian
+        noise_type = self._config.get("noise_type", "gaussian")  # default to Gaussian
         try:
             self.noise_strategy: NoiseStrategy = get_noise_strategy(noise_type)
             print(f"Loaded noise strategy: {noise_type}")
