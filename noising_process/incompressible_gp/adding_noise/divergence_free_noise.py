@@ -3,9 +3,8 @@ import yaml
 import os
 import torchvision.transforms as T
 
+
 from data_prep.data_initializer import DDInitializer
-from noising_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
-from plots.plot_data_tool import plot_vector_field
 
 # Get the directory where this script lives
 base_dir = os.path.dirname(os.path.abspath(__file__))

@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose
 
 from data_prep.ocean_image_dataset import OceanImageDataset
+from ddpm.helper_functions.noise import NoiseStrategy, get_noise_strategy
 from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
 
@@ -36,6 +37,7 @@ class DDInitializer:
         print("we are running on the:", self.device)
         self._setup_transforms()
         self._set_random_seed()
+        self._setup_noise_strategy()
         self._setup_datasets(os.path.join(prefix, boundaries_path))
         self._setup_alphas()
 
@@ -72,6 +74,17 @@ class DDInitializer:
             boundaries=boundaries_file,
             transform=self.transform
             )
+
+    def _setup_noise_strategy(self):
+        noise_type = self.config.get("noise_type", "gaussian")  # default to Gaussian
+        try:
+            self.noise_strategy: NoiseStrategy = get_noise_strategy(noise_type)
+            print(f"Loaded noise strategy: {noise_type}")
+        except KeyError:
+            raise ValueError(f"Unknown noise strategy: {noise_type}")
+
+    def get_noise_strategy(self) -> NoiseStrategy:
+        return self.noise_strategy
 
     def get_tensors(self):
         return self.training_tensor, self.test_tensor, self.validation_tensor
