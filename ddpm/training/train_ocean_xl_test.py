@@ -1,17 +1,12 @@
 import os
 import sys
-import random
-import yaml
 import csv
-import numpy as np
 import torch
 
 from datetime import datetime
 from matplotlib import pyplot as plt
-from torch import nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
-from torchvision.transforms import Compose
 from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
@@ -64,7 +59,8 @@ min_beta = data_init.get_attribute('min_beta')
 max_beta = data_init.get_attribute('max_beta')
 
 ddpm = MyDDPMGaussian(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=data_init.get_device())
-noise_strategy = data_init.get_noise_strategy()
+noise_strategy = data_init.noise_strategy
+loss_strategy = data_init.loss_strategy
 
 training_mode = data_init.get_attribute('training_mode')
 batch_size = data_init.get_attribute('batch_size')
@@ -223,7 +219,7 @@ optimizer = Adam(ddpm.parameters(), lr=lr)
 if training_mode:
     training_loop(ddpm, train_loader, test_loader, n_epochs,
                   optim=optimizer, device=data_init.get_device(),
-                  loss_function=nn.MSELoss(), noise_function=noise_strategy)
+                  loss_function=loss_strategy, noise_function=noise_strategy)
 
 print("last model saved in:", model_file)
 print("best model weights saved in:", best_model_weights)

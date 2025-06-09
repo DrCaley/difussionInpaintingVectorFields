@@ -7,8 +7,11 @@ testSeed: 0
 n_epochs: 2
 batch_size: 35
 lr: 0.001
-loss_function: mse
+
+loss_function: physical
 noise_function: gaussian
+w1: 0.5
+w2: 0.5
 
 n_steps: 1000
 min_beta: 0.0001
