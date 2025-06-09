@@ -43,8 +43,11 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
     plt.title(title)
     plt.grid(True)
 
+    """ Uncomment this to drop thousands of images into the project :)
+    
     output_path = os.path.join(my_path, 'Outputs', os.path.basename(file))
     plt.savefig(output_path)
+    """
 
     plt.close()
 
