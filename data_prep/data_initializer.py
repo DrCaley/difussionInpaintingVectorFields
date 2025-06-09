@@ -37,11 +37,17 @@ class DDInitializer:
         self._setup_transforms()
         self._set_random_seed()
         self._setup_datasets(os.path.join(prefix, boundaries_path))
+        self._setup_alphas()
 
 
     def _setup_yaml_file(self, config_path) -> None:
         with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
+            self._config = yaml.safe_load(f)
+
+    def _setup_alphas(self):
+        self.betas = torch.linspace(self._config["min_beta"], self._config["max_beta"], self._config["n_steps"])
+        self.alphas = (1 - self.betas)
+        self.alpha_bars = torch.tensor([torch.prod(self.alphas[:i + 1]) for i in range(len(self.alphas))])
 
     def _setup_tensors(self, pickle_path) -> None:
         with open(pickle_path, 'rb') as f:
@@ -70,10 +76,10 @@ class DDInitializer:
             )
 
     def get_tensors(self):
-        return training_tensor, test_tensor, validation_tensor
+        return self.training_tensor, self.test_tensor, self.validation_tensor
 
     def _set_random_seed(self):
-        seed = self.config.get('testSeed')
+        seed = self._config.get('testSeed')
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
@@ -81,8 +87,8 @@ class DDInitializer:
 
     def _setup_transforms(self):
         self.standardizer = standardize_data(
-            self.config['u_training_mean'], self.config['u_training_std'],
-            self.config['v_training_mean'], self.config['v_training_std']
+            self._config['u_training_mean'], self._config['u_training_std'],
+            self._config['v_training_mean'], self._config['v_training_std']
         )
 
         self.transform = Compose([
@@ -91,7 +97,11 @@ class DDInitializer:
         ])
 
     def get_attribute(self, attr):
-        return self.config.get(attr)
+        try:
+            return self._config.get(attr)
+        except:
+            print("no attribute", attr)
+            return None
 
     def get_device(self):
         return self.device
@@ -116,3 +126,9 @@ class DDInitializer:
 
     def get_using_pycharm(self):
         return self.using_pycharm
+
+    def get_alphas(self):
+        return self.alphas
+
+    def get_alpha_bars(self):
+        return self.alpha_bars
