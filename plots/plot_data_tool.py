@@ -40,7 +40,8 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
     plt.axis("equal")
     plt.title(title)
     plt.grid(True)
-    plt.savefig(file)
+    # Remove comments to unleash thousands of images into the project :) 
+    # plt.savefig(file)
 
     plt.close()
 
