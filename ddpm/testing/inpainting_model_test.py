@@ -22,58 +22,28 @@ from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 
-data_initializer = DDInitializer()
+dd = DDInitializer()
 
-# Output goes to file, not console
+(training_tensor, validation_tensor, test_tensor) = dd.get_tensors()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename="inpainting_model_test_log.txt")
 
-# Load the YAML file
-if not os.path.exists('../../data.yaml') :
-    using_pycharm = False
-    with open('data.yaml', 'r') as file:
-        config = yaml.safe_load(file)
-else :
-    using_pycharm = True
-    with open('../../data.yaml', 'r') as file:
-        config = yaml.safe_load(file)
-print("loaded yaml file.")
-
-using_dumb_pycharm = True
-# Load the pickle
-if using_dumb_pycharm :
-    with open('../../data.pickle', 'rb') as f:
-        training_data_np, validation_data_np, test_data_np = pickle.load(f)
-else:
-    with open('data.pickle', 'rb') as f:
-        training_data_np, validation_data_np, test_data_np = pickle.load(f)
-
-training_tensor = torch.from_numpy(training_data_np).float()
-validation_tensor = torch.from_numpy(validation_data_np).float()
-test_tensor = torch.from_numpy(test_data_np).float()
-
-# ======== Random Seed Initialization ========
-SEED = config['testSeed']
-snapshots = config['snapshots']
-random.seed(SEED)
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-torch.cuda.manual_seed_all(SEED)
-
 # ======== Model Configuration ========
-n_steps, min_beta, max_beta = config['n_steps'], config['min_beta'], config['max_beta']
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+n_steps = dd.get_attribute("n_steps")
+min_beta = dd.get_attribute("min_beta")
+max_beta = dd.get_attribute("max_beta")
+
 if len(sys.argv) < 2 :
     print("Usage: python3 inpainting_model_test.py <model file ending with .pt>")
-    store_path = config['model_path']
+    store_path = dd.get_attribute("store_path")
 else :
     store_path = sys.argv[1]
 
 # ======== Load DDPM Checkpoint ========
-checkpoint = torch.load(store_path, map_location=device)
+checkpoint = torch.load(store_path, map_location=dd.get_device())
 model_state_dict = checkpoint.get('model_state_dict', checkpoint)
 
 # Create and load the DDPM model with UNet backbone
-best_model = MyDDPMGaussian(MyUNet(n_steps), n_steps=n_steps, device=device)
+best_model = MyDDPMGaussian(MyUNet(n_steps), n_steps=n_steps, device=dd.get_device())
 try:
     logging.info("Loading model")
     best_model.load_state_dict(model_state_dict)
@@ -82,45 +52,17 @@ try:
 except Exception as e:
     logging.error(f"Error loading model: {e}")
     exit(1)
-
-# ======== Data Transformation Setup ========
-standardizer = standardize_data(config['u_training_mean'], config['u_training_std'], config['v_training_mean'], config['v_training_std'])
-
-# Compose resize and standardization transforms
-transform = Compose([
-    resize_transform((2, 64, 128)),
-    standardizer
-])
-
 # ======== Dataset Loading & Splitting ========
 try:
     logging.info("Preparing data")
-    boundaries_file = "../../data/rams_head/boundaries.yaml" if using_pycharm else "./data/rams_head/boundaries.yaml"
 
-    training_tensor = torch.from_numpy(training_data_np).float()
-    validation_tensor = torch.from_numpy(validation_data_np).float()
-    test_tensor = torch.from_numpy(test_data_np).float()
+    batch_size = dd.get_attribute("inpainting_batch_size")
 
-    batch_size = 1
-
-    training_data = OceanImageDataset(
-        data_tensor=training_tensor,
-        boundaries=boundaries_file,
-        transform=transform
-    )
-    test_data = OceanImageDataset(
-        data_tensor=test_tensor,
-        boundaries=boundaries_file,
-        transform=transform
-    )
-    validation_data = OceanImageDataset(
-        data_tensor=validation_tensor,
-        boundaries=boundaries_file,
-        transform=transform
-    )
+    training_data = dd.get_training_data()
+    test_data = dd.get_test_data()
+    validation_data = dd.get_validation_data()
 
     # Set up dataloaders
-    batch_size = config['batch_size']
     train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_data, batch_size=batch_size)
     val_loader = DataLoader(validation_data, batch_size=batch_size)
@@ -155,11 +97,11 @@ def Testing():
         if image_counter >= num_images_to_process:
             break
 
-        input_image = batch[0].to(device)  # (Batch size, Channels, Height, Width)
+        input_image = batch[0].to(dd.get_device()) # (Batch size, Channels, Height, Width)
 
         # Convert back to unstandardized form for land masking
-        # TODO: Fix all this/make it nicer/sanity check
-        input_image_original = standardizer.unstandardize(input_image)
+            #TODO: Fix all this/make it nicer/sanity check
+        input_image_original = dd.get_standardizer().unstandardize(input_image)
         land_mask = (input_image_original != 0).float()
 
         # ======== Masking and Inpainting Loops ========
@@ -175,7 +117,7 @@ def Testing():
                         mask = generate_random_path_mask(input_image.shape, land_mask, num_lines=num_lines,
                                                          line_thickness=5)
 
-                    mask = mask.to(device)
+                        mask = mask.to(dd.get_device())
                     torch.save(mask, f"results/predicted/{mask_type}_{num_lines}.pt")
 
                     mse_ddpm_samples = []
@@ -186,8 +128,8 @@ def Testing():
                             best_model,
                             input_image,
                             mask,
-                            n_samples=1,  # number of samples to generate. I think it doesn't work, not sure
-                            device=device,
+                                n_samples=1, #number of samples to generate. I think it doesn't work, not sure
+                                device=dd.get_device(),
                             resample_steps=resample
                         )
 
@@ -220,9 +162,6 @@ def Testing():
     # ======== Log Final Averages ========
     mean_mse_ddpm = np.mean(mse_ddpm_list)
     logging.info(f"Mean MSE (DDPM Inpainting): {mean_mse_ddpm}")
-
-
-
 
 # ======== CSV Output File for Results ========
 with open("inpainting-xl-data.csv", "w", newline="") as file:

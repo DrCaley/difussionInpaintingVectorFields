@@ -1,20 +1,23 @@
 import torch
+import yaml
 import os
 import torchvision.transforms as T
+
 
 from data_prep.data_initializer import DDInitializer
 
 # Get the directory where this script lives
 base_dir = os.path.dirname(os.path.abspath(__file__))
+dd = DDInitializer()
 
-# Construct possible config file paths
-data_init = DDInitializer()
-n_steps, min_beta, max_beta = data_init.get_attribute('n_steps'), data_init.get_attribute('min_beta'), data_init.get_attribute('max_beta')
-u_mean, v_mean = data_init.get_attribute('u_training_mean'), data_init.get_training_data('v_training_mean')
+n_steps = dd.get_attribute('n_steps')
+min_beta = dd.get_attribute('min_beta')
+max_beta = dd.get_attribute('max_beta')
 
-betas = torch.linspace(min_beta, max_beta, n_steps)
-alphas = (1 - betas)
-alpha_bars = torch.tensor([torch.prod(alphas[:i + 1]) for i in range(len(alphas))])
+u_mean = dd.get_attribute('u_mean')
+v_mean = dd.get_attribute('v_mean')
+
+alpha_bars = dd.get_alpha_bars()
 
 def exact_div_free_field_from_stream(H, W, freq, device='cpu'):
     x = torch.linspace(0, 2 * torch.pi, W, device=device)
