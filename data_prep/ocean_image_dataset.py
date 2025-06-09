@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 import yaml
-from typing import Optional
+from typing import Optional, Union
 
 
 class OceanImageDataset(Dataset):
@@ -11,7 +11,13 @@ class OceanImageDataset(Dataset):
     and returns 3-channel tensors representing u, v, and a binary mask.
     """
 
-    def __init__(self, data_tensor: Tensor, transform=None, boundaries: Optional[str] = None):
+    def __init__(
+        self, data_tensor: Tensor,
+        transform=None,
+        boundaries: Optional[str] = None,
+        data_fraction: Optional[float] = None,
+        max_samples: Optional[int] = None
+    ):
         """
         Initializes the dataset.
 
@@ -19,10 +25,23 @@ class OceanImageDataset(Dataset):
             data_tensor (Tensor): Tensor with shape (94, 44, 2, n)
             transform (callable, optional): Optional transform to apply to each tensor.
             boundaries (str, optional): Path to YAML file with boundary info.
+            data_fraction (float, optional): Fraction of the dataset to use (between 0 and 1).
+            max_samples (int, optional): Maximum number of samples to use.
         """
         assert data_tensor.ndim == 4 and data_tensor.shape[2] == 2, "Expected shape (94, 44, 2, n)"
-        self.raw_tensor = data_tensor  # shape: (94, 44, 2, n)
-        self.tensor_labels = list(range(data_tensor.shape[3]))
+        total_timesteps = data_tensor.shape[3]
+
+        # Determine how many samples to use
+        if data_fraction is not None:
+            assert 0 < data_fraction <= 1, "data_fraction must be in (0, 1]"
+            used_timesteps = int(total_timesteps * data_fraction)
+        elif max_samples is not None:
+            used_timesteps = min(max_samples, total_timesteps)
+        else:
+            used_timesteps = total_timesteps
+
+        self.raw_tensor = data_tensor[..., :used_timesteps]  # restrict to selected portion
+        self.tensor_labels = list(range(used_timesteps))
         self.transform = transform
 
         # Load boundaries if provided

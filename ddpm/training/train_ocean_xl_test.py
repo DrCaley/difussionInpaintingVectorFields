@@ -10,10 +10,10 @@ import torch
 
 from datetime import datetime
 from matplotlib import pyplot as plt
-from torch import nn, Tensor
+from torch import nn
 from torch.optim import Adam
-from torch.utils.data import DataLoader, random_split
-from torchvision.transforms import Compose, Lambda
+from torch.utils.data import DataLoader
+from torchvision.transforms import Compose
 from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
