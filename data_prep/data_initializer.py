@@ -33,8 +33,8 @@ class DDInitializer:
         return cls._instance
 
     def _init(self, config_path, pickle_path, boundaries_path):
-        self.using_pycharm = os.path.exists('../../data.yaml')
-        prefix = "../../" if self.using_pycharm else "./"
+        self.using_pycharm = os.path.exists('../data.yaml')
+        prefix = "../" if self.using_pycharm else "./"
 
         self._instance._setup_yaml_file(os.path.join(prefix, config_path))
         self._instance._setup_tensors(os.path.join(prefix, pickle_path))

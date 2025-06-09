@@ -16,7 +16,7 @@ output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'outputs')
 
 # Generate vector field images
 filenames = []
-for i in range(1000):
+for i in range(2):
     tensor_to_draw_x = data_init.training_tensor[:, :, 0, i]
     tensor_to_draw_y = data_init.training_tensor[:, :, 1, i]
     filename = os.path.join(output_dir, f"vector_field{i}.png")
