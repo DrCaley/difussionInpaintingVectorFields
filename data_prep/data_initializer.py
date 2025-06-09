@@ -39,7 +39,6 @@ class DDInitializer:
         self._setup_datasets(os.path.join(prefix, boundaries_path))
         self._setup_alphas()
 
-
     def _setup_yaml_file(self, config_path) -> None:
         with open(config_path, 'r') as f:
             self._config = yaml.safe_load(f)
@@ -56,7 +55,6 @@ class DDInitializer:
         self.training_tensor = torch.from_numpy(training_data_np).float()
         self.validation_tensor = torch.from_numpy(validation_data_np).float()
         self.test_tensor = torch.from_numpy(test_data_np).float()
-
 
     def _setup_datasets(self, boundaries_file):
         self.training_data = OceanImageDataset(
