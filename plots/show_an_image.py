@@ -22,7 +22,7 @@ output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'outputs')
 filenames = []
 heatmap_filenames = []
 
-for i in range(100):
+for i in range(10):
     tensor_to_draw_x = data_init.training_tensor[:, :, 0, i+500]
     tensor_to_draw_y = data_init.training_tensor[:, :, 1, i+500]
 
@@ -34,10 +34,10 @@ for i in range(100):
     # Heat map gifs
     fig, axs = plt.subplots(1, 2, figsize=(10, 4))
     im0 = axs[0].imshow(tensor_to_draw_x.numpy(), cmap='viridis')
-    axs[0].set_title(f'X-Component t={i}')
+    axs[0].set_title(f'X-Component t={i:03}')
     plt.colorbar(im0, ax=axs[0])
     im1 = axs[1].imshow(tensor_to_draw_y.numpy(), cmap='viridis')
-    axs[1].set_title(f'Y-Component t={i}')
+    axs[1].set_title(f'Y-Component t={i:03}')
     plt.colorbar(im1, ax=axs[1])
 
     for ax in axs:

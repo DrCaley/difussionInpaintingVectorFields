@@ -17,16 +17,10 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
     vx[torch.isnan(vx)] = 0.0
     vy[torch.isnan(vy)] = 0.0
 
-    print("Any NaNs in vx:", torch.isnan(vx).any().item())
-    print("Any NaNs in vy:", torch.isnan(vy).any().item())
-
     # Create meshgrid
     x = torch.arange(0, W)
     y = torch.arange(0, H)
     X, Y = torch.meshgrid(x, y, indexing='ij')
-
-    print("Any NaNs in X:", torch.isnan(X).any().item())
-    print("Any NaNs in Y:", torch.isnan(Y).any().item())
 
     plt.figure(figsize=(6, 6))
     plt.quiver(
