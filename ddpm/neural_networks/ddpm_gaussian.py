@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 
 
-class MyDDPM(nn.Module):
+class MyDDPMGaussian(nn.Module):
     def __init__(self, network, n_steps=200, min_beta=10 ** -4, max_beta=0.02, device=None, image_chw=(1, 64, 128)):
-        super(MyDDPM, self).__init__()
+        super(MyDDPMGaussian, self).__init__()
         self.n_steps = n_steps
         self.device = device
         # The shape of input images
