@@ -16,5 +16,8 @@ max_beta: 0.02
 training_mode: True
 inpainting_batch_size: 1
 
-snapshots: 10
-model_path: "../trained_models/ddpm_ocean_v0_2025_JUN_4.pt"
+image_counter: 0
+num_images_to_process: 5
+n_samples: 1
+
+model_path: "./"

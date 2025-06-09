@@ -33,13 +33,26 @@ Absolute model
     |   |
 """
 
+continue_training = False
+model_to_retrain = None
+if len(sys.argv) >= 2:
+    if os.path.exists(sys.argv[1]) :
+        print("retraining...")
+        model_to_retrain = sys.argv[1]
+        continue_training = True
+    else:
+        print("model not found!:", sys.argv[1])
+        exit(1)
+
 timestamp = datetime.now().strftime("%h%d_%H%M")
 output_dir = os.path.join(os.path.dirname(__file__), f"training_output")
 os.makedirs(output_dir, exist_ok=True)
 csv_file = os.path.join(output_dir, f"training_log_{timestamp}.csv")
 plot_file = os.path.join(output_dir, f"train_test_loss_xl_{timestamp}.png")
+
 model_file = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}.pt")
-best_model_file = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}_best.pt")
+best_model_weights = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}_best_weights.pt")
+best_model_checkpoint = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}_best_checkpoint.pt")
 
 data_init = DDInitializer()
 
@@ -105,8 +118,8 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
     TODO: since each model has its own unique file name with timestamp, we are not able to train the same model
     more than once, we need to implement a way to train the same model again. I'm talking to you future me!
     """
-    if os.path.exists(model_file):
-        checkpoint = torch.load(model_file)
+    if continue_training :
+        checkpoint = torch.load(model_to_retrain)
         ddpm.load_state_dict(checkpoint['model_state_dict'])
         optim.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = checkpoint['epoch'] + 1
@@ -162,22 +175,10 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
 
         log_string = f"\nepoch {epoch + 1}: \n" + f"EPOCH Loss: {epoch_loss:.3f}\n" + f"TRAIN Loss: {avg_train_loss:.3f}\n" + f"TEST Loss: {avg_test_loss:.3f}\n"
 
-        #TODO: Sanity check each of the above losses
-
         # Append current epoch results to CSV
         with open(csv_file, mode='a', newline='') as file:
             writer = csv.writer(file)
             writer.writerow([epoch + 1, epoch_loss, avg_train_loss, avg_test_loss])
-
-        if best_test_loss > avg_test_loss:
-            best_test_loss = avg_test_loss
-            torch.save(ddpm.state_dict(), best_model_file)
-            log_string += " --> Best model ever (stored based on test loss)"
-
-        log_string += (f"\nAverage test loss: {avg_test_loss:.3f} -> best: {best_test_loss:.3f}\n"
-                       + f"Average train loss: {avg_train_loss:.3f}")
-
-        tqdm.write(log_string)
 
         checkpoint = {
             'epoch': epoch,
@@ -188,6 +189,18 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
             'test_losses': test_losses,
             'best_test_loss': best_test_loss
         }
+
+        if best_test_loss > avg_test_loss:
+            best_test_loss = avg_test_loss
+            torch.save(ddpm.state_dict(), best_model_weights)
+            torch.save(checkpoint, best_model_checkpoint)
+            log_string += " --> Best model ever (stored based on test loss)"
+
+        log_string += (f"\nAverage test loss: {avg_test_loss:.3f} -> best: {best_test_loss:.3f}\n"
+                       + f"Average train loss: {avg_train_loss:.3f}")
+
+        tqdm.write(log_string)
+
         torch.save(checkpoint, model_file)
 
         """
@@ -211,3 +224,7 @@ if training_mode:
     training_loop(ddpm, train_loader, test_loader, n_epochs,
                   optim=optimizer, device=data_init.get_device(),
                   loss_function=nn.MSELoss(), noise_function=noise_strategy)
+
+print("last model saved in:", model_file)
+print("best model weights saved in:", best_model_weights)
+print("best model checkpoint saved in:", best_model_checkpoint)
