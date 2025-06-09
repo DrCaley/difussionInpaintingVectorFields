@@ -3,29 +3,22 @@ import yaml
 import os
 import torchvision.transforms as T
 
+from data_prep.data_initializer import DDInitializer
+from noising_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
+from plots.plot_data_tool import plot_vector_field
+
 # Get the directory where this script lives
 base_dir = os.path.dirname(os.path.abspath(__file__))
+dd = DDInitializer()
 
-# Construct possible config file paths
-possible_paths = [
-    os.path.join(base_dir, '../../../data.yaml'),
-    os.path.join(base_dir, 'data.yaml')
-]
+n_steps = dd.get_attribute('n_steps')
+min_beta = dd.get_attribute('min_beta')
+max_beta = dd.get_attribute('max_beta')
 
-for path in possible_paths:
-    if os.path.exists(path):
-        with open(path, 'r') as file:
-            config = yaml.safe_load(file)
-        break
-else:
-    raise FileNotFoundError(f"Could not find data.yaml in any expected location: {possible_paths}")
+u_mean = dd.get_attribute('u_mean')
+v_mean = dd.get_attribute('v_mean')
 
-n_steps, min_beta, max_beta = config['n_steps'], config['min_beta'], config['max_beta']
-u_mean, v_mean = config['u_training_mean'], config['v_training_mean']
-
-betas = torch.linspace(min_beta, max_beta, n_steps)
-alphas = (1 - betas)
-alpha_bars = torch.tensor([torch.prod(alphas[:i + 1]) for i in range(len(alphas))])
+alpha_bars = dd.get_alpha_bars()
 
 def exact_div_free_field_from_stream(H, W, freq, device='cpu'):
     x = torch.linspace(0, 2 * torch.pi, W, device=device)
