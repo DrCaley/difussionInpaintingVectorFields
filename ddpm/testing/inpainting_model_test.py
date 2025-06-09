@@ -19,7 +19,7 @@ from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 
-#output goes to file, not console
+# Output goes to file, not console
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename="inpainting_model_test_log.txt")
 
 # Load the YAML file
@@ -43,7 +43,7 @@ torch.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 
 # ======== Model Configuration ========
-n_steps, min_beta, max_beta = 1000, 1e-4, 0.02
+n_steps, min_beta, max_beta = config['n_steps'], config['min_beta'], config['max_beta']
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if len(sys.argv) < 2 :
     print("Usage: python3 inpainting_model_test.py <model file ending with .pt>")
@@ -97,7 +97,7 @@ try:
     training_data, test_data, validation_data = random_split(data, [train_len, test_len, val_len])
 
     # Set up dataloaders
-    batch_size = 1
+    batch_size = config['batch_size']
     train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_data, batch_size=batch_size)
     val_loader = DataLoader(validation_data, batch_size=batch_size)
