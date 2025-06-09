@@ -1,7 +1,6 @@
 import torch
 import yaml
 import os
-import torch.nn.functional as F
 import torchvision.transforms as T
 
 from data_prep.data_initializer import DDInitializer
@@ -46,7 +45,7 @@ def divergence_free_noise(data_set: torch.Tensor, t: torch.Tensor, device='cpu')
     output = torch.zeros((batch, 2, height, width), device=device)
 
     for i in range(batch):
-        for j in range(t[i]):
+        for j in range(t[i].item()):
             freq = torch.normal(torch.tensor(0.0, device=device), std=1.0)
             vx, vy = exact_div_free_field_from_stream(width, height, freq, device=device)
             output[i, 0] += vx  # Accumulate vx

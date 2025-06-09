@@ -11,8 +11,6 @@ import yaml
 import sys
 import pickle
 
-from ddpm.training.train_ocean_xl_test import batch_size
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from data_prep.ocean_image_dataset import OceanImageDataset
 from data_prep.data_initializer import DDInitializer
@@ -78,88 +76,97 @@ resample_nums = [5]                 # Number of resampling steps
 masks_to_test = ["random_path_thin", "random_path_thick"]  # Mask types
 mse_ddpm_list = []                 # To store average MSEs per image
 
-# ======== CSV Output File for Results ========
-with open("inpainting-xl-data.csv", "w", newline="") as file:
-    try:
-        #writes data to csv file
-        writer = csv.writer(file)
-        header = ["image_num", "mask_type", "num_lines", "resample_steps", "mse"]
-        writer.writerow(header)
-        logging.info("Processing data")
-        image_counter = 0
-        num_images_to_process = 5
-        n_samples = 1 # Number of samples per mask config
 
-        loader = train_loader #change to test_loader, val_loader depending on what you want to test
+def Testing():
+    # writes data to csv file
+    writer = csv.writer(file)
+    header = ["image_num", "mask_type", "num_lines", "resample_steps", "mse"]
+    writer.writerow(header)
+    logging.info("Processing data")
+    image_counter = 0
+    num_images_to_process = 5
+    n_samples = 1  # Number of samples per mask config
 
-        # ======== Loop Through Batches ========
-        for batch in loader:
-            if image_counter >= num_images_to_process:
-                break
+    loader = train_loader  # change to test_loader, val_loader depending on what you want to test
+
+    # ======== Loop Through Batches ========
+    for batch in loader:
+        if image_counter >= num_images_to_process:
+            break
 
             input_image = batch[0].to(dd.get_device()) # (Batch size, Channels, Height, Width)
 
-            # Convert back to unstandardized form for land masking
+        # Convert back to unstandardized form for land masking
             #TODO: Fix all this/make it nicer/sanity check
             input_image_original = dd.get_standardizer().unstandardize(input_image)
-            land_mask = (input_image_original != 0).float()
+        land_mask = (input_image_original != 0).float()
 
-            # ======== Masking and Inpainting Loops ========
-            for mask_type in masks_to_test:
-                for resample in resample_nums:
-                    for num_lines in line_numbers:
+        # ======== Masking and Inpainting Loops ========
+        for mask_type in masks_to_test:
+            for resample in resample_nums:
+                for num_lines in line_numbers:
 
-                        # Generate a mask with different parameters
-                        if mask_type == "random_path_thin":
-                            mask = generate_random_path_mask(input_image.shape, land_mask, num_lines=num_lines, line_thickness=1)
-                        elif mask_type == "random_path_thick":
-                            mask = generate_random_path_mask(input_image.shape, land_mask, num_lines=num_lines, line_thickness=5)
+                    # Generate a mask with different parameters
+                    if mask_type == "random_path_thin":
+                        mask = generate_random_path_mask(input_image.shape, land_mask, num_lines=num_lines,
+                                                         line_thickness=1)
+                    elif mask_type == "random_path_thick":
+                        mask = generate_random_path_mask(input_image.shape, land_mask, num_lines=num_lines,
+                                                         line_thickness=5)
 
                         mask = mask.to(dd.get_device())
-                        torch.save(mask, f"results/predicted/{mask_type}_{num_lines}.pt")
+                    torch.save(mask, f"results/predicted/{mask_type}_{num_lines}.pt")
 
-                        mse_ddpm_samples = []
+                    mse_ddpm_samples = []
 
-                        # ======== Generate Samples ========
-                        for i in range(n_samples):
-                            final_image_ddpm = inpaint_generate_new_images(
-                                best_model,
-                                input_image,
-                                mask,
+                    # ======== Generate Samples ========
+                    for i in range(n_samples):
+                        final_image_ddpm = inpaint_generate_new_images(
+                            best_model,
+                            input_image,
+                            mask,
                                 n_samples=1, #number of samples to generate. I think it doesn't work, not sure
                                 device=dd.get_device(),
-                                resample_steps=resample
-                            )
+                            resample_steps=resample
+                        )
 
-                            # Save inpainted result and mask
-                            torch.save(final_image_ddpm, f"results/predicted/img{batch[1].item()}_{mask_type}_resample{resample}_num_lines_{num_lines}.pt")
-                            torch.save(mask, f"results/predicted/mask{batch[1].item()}_{mask_type}_resample{resample}_num_lines_{num_lines}.pt");
+                        # Save inpainted result and mask
+                        torch.save(final_image_ddpm,
+                                   f"results/predicted/img{batch[1].item()}_{mask_type}_resample{resample}_num_lines_{num_lines}.pt")
+                        torch.save(mask,
+                                   f"results/predicted/mask{batch[1].item()}_{mask_type}_resample{resample}_num_lines_{num_lines}.pt");
 
-                            # Calculate MSE for masked region
-                            mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
-                            mse_ddpm_samples.append(mse_ddpm.item())
+                        # Calculate MSE for masked region
+                        mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
+                        mse_ddpm_samples.append(mse_ddpm.item())
 
-                            logging.info(
-                                f"MSE (DDPM Inpainting) with {num_lines} lines for image {image_counter}, sample {i}: {mse_ddpm.item()}")
+                        logging.info(
+                            f"MSE (DDPM Inpainting) with {num_lines} lines for image {image_counter}, sample {i}: {mse_ddpm.item()}")
 
-                            # Write result to CSV
-                            output = [image_counter, mask_type, num_lines, resample, mse_ddpm.item()]
-                            writer.writerow(output)
+                        # Write result to CSV
+                        output = [image_counter, mask_type, num_lines, resample, mse_ddpm.item()]
+                        writer.writerow(output)
 
-                            del final_image_ddpm
-                            torch.cuda.empty_cache()
+                        del final_image_ddpm
+                        torch.cuda.empty_cache()
 
-                    # Compute average MSE over all samples for this mask config
-                    mean_mse_ddpm_samples = np.mean(mse_ddpm_samples)
-                    mse_ddpm_list.append(mean_mse_ddpm_samples)
+                # Compute average MSE over all samples for this mask config
+                mean_mse_ddpm_samples = np.mean(mse_ddpm_samples)
+                mse_ddpm_list.append(mean_mse_ddpm_samples)
 
-            image_counter += 1
+        image_counter += 1
 
-        # ======== Log Final Averages ========
-        mean_mse_ddpm = np.mean(mse_ddpm_list)
-        logging.info(f"Mean MSE (DDPM Inpainting): {mean_mse_ddpm}")
+    # ======== Log Final Averages ========
+    mean_mse_ddpm = np.mean(mse_ddpm_list)
+    logging.info(f"Mean MSE (DDPM Inpainting): {mean_mse_ddpm}")
 
 
+
+
+# ======== CSV Output File for Results ========
+with open("inpainting-xl-data.csv", "w", newline="") as file:
+    try:
+        Testing()
     except Exception as e:
         logging.error(f"Error during processing: {e}")
         exit(1)
