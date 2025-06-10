@@ -27,7 +27,7 @@ with open(csv_file, mode='w', newline='') as file:
         writer.writerow(['Number', 'Divergence'])
 
 # I've lost the plot
-plot_file = os.path.join(output_dir, f"div_plot.png")
+plot_file = os.path.join(output_dir, f"div_plot_validation_tensor.png")
 
 
 # Generate vector field images
@@ -39,11 +39,11 @@ heatmap_filenames = []
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))
 
 # Initialize the heat map images with the first frame
-im0 = axs[0].imshow(data_init.test_tensor[:, :, 0, 0].numpy(), cmap='viridis')
+im0 = axs[0].imshow(data_init.validation_tensor[:, :, 0, 0].numpy(), cmap='viridis')
 axs[0].set_title(f'X-Component t=0')
 cbar0 = fig.colorbar(im0, ax=axs[0])
 
-im1 = axs[1].imshow(data_init.test_tensor[:, :, 1, 0].numpy(), cmap='viridis')
+im1 = axs[1].imshow(data_init.validation_tensor[:, :, 1, 0].numpy(), cmap='viridis')
 axs[1].set_title(f'Y-Component t=0')
 cbar1 = fig.colorbar(im1, ax=axs[1])
 
@@ -56,9 +56,9 @@ for ax in axs:
 divergences = []
 
 # IMAGE GENERATION LOOP
-for i in range(data_init.test_tensor.shape[3]):
-    tensor_to_draw_x = data_init.test_tensor[:, :, 0, i]
-    tensor_to_draw_y = data_init.test_tensor[:, :, 1, i]
+for i in range(data_init.validation_tensor.shape[3]):
+    tensor_to_draw_x = data_init.validation_tensor[:, :, 0, i]
+    tensor_to_draw_y = data_init.validation_tensor[:, :, 1, i]
 
     # Create vector field files
     filename = os.path.join(output_dir, f"vector_field{i:04}.png")
@@ -85,10 +85,10 @@ for i in range(data_init.test_tensor.shape[3]):
 
 # Create GIFS
 images = [imageio.imread(f) for f in sorted(filenames)]
-imageio.mimsave(output_dir + "\\vector_fields.gif", images, fps=27)  # Adjust fps as needed
+imageio.mimsave(output_dir + "\\vector_fields_validation_tensor.gif", images, fps=20)  # Adjust fps as needed
 
 heat_images = [imageio.imread(f) for f in heatmap_filenames]
-imageio.mimsave(output_dir + "\\heat_map.gif", heat_images, fps=27)
+imageio.mimsave(output_dir + "\\heat_map_validation_tensor.gif", heat_images, fps=20)
 
 
 # No more 1000+ image pushes :(
