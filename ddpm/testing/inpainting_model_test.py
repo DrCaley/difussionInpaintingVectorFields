@@ -15,6 +15,8 @@ from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 
+
+
 dd = DDInitializer()
 
 (training_tensor, validation_tensor, test_tensor) = dd.get_tensors()
@@ -73,8 +75,8 @@ except Exception as e:
 
 # ======== Inpainting Evaluation Parameters ========
 line_numbers = [10, 20, 40]          # Number of lines in the abstract_mask.py
-resample_nums = [5]                 # Number of resampling steps
-mse_ddpm_list = []                 # To store average MSEs per image
+resample_nums = [5]                  # Number of resampling steps
+mse_ddpm_list = []                   # To store average MSEs per image
 
 # =========== Initializing Masks ==================
 masks_to_test = []
