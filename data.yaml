@@ -24,4 +24,4 @@ num_images_to_process: 5
 n_samples: 1
 gaussian_scaling: True
 
-model_path: "./"
+model_path: "../trained_models/ddpm_ocean_model_Jun06_1223.pt"

@@ -1,6 +1,10 @@
 import torch
 import torch.nn.functional as f
 
+from data_prep.data_initializer import DDInitializer
+from ddpm.helper_functions.model_evaluation import noise_strat
+
+dd = DDInitializer()
 
 def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
                                 resample_steps=1, channels=1, height=64, width=128):
@@ -23,7 +27,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
     """
     noised_images = [None] * (ddpm.n_steps + 1)
 
-    def denoise_one_step(noisy_img):
+    def denoise_one_step(noisy_img, noise_strat):
         """
         Denoises image by one step.
 
@@ -38,23 +42,24 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
 
         # Partially denoising the image
         less_noised_img = (1 / alpha_t.sqrt()) * (noisy_img - (1 - alpha_t) / (1 - alpha_t_bar).sqrt() * epsilon_theta)
+        tensor_size = torch.zeros(n_samples, 2, height, width).to(device).float()
 
         if t > 0:
-            z = torch.randn(n_samples, channels, height, width).to(device)
+            z = noise_strat(tensor_size, torch.Tensor([t]))
             beta_t = ddpm.betas[t]
             sigma_t = beta_t.sqrt()
             less_noised_img = less_noised_img + sigma_t * z
 
         return less_noised_img
 
-    def noise_one_step(unnoised_img):
+    def noise_one_step(unnoised_img, t, noise_strat):
         """
         Noises image by one step.
 
         Returns:
             Slightly more noised image.
         """
-        epsilon = torch.randn_like(unnoised_img).to(device)
+        epsilon = noise_strat(unnoised_img, torch.Tensor([t]))
         noised_img = ddpm(unnoised_img, t, epsilon, one_step=True)
         return noised_img
 
@@ -62,20 +67,22 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         if device is None:
             device = ddpm.device
 
+
+        noise_strat = dd.get_noise_strategy()
         input_img = input_image.clone().to(device)
-        noise = torch.randn_like(input_img).to(device) # TODO: Another noise place
+        noise = noise_strat(input_img, t = torch.Tensor([0]))
 
         # Adding noise step by step
         noised_images[0] = input_img
         for t in range(ddpm.n_steps):
-            noised_images[t + 1] = noise_one_step(noised_images[t])
+            noised_images[t + 1] = noise_one_step(noised_images[t], t, noise_strat)
 
         x = noised_images[ddpm.n_steps] * (1 - mask) + (noise * mask)
 
         for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
 
             for i in range(resample_steps):
-                x = denoise_one_step(x)
+                x = denoise_one_step(x, noise_strat)
                 # Combine parts
                 x = noised_images[t] * (1 - mask) + (x * mask)
                 # Renoise and repeat if not the last step
