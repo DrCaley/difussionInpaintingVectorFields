@@ -31,9 +31,6 @@ class my_block(nn.Module):
         self.activation = nn.SiLU() if activation is None else activation
         self.normalize = normalize
 
-
-
-
     def forward(self, x):
         out = self.ln(x) if self.normalize else x
         out = self.conv1(out)
