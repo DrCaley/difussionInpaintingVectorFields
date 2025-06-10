@@ -1,0 +1,31 @@
+2025-06-09 11:27:46,239 - INFO - Loading model
+2025-06-09 11:27:48,380 - INFO - Model loaded successfully
+2025-06-09 11:27:57,933 - INFO - Preparing data
+2025-06-09 11:30:55,454 - INFO - Data prepared successfully
+2025-06-09 11:31:07,173 - INFO - Processing data
+2025-06-09 11:48:11,373 - INFO - Loading model
+2025-06-09 11:48:11,404 - INFO - Model loaded successfully
+2025-06-09 11:48:11,404 - INFO - Preparing data
+2025-06-09 11:48:14,294 - INFO - Data prepared successfully
+2025-06-09 11:48:14,294 - INFO - Processing data
+2025-06-09 11:55:41,435 - INFO - Loading model
+2025-06-09 11:55:41,498 - INFO - Model loaded successfully
+2025-06-09 11:55:41,498 - INFO - Preparing data
+2025-06-09 11:55:45,569 - INFO - Data prepared successfully
+2025-06-09 11:55:45,569 - INFO - Processing data
+2025-06-10 11:31:18,632 - INFO - Loading model
+2025-06-10 11:31:20,476 - INFO - Model loaded successfully
+2025-06-10 11:31:21,692 - INFO - Preparing data
+2025-06-10 11:31:27,667 - INFO - Data prepared successfully
+2025-06-10 11:31:39,798 - INFO - Processing data
+2025-06-10 11:39:52,429 - INFO - Loading model
+2025-06-10 11:39:52,450 - INFO - Model loaded successfully
+2025-06-10 11:39:52,451 - INFO - Preparing data
+2025-06-10 11:39:52,451 - INFO - Data prepared successfully
+2025-06-10 11:39:59,238 - INFO - Processing data
+2025-06-10 12:10:09,914 - INFO - Loading model
+2025-06-10 12:10:09,936 - INFO - Model loaded successfully
+2025-06-10 12:10:09,937 - INFO - Preparing data
+2025-06-10 12:10:09,937 - INFO - Data prepared successfully
+2025-06-10 12:10:28,190 - INFO - Processing data
+2025-06-10 12:11:05,417 - ERROR - Error during processing: inpaint_generate_new_images.<locals>.noise_one_step() missing 2 required positional arguments: 't' and 'noise_strat'

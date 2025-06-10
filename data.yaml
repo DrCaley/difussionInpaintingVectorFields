@@ -4,12 +4,12 @@ v_training_mean: -0.032393779611754124
 v_training_std: 0.08899177232117583
 
 testSeed: 0
-n_epochs: 2
+n_epochs: 5
 batch_size: 35
 lr: 0.001
 
-loss_function: physical
-noise_function: gaussian
+noise_function: div_free
+loss_function: mse
 w1: 0.5
 w2: 0.5
 
@@ -22,5 +22,6 @@ inpainting_batch_size: 1
 image_counter: 0
 num_images_to_process: 5
 n_samples: 1
+gaussian_scaling: False
 
-model_path: "./"
+model_path: "../trained_models/ddpm_ocean_model_Jun06_1223.pt"

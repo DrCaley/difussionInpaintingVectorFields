@@ -11,7 +11,7 @@ from ddpm.helper_functions.mask_factory.masks.random_path import RandomPathMaskG
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from data_prep.data_initializer import DDInitializer
-from ddpm.neural_networks.ddpm_gaussian import MyDDPMGaussian
+from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 
@@ -29,6 +29,7 @@ store_path = dd.get_attribute("store_path")
 
 if len(sys.argv) < 2 :
     print("Usage: python3 inpainting_model_test.py <model file ending with .pt>")
+    store_path = dd.get_attribute("model_path")
 else :
     if os.path.exists(sys.argv[1]):
         store_path = sys.argv[1]
@@ -96,13 +97,13 @@ def testing(mask_generator : MaskGenerator):
     n_samples = dd.get_attribute('n_samples') # Number of samples per abstract_mask.py config
 
     loader = train_loader  # change to test_loader, val_loader depending on what you want to test
+
     # ======== Loop Through Batches ========
     for batch in loader:
         if image_counter >= num_images_to_process:
             break
 
         input_image = batch[0].to(dd.get_device()) # (Batch size, Channels, Height, Width)
-
 
         # Convert back to unstandardized form for land masking
         input_image_original = dd.get_standardizer().unstandardize(input_image)
