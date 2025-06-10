@@ -82,7 +82,7 @@ def Testing():
     num_images_to_process = 5
     n_samples = 1  # Number of samples per mask config
 
-    loader = train_loader  # TODO: Add this being changable to yaml
+    loader = train_loader  # TODO: Add this being changeable to yaml
 
     # ======== Loop Through Batches ========
     for batch in loader:
