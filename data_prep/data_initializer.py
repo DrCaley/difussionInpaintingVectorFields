@@ -159,6 +159,9 @@ class DDInitializer:
 
     def get_alphas(self):
         return self.alphas
+    
+    def get_betas(self):
+        return self.betas
 
     def get_alpha_bars(self):
         return self.alpha_bars
