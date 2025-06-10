@@ -8,8 +8,8 @@ n_epochs: 2
 batch_size: 35
 lr: 0.001
 
-loss_function: physical
-noise_function: gaussian
+loss_function: mse
+noise_function: div_free
 w1: 0.5
 w2: 0.5
 

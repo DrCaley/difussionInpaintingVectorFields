@@ -1,9 +1,8 @@
 import unittest
 import torch
 from noising_process.incompressible_gp.adding_noise.divergence_free_noise import divergence_free_noise, \
-    normalized_divergence_free_noise, gaussian_at_end_divergence_free_noise, gaussian_each_step_divergence_free_noise, \
-    stream_function_noise, exact_div_free_field_from_stream
-from noising_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
+    normalized_divergence_free_noise, gaussian_at_end_divergence_free_noise, gaussian_each_step_divergence_free_noise
+from ddpm.helper_functions.compute_divergence import compute_divergence
 from plots.plot_data_tool import plot_vector_field
 
 class GaussianTest(unittest.TestCase):

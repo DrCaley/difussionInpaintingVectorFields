@@ -1,6 +1,9 @@
 import torch
-import numpy as np
 from typing import Optional
+
+from noising_process.incompressible_gp.adding_noise.divergence_free_noise import \
+    gaussian_each_step_divergence_free_noise
+
 
 class NoiseStrategy:
     def __call__(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
@@ -32,10 +35,7 @@ class DivergenceFreeNoise(NoiseStrategy):
     ) -> torch.Tensor:
         assert shape[1] == 2, "Divergence-free noise expects 2 channels"
         batch, _, H, W = shape
-        potential = torch.randn((batch, 1, H, W), device=device)
-        dx = (torch.roll(potential, -1, dims=3) - torch.roll(potential, 1, dims=3)) / 2
-        dy = (torch.roll(potential, -1, dims=2) - torch.roll(potential, 1, dims=2)) / 2
-        return torch.cat([-dy, dx], dim=1)
+        return gaussian_each_step_divergence_free_noise(shape=shape, t=t, device=device)
 
 NOISE_REGISTRY = {
     "gaussian": GaussianNoise,

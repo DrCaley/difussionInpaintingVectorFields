@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from noising_process.incompressible_gp.adding_noise.compute_divergence import compute_divergence
+from ddpm.helper_functions.compute_divergence import compute_divergence
 
 # Base class for loss strategies
 class LossStrategy(nn.Module):
