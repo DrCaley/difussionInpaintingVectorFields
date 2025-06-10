@@ -6,12 +6,13 @@ import logging
 import csv
 import sys
 
-from data_prep.data_initializer import DDInitializer
+from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
+from ddpm.helper_functions.mask_factory.masks.random_path import RandomPathMaskGenerator
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm_gaussian import MyDDPMGaussian
 from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
-from ddpm.helper_functions.masks import generate_random_path_mask
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 
 dd = DDInitializer()
@@ -24,11 +25,15 @@ n_steps = dd.get_attribute("n_steps")
 min_beta = dd.get_attribute("min_beta")
 max_beta = dd.get_attribute("max_beta")
 
+store_path = dd.get_attribute("store_path")
+
 if len(sys.argv) < 2 :
     print("Usage: python3 inpainting_model_test.py <model file ending with .pt>")
-    store_path = dd.get_attribute("store_path")
 else :
-    store_path = sys.argv[1]
+    if os.path.exists(sys.argv[1]):
+        store_path = sys.argv[1]
+    else :
+        print(sys.argv[1], "not found, using:", store_path)
 
 # ======== Load DDPM Checkpoint ========
 checkpoint = torch.load(store_path, map_location=dd.get_device())
@@ -66,24 +71,31 @@ except Exception as e:
     exit(1)
 
 # ======== Inpainting Evaluation Parameters ========
-line_numbers = [10, 20, 40]          # Number of lines in the mask
+line_numbers = [10, 20, 40]          # Number of lines in the abstract_mask.py
 resample_nums = [5]                 # Number of resampling steps
-masks_to_test = ["random_path_thin", "random_path_thick"]  # Mask types
 mse_ddpm_list = []                 # To store average MSEs per image
 
+# =========== Initializing Masks ==================
+masks_to_test = []
+for line in line_numbers:
+    random_mask_thin = RandomPathMaskGenerator(num_lines=line, line_thickness=1, line_length=5)
+    random_mask_thick = RandomPathMaskGenerator(num_lines=line, line_thickness=5, line_length=5)
 
-def Testing():
+    masks_to_test.append(random_mask_thin)
+    masks_to_test.append(random_mask_thick)
+
+
+def testing(mask_generator : MaskGenerator):
     # writes data to csv file
     writer = csv.writer(file)
-    header = ["image_num", "mask_type", "num_lines", "resample_steps", "mse"]
+    header = ["image_num", "num_lines", "resample_steps", "mse"]
     writer.writerow(header)
     logging.info("Processing data")
-    image_counter = 0
-    num_images_to_process = 5
-    n_samples = 1  # Number of samples per mask config
+    image_counter = dd.get_attribute('image_counter')
+    num_images_to_process = dd.get_attribute('num_images_to_process')
+    n_samples = dd.get_attribute('n_samples') # Number of samples per abstract_mask.py config
 
     loader = train_loader  # change to test_loader, val_loader depending on what you want to test
-
     # ======== Loop Through Batches ========
     for batch in loader:
         if image_counter >= num_images_to_process:
@@ -91,63 +103,56 @@ def Testing():
 
         input_image = batch[0].to(dd.get_device()) # (Batch size, Channels, Height, Width)
 
+
         # Convert back to unstandardized form for land masking
-            #TODO: Fix all this/make it nicer/sanity check
         input_image_original = dd.get_standardizer().unstandardize(input_image)
         land_mask = (input_image_original != 0).float()
 
+        mask = mask_generator.generate_mask(input_image.shape, land_mask)
+        num_lines = mask.num_lines
+
+        mask = mask.to(dd.get_device())
+
         # ======== Masking and Inpainting Loops ========
-        for mask_type in masks_to_test:
-            for resample in resample_nums:
-                for num_lines in line_numbers:
+        for resample in resample_nums:
 
-                    # Generate a mask with different parameters
-                    if mask_type == "random_path_thin":
-                        mask = generate_random_path_mask(input_image.shape, land_mask, num_lines=num_lines,
-                                                         line_thickness=1)
-                    elif mask_type == "random_path_thick":
-                        mask = generate_random_path_mask(input_image.shape, land_mask, num_lines=num_lines,
-                                                         line_thickness=5)
+            torch.save(mask, f"results/predicted/{mask_generator}_{num_lines}.pt")
 
-                        mask = mask.to(dd.get_device())
-                    torch.save(mask, f"results/predicted/{mask_type}_{num_lines}.pt")
+            mse_ddpm_samples = []
+            # ======== Generate Samples ========
+            for i in range(n_samples):
+                final_image_ddpm = inpaint_generate_new_images(
+                    best_model,
+                    input_image,
+                    mask,
+                        n_samples=1, #number of samples to generate. I think it doesn't work, not sure
+                        device=dd.get_device(),
+                    resample_steps=resample
+                )
 
-                    mse_ddpm_samples = []
+                # Save inpainted result and abstract_mask.py
+                torch.save(final_image_ddpm,
+                           f"results/predicted/img{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                torch.save(mask_generator,
+                           f"results/predicted/mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
 
-                    # ======== Generate Samples ========
-                    for i in range(n_samples):
-                        final_image_ddpm = inpaint_generate_new_images(
-                            best_model,
-                            input_image,
-                            mask,
-                                n_samples=1, #number of samples to generate. I think it doesn't work, not sure
-                                device=dd.get_device(),
-                            resample_steps=resample
-                        )
+                # Calculate MSE for masked region
+                mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
+                mse_ddpm_samples.append(mse_ddpm.item())
 
-                        # Save inpainted result and mask
-                        torch.save(final_image_ddpm,
-                                   f"results/predicted/img{batch[1].item()}_{mask_type}_resample{resample}_num_lines_{num_lines}.pt")
-                        torch.save(mask,
-                                   f"results/predicted/mask{batch[1].item()}_{mask_type}_resample{resample}_num_lines_{num_lines}.pt");
+                logging.info(
+                    f"MSE (DDPM Inpainting) with {num_lines} lines for image {image_counter}, sample {i}: {mse_ddpm.item()}")
 
-                        # Calculate MSE for masked region
-                        mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
-                        mse_ddpm_samples.append(mse_ddpm.item())
+                # Write result to CSV
+                output = [image_counter, num_lines, resample, mse_ddpm.item()]
+                writer.writerow(output)
 
-                        logging.info(
-                            f"MSE (DDPM Inpainting) with {num_lines} lines for image {image_counter}, sample {i}: {mse_ddpm.item()}")
+                del final_image_ddpm
+                torch.cuda.empty_cache()
 
-                        # Write result to CSV
-                        output = [image_counter, mask_type, num_lines, resample, mse_ddpm.item()]
-                        writer.writerow(output)
-
-                        del final_image_ddpm
-                        torch.cuda.empty_cache()
-
-                # Compute average MSE over all samples for this mask config
-                mean_mse_ddpm_samples = np.mean(mse_ddpm_samples)
-                mse_ddpm_list.append(mean_mse_ddpm_samples)
+        # Compute average MSE over all samples for this abstract_mask.py config
+        mean_mse_ddpm_samples = np.mean(mse_ddpm_samples)
+        mse_ddpm_list.append(mean_mse_ddpm_samples)
 
         image_counter += 1
 
@@ -158,7 +163,8 @@ def Testing():
 # ======== CSV Output File for Results ========
 with open("inpainting-xl-data.csv", "w", newline="") as file:
     try:
-        Testing()
+        for mask in masks_to_test:
+            testing(mask)
     except Exception as e:
         logging.error(f"Error during processing: {e}")
         exit(1)
