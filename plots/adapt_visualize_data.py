@@ -47,7 +47,7 @@ def plot_png(image_path, land_mask_path):
     """
     To change the original png data vizualization into a plot. No longer useful
     :param image_path: Path to ocean image to be plotted, must be 94x44
-    :param land_mask_path: Path to land mask image, must be 94x44
+    :param land_mask_path: Path to land abstract_mask.py image, must be 94x44
     """
     data = OceanImageDataset(num=1)
     train_loader = DataLoader(data, batch_size=1, shuffle=True)
@@ -68,8 +68,8 @@ def plot_png(image_path, land_mask_path):
 def plot_tensor(input_tensor, land_mask_tensor=None, filename = "results/plot.png"):
     """
     Plots a tensor. May still be useful
-    :param input_tensor: (3, 94, 44), where third channel is binary representation of land mask
-    :param land_mask_tensor: Optional land mask tensor, default is third channel
+    :param input_tensor: (3, 94, 44), where third channel is binary representation of land abstract_mask.py
+    :param land_mask_tensor: Optional land abstract_mask.py tensor, default is third channel
     """
 
     if land_mask_tensor is not None:
