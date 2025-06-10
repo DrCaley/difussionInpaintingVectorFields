@@ -26,7 +26,7 @@ max_beta = dd.get_attribute("max_beta")
 
 if len(sys.argv) < 2 :
     print("Usage: python3 inpainting_model_test.py <model file ending with .pt>")
-    store_path = dd.get_attribute("store_path")
+    store_path = dd.get_attribute("model_path")
 else :
     store_path = sys.argv[1]
 
@@ -82,7 +82,7 @@ def Testing():
     num_images_to_process = 5
     n_samples = 1  # Number of samples per mask config
 
-    loader = train_loader  # change to test_loader, val_loader depending on what you want to test
+    loader = train_loader  # TODO: Add this being changable to yaml
 
     # ======== Loop Through Batches ========
     for batch in loader:
