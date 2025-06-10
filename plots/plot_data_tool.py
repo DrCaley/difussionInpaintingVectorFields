@@ -7,6 +7,8 @@ matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import torch
 
+
+
 def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: float = 1.0, title: str = "Vector Field", file: str = "vector_field.png"):
     assert vx.shape == vy.shape, "vx and vy must be the same shape"
     H, W = vx.shape
