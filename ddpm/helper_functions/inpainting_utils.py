@@ -41,7 +41,10 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         alpha_t_bar = ddpm.alpha_bars[t]
 
         # Partially denoising the image
-        less_noised_img = (1 / alpha_t.sqrt()) * (noisy_img - (1 - alpha_t) / (1 - alpha_t_bar).sqrt() * epsilon_theta)
+        if dd.get_attribute('gaussian_scaling'):
+            less_noised_img = (1 / alpha_t.sqrt()) * (noisy_img - (1 - alpha_t) / (1 - alpha_t_bar).sqrt() * epsilon_theta)
+        else:
+            less_noised_img = (1 / alpha_t.sqrt()) * (noisy_img - epsilon_theta)
         tensor_size = torch.zeros(n_samples, 2, height, width).to(device).float()
 
         if t > 0:

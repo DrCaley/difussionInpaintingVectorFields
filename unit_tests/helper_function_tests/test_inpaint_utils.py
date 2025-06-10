@@ -120,9 +120,10 @@ def test_forward_reconstructs_image():
     alpha_t = ddpm.alphas[t_idx]
     alpha_bar_t = ddpm.alpha_bars[t_idx]
 
-    reconstructed = (1 / alpha_t.sqrt()) * (
-        x_t - ((1 - alpha_t) / (1 - alpha_bar_t).sqrt()) * known_noise
-    )
+    if dd.get_attribute('gaussian_scaling'):
+        reconstructed = (1 / alpha_t.sqrt()) * (x_t - (1 - alpha_t) / (1 - alpha_bar_t).sqrt() * known_noise)
+    else:
+        reconstructed = (1 / alpha_t.sqrt()) * (x_t - known_noise)
 
     # Measure how close we are
     mse = torch.nn.functional.mse_loss(reconstructed, x0)
