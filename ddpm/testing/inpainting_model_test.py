@@ -9,7 +9,7 @@ import sys
 from data_prep.data_initializer import DDInitializer
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from ddpm.neural_networks.ddpm_gaussian import MyDDPMGaussian
+from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from ddpm.helper_functions.masks import generate_random_path_mask
 from ddpm.neural_networks.unets.unet_xl import MyUNet

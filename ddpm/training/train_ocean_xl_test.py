@@ -12,7 +12,7 @@ from tqdm import tqdm
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from data_prep.data_initializer import DDInitializer
-from ddpm.neural_networks.ddpm_gaussian import MyDDPMGaussian
+from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 from ddpm.helper_functions.model_evaluation import evaluate
 

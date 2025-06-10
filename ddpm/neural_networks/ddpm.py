@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from data_prep.data_initializer import DDInitializer
+dd = DDInitializer()
 
 class MyDDPMGaussian(nn.Module):
     def __init__(self, network, n_steps=200, min_beta=10 ** -4, max_beta=0.02, device=None, image_chw=(1, 64, 128)):
@@ -41,7 +43,10 @@ class MyDDPMGaussian(nn.Module):
         # - Scale the original image by sqrt(a_bar)
         # - Scale the noise by sqrt(1 - a_bar)
         # - Combine the scaled original image and scaled noise to get the noisy image
-        noisy = a_bar.sqrt().reshape(n, 1, 1, 1) * x0 + (1 - a_bar).sqrt().reshape(n, 1, 1, 1) * epsilon
+        if dd.get_attribute('gaussian_scaling'):
+            noisy = a_bar.sqrt().reshape(n, 1, 1, 1) * x0 + (1 - a_bar).sqrt().reshape(n, 1, 1, 1) * epsilon
+        else:
+            noisy = a_bar.sqrt().reshape(n, 1, 1, 1) * x0 + epsilon
 
         # Return the noisy image
         return noisy
