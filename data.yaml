@@ -8,8 +8,8 @@ n_epochs: 2
 batch_size: 35
 lr: 0.001
 
-loss_function: physical
-noise_function: gaussian
+noise_function: div_gaussian
+loss_function: mse
 w1: 0.5
 w2: 0.5
 
@@ -22,5 +22,6 @@ inpainting_batch_size: 1
 image_counter: 0
 num_images_to_process: 5
 n_samples: 1
+gaussian_scaling: True
 
 model_path: "./"

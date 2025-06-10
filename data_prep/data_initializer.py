@@ -1,20 +1,16 @@
 import os
 import sys
-import math
 import pickle
 
 import torch
 import random
 import numpy as np
 import yaml
-from torch.utils.data import DataLoader, random_split
 from torchvision.transforms import Compose
-
-from ddpm.helper_functions.loss_functions import LossStrategy, get_loss_strategy
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), './../')))
 from data_prep.ocean_image_dataset import OceanImageDataset
-from ddpm.helper_functions.noise import NoiseStrategy, get_noise_strategy
+from ddpm.helper_functions.noise_utils import NoiseStrategy, get_noise_strategy
 from ddpm.helper_functions.loss_functions import LossStrategy, get_loss_strategy
 from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
@@ -33,8 +29,8 @@ class DDInitializer:
         return cls._instance
 
     def _init(self, config_path, pickle_path, boundaries_path):
-        self.using_pycharm = os.path.exists('../data.yaml')
-        prefix = "../" if self.using_pycharm else "./"
+        self.using_pycharm = os.path.exists('../../data.yaml')
+        prefix = "../../" if self.using_pycharm else "./"
 
         self._instance._setup_yaml_file(os.path.join(prefix, config_path))
         self._instance._setup_tensors(os.path.join(prefix, pickle_path))
@@ -97,7 +93,7 @@ class DDInitializer:
         w1 = self._config.get("w1", 1.0)
         w2 = self._config.get("w2", 0.0)
         try:
-            self.loss_strategy: LossStrategy = get_loss_strategy(loss_type, w1=w1, w2=w2)
+            self.loss_strategy: LossStrategy = get_loss_strategy(loss_type)
             print(f"Loaded loss strategy: {loss_type} (w1={w1}, w2={w2})")
         except KeyError:
             raise ValueError(f"Unknown loss strategy: {loss_type}")
