@@ -38,6 +38,8 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
         color='blue'
     )
     my_path = os.path.dirname(os.path.abspath(__file__))
+
+    # TODO: REMOVE/MODIFY
     plt.gca().invert_yaxis()
     plt.axis("equal")
     plt.title(title)
