@@ -48,7 +48,6 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         noise_strat = dd.get_noise_strategy()
 
         input_img = input_image.clone().to(device)
-        mask = mask.to(device)
 
         noise = noise_strat(input_img, torch.tensor([0], device=device))
 
