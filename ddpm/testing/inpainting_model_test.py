@@ -90,11 +90,10 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
     n_samples = dd.get_attribute('n_samples')
 
     # ======== Loop Through Batches ========
-    batch_num = 1
     loader = train_loader
 
     for batch in loader:
-        logging.info("Processing batch:", batch_num)
+        logging.info("Processing batch")
         if image_counter >= num_images_to_process:
             break
 
@@ -151,8 +150,7 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
         mse_ddpm_list.append(mean_mse_ddpm_samples)
 
         image_counter += 1
-        logging.info("Finished processing batch:", batch_num)
-        batch_num += 1
+        logging.info("Finished processing batch:")
 
 
     return image_counter
