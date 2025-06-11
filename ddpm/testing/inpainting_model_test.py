@@ -20,6 +20,8 @@ dd = DDInitializer()
 (training_tensor, validation_tensor, test_tensor) = dd.get_tensors()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename="inpainting_model_test_log.txt")
 
+results_path = "./results/"
+
 # ======== Model Configuration ========
 n_steps = dd.get_attribute("n_steps")
 min_beta = dd.get_attribute("min_beta")
@@ -107,15 +109,12 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
         land_mask = (input_image_original != 0).float().to(device)
 
         mask = mask_generator.generate_mask(input_image.shape, land_mask)
-        num_lines = mask_generator.num_lines
+        num_lines = mask_generator.get_num_lines()
 
-        mask = mask.to(device)
-
-        print("using", device)
         # ======== Masking and Inpainting Loops ========
         for resample in resample_nums:
 
-            torch.save(mask, f"./ddpm/testing/results/predicted/{mask_generator}_{num_lines}.pt")
+            torch.save(mask, f"{results_path}{mask_generator}_{num_lines}.pt")
 
             mse_ddpm_samples = []
             # ======== Generate Samples ========
@@ -131,9 +130,9 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
 
                 # Save inpainted result and mask.py
                 torch.save(final_image_ddpm,
-                           f"./ddpm/testing/results/predicted/img{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                           f"{results_path}img{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
                 torch.save(mask_generator,
-                           f"./ddpm/testing/results/predicted/mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                           f"{results_path}mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
 
                 # Calculate MSE for masked region
                 mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
@@ -160,10 +159,11 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
     return image_counter
 
 # ======== CSV Output File for Results ========
-with open("inpainting-xl-data.csv", "w", newline="") as file:
+with open("inpainting_xl_data.csv", "w", newline="") as file:
     try:
         image_counter = dd.get_attribute("image_counter")
         for mask in masks_to_test:
+            logging.info(f"Running next mask: {mask}")
             image_counter = inpaint_testing(mask, image_counter)
     except Exception as e:
         logging.error(f"Error during processing: {e}")
