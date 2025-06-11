@@ -15,7 +15,7 @@ from data_prep.data_initializer import DDInitializer
 from ddpm.helper_functions.compute_divergence import compute_divergence
 
 # Types of noise to test
-from noising_process.incompressible_gp.adding_noise.divergence_free_noise import exact_div_free_field_from_stream, divergence_free_noise, normalized_divergence_free_noise, gaussian_at_end_divergence_free_noise, gaussian_each_step_divergence_free_noise, stream_function_noise
+from noising_process.incompressible_gp.adding_noise.divergence_free_noise import exact_div_free_field_from_stream, gaussian_each_step_divergence_free_noise, generate_div_free_noise, layered_div_free_noise
 
 
 
@@ -26,13 +26,13 @@ data_init = DDInitializer()
 output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'outputs')
 
 # CSV
-csv_file = os.path.join(output_dir, f"divergences_EDFFFS.csv")
+csv_file = os.path.join(output_dir, f"divergences_.csv")
 with open(csv_file, mode='w', newline='') as file:
     writer = csv.writer(file)
     writer.writerow(['Number', 'Divergence'])
 
 # I've lost the plot
-plot_file = os.path.join(output_dir, f"div_plot_EDFFFS.png")
+plot_file = os.path.join(output_dir, f"div_plot_divergence_free_noise.png")
 
 
 # Generate vector field images
@@ -44,7 +44,7 @@ tensor_to_draw_y = data_init.validation_tensor[:, :, 1, 0]
 
 # IMAGE GENERATION LOOP
 for i in range(500):
-    vx, vy = exact_div_free_field_from_stream(94, 44, 1)
+    vx, vy = gaussian_each_step_divergence_free_noise(94, 44, 1)
     tensor_to_draw_x = vx
     tensor_to_draw_y = vy
 
@@ -61,7 +61,7 @@ for i in range(500):
 
 # Create GIFS
 images = [imageio.imread(f) for f in sorted(filenames)]
-imageio.mimsave(output_dir + "\\vector_fields_EDFFFS.gif", images, fps=15)  # Adjust fps as needed
+imageio.mimsave(output_dir + "\\vector_fields_divergence_free_noise.gif", images, fps=15)  # Adjust fps as needed
 
 # No more 1000+ image pushes :(
 for f in filenames:
