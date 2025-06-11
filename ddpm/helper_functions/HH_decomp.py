@@ -8,7 +8,7 @@ from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import spsolve
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from plots.plot_data_tool import plot_vector_field
+from plots.plot_vector_field_tool import plot_vector_field
 from ddpm.helper_functions.compute_divergence import compute_divergence
 
 
