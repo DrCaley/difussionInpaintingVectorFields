@@ -6,14 +6,15 @@ import logging
 import csv
 import sys
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
 from ddpm.helper_functions.mask_factory.masks.random_path import RandomPathMaskGenerator
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from ddpm.neural_networks.unets.unet_xl import MyUNet
+
+
 
 dd = DDInitializer()
 
@@ -73,8 +74,8 @@ except Exception as e:
 
 # ======== Inpainting Evaluation Parameters ========
 line_numbers = [10, 20, 40]          # Number of lines in the abstract_mask.py
-resample_nums = [5]                 # Number of resampling steps
-mse_ddpm_list = []                 # To store average MSEs per image
+resample_nums = [5]                  # Number of resampling steps
+mse_ddpm_list = []                   # To store average MSEs per image
 
 # =========== Initializing Masks ==================
 masks_to_test = []
@@ -131,7 +132,7 @@ def inpaint_testing(mask_generator : MaskGenerator):
                     resample_steps=resample
                 )
 
-                # Save inpainted result and abstract_mask.py
+                # Save inpainted result and mask.py
                 torch.save(final_image_ddpm,
                            f"results/predicted/img{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
                 torch.save(mask_generator,
