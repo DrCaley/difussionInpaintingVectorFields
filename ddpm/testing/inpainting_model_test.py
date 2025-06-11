@@ -16,6 +16,8 @@ from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 
+
+
 dd = DDInitializer()
 
 (training_tensor, validation_tensor, test_tensor) = dd.get_tensors()
