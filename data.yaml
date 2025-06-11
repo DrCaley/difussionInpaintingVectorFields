@@ -8,12 +8,12 @@ n_epochs: 5
 batch_size: 35
 lr: 0.001
 
-noise_function: div_free
+noise_function: gaussian
 loss_function: mse
 w1: 0.5
 w2: 0.5
 
-n_steps: 1000
+n_steps: 100
 min_beta: 0.0001
 max_beta: 0.02
 training_mode: True
@@ -22,6 +22,6 @@ inpainting_batch_size: 1
 image_counter: 0
 num_images_to_process: 5
 n_samples: 1
-gaussian_scaling: False
+gaussian_scaling: True
 
-model_path: "../trained_models/ddpm_ocean_model_Jun06_1223.pt"
+model_path: "../trained_models/weekend_ddpm_ocean_model.pt"

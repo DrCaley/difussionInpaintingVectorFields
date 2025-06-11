@@ -72,8 +72,8 @@ except Exception as e:
 
 # ======== Inpainting Evaluation Parameters ========
 line_numbers = [10, 20, 40]          # Number of lines in the abstract_mask.py
-resample_nums = [5]                 # Number of resampling steps
-mse_ddpm_list = []                 # To store average MSEs per image
+resample_nums = [5]                  # Number of resampling steps
+mse_ddpm_list = []                   # To store average MSEs per image
 
 # =========== Initializing Masks ==================
 masks_to_test = []
@@ -85,7 +85,7 @@ for line in line_numbers:
     masks_to_test.append(random_mask_thick)
 
 
-def testing(mask_generator : MaskGenerator):
+def inpaint_testing(mask_generator : MaskGenerator):
     # writes data to csv file
     writer = csv.writer(file)
     header = ["image_num", "num_lines", "resample_steps", "mse"]
@@ -164,7 +164,7 @@ def testing(mask_generator : MaskGenerator):
 with open("inpainting-xl-data.csv", "w", newline="") as file:
     try:
         for mask in masks_to_test:
-            testing(mask)
+            inpaint_testing(mask)
     except Exception as e:
         logging.error(f"Error during processing: {e}")
         exit(1)
