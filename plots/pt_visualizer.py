@@ -58,6 +58,6 @@ def load_and_visualize_pt(file_path, title="loaded_tensor", save_dir="tensor_ima
     print("Loaded tensor shape:", tensor.shape)
     visualize_tensor(tensor, title=title, save_dir=save_dir)
 
-# Example usage:
-load_and_visualize_pt('../ddpm/testing/results/predicted/RandomPathMaskGenerator_lines10.pt',
-                      title="RandomPathMaskGenerator_lines10")
+# Use here:
+load_and_visualize_pt('../ddpm/testing/results/predicted/RandomPath_10.pt',
+                      title="RandomPath_10")
