@@ -81,3 +81,12 @@ def avg_pixel_value(original_image, predicted_image, mask):
     avg_pixel_value = torch.sum(torch.abs(original_image * mask)) / mask.sum()
     avg_diff = torch.sum(torch.abs((predicted_image * mask) - (original_image * mask))) / mask.sum()
     return avg_diff * (100 / avg_pixel_value)
+
+
+# === Helper function to safely convert tensor to numpy ===
+def to_numpy(tensor: torch.Tensor) -> np.ndarray:
+    """
+    Safely convert a tensor to a numpy array.
+    If tensor is on CUDA, moves it to CPU first.
+    """
+    return tensor.detach().cpu().numpy()
