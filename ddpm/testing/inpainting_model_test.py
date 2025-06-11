@@ -80,7 +80,7 @@ for line in line_numbers:
     masks_to_test.append(random_mask_thin)
     masks_to_test.append(random_mask_thick)
 
-def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
+def inpaint_testing(mask_generator: MaskGenerator, image_counter: int, loader=train_loader) -> int:
     writer = csv.writer(file)
     header = ["image_num", "num_lines", "resample_steps", "mse"]
     writer.writerow(header)
@@ -90,7 +90,6 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
     n_samples = dd.get_attribute('n_samples')
 
     # ======== Loop Through Batches ========
-    loader = train_loader
 
     for batch in loader:
         logging.info("Processing batch")
