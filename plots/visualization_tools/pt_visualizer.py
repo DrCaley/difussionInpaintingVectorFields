@@ -93,7 +93,8 @@ def load_and_visualize_pt(file_path, title="loaded_tensor", save_dir="pt_visuali
     Passes optional args to the visualizer.
     """
     tensor = torch.load(file_path, map_location='cpu', weights_only=False)
-    visualize_tensor(tensor, title=title, save_dir=save_dir, **kwargs)
+    visualize_tensor(tensor[0,0], title=title, save_dir=f"0_{save_dir}", **kwargs)
+    visualize_tensor(tensor[0,1], title=title, save_dir=f"1_{save_dir}", **kwargs)
 
 load_and_visualize_pt(
     '../../ddpm/testing/results/predicted/mask6809_RandomPath_resample5_num_lines_10.pt',
