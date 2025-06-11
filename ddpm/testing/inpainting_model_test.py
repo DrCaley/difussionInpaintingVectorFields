@@ -106,8 +106,6 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
 
         # Convert back to unstandardized form for land masking
         input_image_original = dd.get_standardizer().unstandardize(input_image).to(device)
-        torch.save(input_image_original,
-                   f"./ddpm/testing/results/predicted/img{batch[1].item()}_initial.pt")
         land_mask = (input_image_original != 0).float().to(device)
 
         mask = mask_generator.generate_mask(input_image.shape, land_mask)
@@ -135,6 +133,9 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
                            f"{results_path}img{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
                 torch.save(mask_generator,
                            f"{results_path}mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                torch.save(input_image_original,
+                           f"{results_path}img_0_{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+
 
                 # Calculate MSE for masked region
                 mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
