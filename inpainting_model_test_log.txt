@@ -1,0 +1,7 @@
+2025-06-11 10:11:58,273 - INFO - Loading model
+2025-06-11 10:11:58,288 - INFO - Model loaded successfully
+2025-06-11 10:11:58,288 - INFO - Preparing data
+2025-06-11 10:11:58,288 - INFO - Data prepared successfully
+2025-06-11 10:11:58,304 - INFO - Processing data
+2025-06-11 10:11:58,336 - INFO - Processing batch
+2025-06-11 10:11:58,376 - ERROR - Error during processing: Parent directory results/predicted does not exist.

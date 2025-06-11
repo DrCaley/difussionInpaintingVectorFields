@@ -11,6 +11,8 @@ def get_dd_initializer():
 # Used for plain divergence free noise
 
 def exact_div_free_field_from_stream(H, W, freq, device='cpu'):
+    dd = get_dd_initializer()
+    device = dd.get_device()
     x = torch.linspace(0, 2 * torch.pi, W, device=device)
     y = torch.linspace(0, 2 * torch.pi, H, device=device)
     X, Y = torch.meshgrid(x, y, indexing='ij')
@@ -31,6 +33,7 @@ def exact_div_free_field_from_stream(H, W, freq, device='cpu'):
 
 def gaussian_each_step_divergence_free_noise(shape: torch.Size, t: torch.Tensor, device='cpu') -> torch.Tensor:
     dd = get_dd_initializer()
+    device = dd.get_device()
 
     u_mean = dd.get_attribute('u_training_mean')
     v_mean = dd.get_attribute('v_training_mean')
@@ -77,7 +80,7 @@ import torch.nn.functional as F
 def generate_div_free_noise(batch_size, height, width, device=None):
     dd = get_dd_initializer()
     device = dd.get_device()
-    psi = torch.randn(batch_size, 1, height, width, device=get_dd_initializer().get_device())
+    psi = torch.randn(batch_size, 1, height, width, device=device)
 
     dy = psi[:, :, 1:, :] - psi[:, :, :-1, :]
     dx = psi[:, :, :, 1:] - psi[:, :, :, :-1]
