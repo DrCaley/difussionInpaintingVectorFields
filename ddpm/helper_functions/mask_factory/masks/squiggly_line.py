@@ -2,8 +2,10 @@ import random
 import torch
 import numpy as np
 
+from data_prep.data_initializer import DDInitializer
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
 
+dd = DDInitializer
 
 class SquigglyLineMaskGenerator(MaskGenerator):
     def __init__(self, input_image_original, num_lines=5, line_thickness=2):
@@ -50,7 +52,12 @@ class SquigglyLineMaskGenerator(MaskGenerator):
             for i in range(len(points) - 1):
                 draw_line(mask, points[i], points[i + 1], line_thickness)
 
+        device = dd.get_device()
+
         mask = torch.tensor(mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+
+        mask = mask.to(device)
+
         return mask
 
     def __str__(self):
