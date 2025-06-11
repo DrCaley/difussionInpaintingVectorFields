@@ -42,3 +42,6 @@ class StraightLineMaskGenerator(MaskGenerator):
 
     def __str__(self):
         return "StraightLineMaskGenerator"
+
+    def get_num_lines(self):
+        return self.get_num_lines()

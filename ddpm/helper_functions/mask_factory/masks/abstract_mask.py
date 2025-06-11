@@ -12,3 +12,7 @@ class MaskGenerator(ABC):
     @abstractmethod
     def __str__(self):
         pass
+
+    @abstractmethod
+    def get_num_lines(self):
+        return 0

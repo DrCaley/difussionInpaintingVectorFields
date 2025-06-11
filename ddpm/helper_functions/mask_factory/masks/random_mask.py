@@ -4,6 +4,7 @@ import torch
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
 
 class RandomMaskGenerator(MaskGenerator):
+
     def __init__(self, input_image_original, max_mask_size=32):
         self.input_image_original = input_image_original
         self.max_mask_size = max_mask_size
@@ -32,3 +33,6 @@ class RandomMaskGenerator(MaskGenerator):
 
     def __str__(self):
         return "RandomMask"
+
+    def get_num_lines(self):
+        return super().get_num_lines()

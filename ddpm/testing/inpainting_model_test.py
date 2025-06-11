@@ -109,7 +109,7 @@ def testing(mask_generator : MaskGenerator):
         land_mask = (input_image_original != 0).float()
 
         mask = mask_generator.generate_mask(input_image.shape, land_mask)
-        num_lines = mask.num_lines
+        num_lines = mask_generator.get_num_lines()
 
         mask = mask.to(dd.get_device())
 

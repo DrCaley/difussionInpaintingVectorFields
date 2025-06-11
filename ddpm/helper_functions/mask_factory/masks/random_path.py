@@ -67,5 +67,8 @@ class RandomPathMaskGenerator(MaskGenerator):
 
         return mask
 
+    def get_num_lines(self):
+        return self.num_lines
+
     def __str__(self):
         return "RandomPath"
