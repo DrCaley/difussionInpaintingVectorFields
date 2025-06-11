@@ -6,7 +6,7 @@ from ddpm.helper_functions.model_evaluation import noise_strat
 
 dd = DDInitializer()
 
-def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
+def inpaint_generate_new_images(ddpm, input_image, mask : torch.Tensor, n_samples=16, device=None,
                                 resample_steps=1, channels=1, height=64, width=128):
     """
     Given a DDPM model, an input image, and a mask, generates in-painted samples.
@@ -48,6 +48,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         noise_strat = dd.get_noise_strategy()
 
         input_img = input_image.clone().to(device)
+        mask = mask.to(device)
 
         noise = noise_strat(input_img, torch.tensor([0], device=device))
 
