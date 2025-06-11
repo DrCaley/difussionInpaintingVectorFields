@@ -1,6 +1,7 @@
 import os.path
 import numpy as np
 import torch
+from tensorflow.python.eager.context import device
 from torch.utils.data import DataLoader
 import logging
 import csv
@@ -96,7 +97,7 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
 
         input_image = batch[0].to(dd.get_device())
         input_image_original = dd.get_standardizer().unstandardize(input_image)
-        land_mask = (input_image_original != 0).float().to("cpu")
+        land_mask = (input_image_original != 0).float().to(dd.get_device())
 
         mask = mask_generator.generate_mask(input_image.shape, land_mask)
         mask = mask.to(dd.get_device())
