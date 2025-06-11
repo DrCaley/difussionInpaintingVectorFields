@@ -6,12 +6,13 @@ from ddpm.helper_functions.model_evaluation import noise_strat
 
 dd = DDInitializer()
 
-def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=dd.get_device(),
+def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
                                 resample_steps=1, channels=1, height=64, width=128):
     """
     Given a DDPM model, an input image, and a mask, generates in-painted samples.
     """
     noised_images = [None] * (ddpm.n_steps + 1)
+    device = dd.get_device()
 
     def denoise_one_step(noisy_img, noise_strat):
         time_tensor = torch.full((n_samples, 1), t, device=device, dtype=torch.long)

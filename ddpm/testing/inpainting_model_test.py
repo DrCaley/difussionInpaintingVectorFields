@@ -98,7 +98,6 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int, loader=tr
 
         device = dd.get_device()
 
-        print("using", device)
         input_image = batch[0].to(device) # (Batch size, Channels, Height, Width)
 
         # Convert back to unstandardized form for land masking
@@ -110,6 +109,7 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int, loader=tr
 
         mask = mask.to(device)
 
+        print("using", device)
         # ======== Masking and Inpainting Loops ========
         for resample in resample_nums:
 
