@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn.functional as f
 
@@ -6,11 +7,8 @@ from ddpm.helper_functions.model_evaluation import noise_strat
 
 dd = DDInitializer()
 
-def inpaint_generate_new_images(ddpm, input_image, mask : torch.Tensor, n_samples=16, device=None,
+def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
                                 resample_steps=1, channels=1, height=64, width=128):
-    """
-    Given a DDPM model, an input image, and a mask, generates in-painted samples.
-    """
     noised_images = [None] * (ddpm.n_steps + 1)
     device = dd.get_device()
 
@@ -23,7 +21,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask : torch.Tensor, n_sample
 
         if dd.get_attribute('gaussian_scaling'):
             less_noised_img = (1 / alpha_t.sqrt()) * (
-                    noisy_img - ((1 - alpha_t) / (1 - alpha_t_bar).sqrt()) * epsilon_theta
+                noisy_img - ((1 - alpha_t) / (1 - alpha_t_bar).sqrt()) * epsilon_theta
             )
         else:
             less_noised_img = (1 / alpha_t.sqrt()) * (noisy_img - epsilon_theta)
@@ -44,15 +42,20 @@ def inpaint_generate_new_images(ddpm, input_image, mask : torch.Tensor, n_sample
         return noised_img
 
     with torch.no_grad():
-
         noise_strat = dd.get_noise_strategy()
 
-        input_img = input_image.clone().to(device)
-        mask = mask.float().to(device)
+        if isinstance(input_image, np.ndarray):
+            input_img = torch.from_numpy(input_image).float().to(device)
+        else:
+            input_img = input_image.clone().to(device)
+
+        if isinstance(mask, np.ndarray):
+            mask = torch.from_numpy(mask).float().to(device)
+        else:
+            mask = mask.float().to(device)
 
         noise = noise_strat(input_img, torch.tensor([0], device=device))
 
-        # Step-by-step forward noising
         noised_images[0] = input_img
         for t in range(ddpm.n_steps):
             noised_images[t + 1] = noise_one_step(noised_images[t], t, noise_strat)
@@ -63,11 +66,10 @@ def inpaint_generate_new_images(ddpm, input_image, mask : torch.Tensor, n_sample
             for i in range(resample_steps):
                 x = denoise_one_step(x, noise_strat, t)
                 x = noised_images[t] * (1 - mask) + (x * mask)
-
                 if (i + 1) < resample_steps:
                     x = noise_one_step(x, t, noise_strat)
-    return x
 
+    return x
 
 def calculate_mse(original_image, predicted_image, mask, flow=False):
     masked_original = original_image * mask
@@ -75,8 +77,16 @@ def calculate_mse(original_image, predicted_image, mask, flow=False):
     mse = f.mse_loss(masked_predicted, masked_original, reduction='sum') / mask.sum()
     return mse
 
-
 def avg_pixel_value(original_image, predicted_image, mask):
     avg_pixel_value = torch.sum(torch.abs(original_image * mask)) / mask.sum()
     avg_diff = torch.sum(torch.abs((predicted_image * mask) - (original_image * mask))) / mask.sum()
     return avg_diff * (100 / avg_pixel_value)
+
+
+# === Helper function to safely convert tensor to numpy ===
+def to_numpy(tensor: torch.Tensor) -> np.ndarray:
+    """
+    Safely convert a tensor to a numpy array.
+    If tensor is on CUDA, moves it to CPU first.
+    """
+    return tensor.detach().cpu().numpy()
