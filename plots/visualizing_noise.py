@@ -10,7 +10,6 @@ from plot_data_tool import plot_vector_field
 
 # Setup paths
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), './../')))
-from data_prep.ocean_image_dataset import OceanImageDataset
 from data_prep.data_initializer import DDInitializer
 from ddpm.helper_functions.compute_divergence import compute_divergence
 

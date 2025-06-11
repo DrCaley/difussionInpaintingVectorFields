@@ -5,5 +5,11 @@ __pycache__/
 output/
 example_nn/
 /training_output/
+/plots/pt_visualizer_images
+/plots/outputs
+/plots/images
+*.csv
+*.txt
+*.pt
 util.py
 data.pickle

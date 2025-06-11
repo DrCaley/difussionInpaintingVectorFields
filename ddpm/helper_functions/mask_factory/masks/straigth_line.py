@@ -2,9 +2,11 @@ import random
 import torch
 import numpy as np
 
+from data_prep.data_initializer import DDInitializer
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
 from ddpm.helper_functions.mask_factory.masks.border_mask import BorderMaskGenerator
 
+dd = DDInitializer
 
 class StraightLineMaskGenerator(MaskGenerator):
     def __init__(self, num_lines=10, line_thickness=5):
@@ -36,7 +38,13 @@ class StraightLineMaskGenerator(MaskGenerator):
 
         border_mask = BorderMaskGenerator().generate_mask(image_shape, land_mask)
         # Exclude land
-        mask = land_mask * mask * border_mask
+        device = dd.get_device()
+
+        mask = mask.to(device)
+        land_mask = land_mask.to(device)
+        border_mask = border_mask.to(device)
+
+        mask = mask * land_mask * border_mask
 
         return mask
 

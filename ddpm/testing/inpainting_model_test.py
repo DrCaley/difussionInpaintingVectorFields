@@ -115,7 +115,7 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
         # ======== Masking and Inpainting Loops ========
         for resample in resample_nums:
 
-            torch.save(mask, f"results/predicted/{mask_generator}_{num_lines}.pt")
+            torch.save(mask, f"./ddpm/testing/results/predicted/{mask_generator}_{num_lines}.pt")
 
             mse_ddpm_samples = []
             # ======== Generate Samples ========
@@ -131,9 +131,9 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
 
                 # Save inpainted result and mask.py
                 torch.save(final_image_ddpm,
-                           f"results/predicted/img{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                           f"./ddpm/testing/results/predicted/img{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
                 torch.save(mask_generator,
-                           f"results/predicted/mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                           f"./ddpm/testing/results/predicted/mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
 
                 # Calculate MSE for masked region
                 mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
