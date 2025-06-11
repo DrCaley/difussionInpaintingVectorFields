@@ -130,3 +130,39 @@ def test_forward_reconstructs_image():
 
     print(f"MSE with dd noise strategy: {mse.item()}")
     assert mse < 1e-3, "Reconstructed image is not close enough to the original using DD noise"
+
+def test_backward_learns_to_predict_noise():
+    # Define dummy DDPM
+    class DummyDDPM:
+        def __init__(self):
+            self.n_steps = 1
+            self.alphas = [torch.tensor(0.9)]
+            self.alpha_bars = [torch.tensor(0.9)]
+
+        def backward(self, x_t, t):
+            return x_t - x_0  # Perfectly predicts (x_t - x_0) assuming epsilon = x_t - x_0
+
+    dd = DDInitializer()
+    noise_strat = dd.get_noise_strategy()
+
+    # Clean image
+    x_0 = torch.ones(1, 2, 4, 4) * 0.5
+    epsilon_true = noise_strat(x_0, t = torch.tensor([1]))
+    alpha_bar_t = torch.tensor(0.9)
+
+    # Forward diffusion
+    if dd.get_attribute('gaussian_scaling'):
+        x_t = (alpha_bar_t.sqrt() * x_0 + (1 - alpha_bar_t).sqrt() * epsilon_true)
+    else:
+        x_t = (alpha_bar_t.sqrt() * x_0 + epsilon_true)
+
+    # Time step
+    t = torch.tensor([[0]])
+
+    # Backward
+    ddpm = DummyDDPM()
+    epsilon_pred = ddpm.backward(x_t, t)
+
+    # Check closeness
+    assert torch.allclose(epsilon_pred, epsilon_true, atol=1e-2)
+

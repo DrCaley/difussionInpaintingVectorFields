@@ -90,7 +90,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                 x = noised_images[t] * (1 - mask) + (x * mask)
                 # Renoise and repeat if not the last step
                 if not (i + 1) >= resample_steps:
-                    x = noise_one_step(x)
+                    x = noise_one_step(x, t, noise_strat)
 
     return x
 

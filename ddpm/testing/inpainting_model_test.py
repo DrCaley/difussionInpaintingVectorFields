@@ -86,7 +86,7 @@ for line in line_numbers:
     masks_to_test.append(random_mask_thick)
 
 
-def testing(mask_generator : MaskGenerator):
+def inpaint_testing(mask_generator : MaskGenerator):
     # writes data to csv file
     writer = csv.writer(file)
     header = ["image_num", "num_lines", "resample_steps", "mse"]
@@ -110,7 +110,7 @@ def testing(mask_generator : MaskGenerator):
         land_mask = (input_image_original != 0).float()
 
         mask = mask_generator.generate_mask(input_image.shape, land_mask)
-        num_lines = mask.num_lines
+        num_lines = mask_generator.num_lines
 
         mask = mask.to(dd.get_device())
 
@@ -165,7 +165,7 @@ def testing(mask_generator : MaskGenerator):
 with open("inpainting-xl-data.csv", "w", newline="") as file:
     try:
         for mask in masks_to_test:
-            testing(mask)
+            inpaint_testing(mask)
     except Exception as e:
         logging.error(f"Error during processing: {e}")
         exit(1)
