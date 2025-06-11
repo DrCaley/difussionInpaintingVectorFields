@@ -1,7 +1,6 @@
 import os.path
 import numpy as np
 import torch
-from tensorflow.python.eager.context import device
 from torch.utils.data import DataLoader
 import logging
 import csv
