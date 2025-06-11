@@ -65,9 +65,13 @@ class RandomPathMaskGenerator(MaskGenerator):
 
         border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape, land_mask=land_mask)
 
-        mask = mask * land_mask * border_mask
+        device = dd.get_device()
 
-        mask = mask.to(dd.get_device())
+        mask = mask.to(device)
+        land_mask = land_mask.to(device)
+        border_mask = border_mask.to(device)
+
+        mask = mask * land_mask * border_mask
 
         return mask
 
