@@ -74,7 +74,9 @@ import torch.nn.functional as F
 
 # Used for gaussian divergence free noise
 
-def generate_div_free_noise(batch_size, height, width, device=get_dd_initializer().get_device()):
+def generate_div_free_noise(batch_size, height, width, device=None):
+    dd = get_dd_initializer()
+    device = dd.get_device()
     psi = torch.randn(batch_size, 1, height, width, device=get_dd_initializer().get_device())
 
     dy = psi[:, :, 1:, :] - psi[:, :, :-1, :]
