@@ -2,9 +2,11 @@ import random
 import torch
 import numpy as np
 
+from data_prep.data_initializer import DDInitializer
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
 from ddpm.helper_functions.mask_factory.masks.border_mask import BorderMaskGenerator
 
+dd = DDInitializer()
 
 class RandomPathMaskGenerator(MaskGenerator):
 
@@ -64,6 +66,8 @@ class RandomPathMaskGenerator(MaskGenerator):
         border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape, land_mask=land_mask)
 
         mask = mask * land_mask * border_mask
+
+        mask = mask.to(dd.get_device())
 
         return mask
 
