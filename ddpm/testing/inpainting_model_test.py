@@ -81,7 +81,7 @@ for line in line_numbers:
     masks_to_test.append(random_mask_thin)
     masks_to_test.append(random_mask_thick)
 
-def inpaint_testing(mask_generator: MaskGenerator, image_counter: int, loader=train_loader) -> int:
+def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
     writer = csv.writer(file)
     header = ["image_num", "num_lines", "resample_steps", "mse"]
     writer.writerow(header)
@@ -91,6 +91,7 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int, loader=tr
     n_samples = dd.get_attribute('n_samples')
 
     # ======== Loop Through Batches ========
+    loader = train_loader
 
     for batch in loader:
         logging.info("Processing batch")
@@ -102,7 +103,7 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int, loader=tr
         input_image = batch[0].to(device) # (Batch size, Channels, Height, Width)
 
         # Convert back to unstandardized form for land masking
-        input_image_original = dd.get_standardizer().unstandardize(input_image)
+        input_image_original = dd.get_standardizer().unstandardize(input_image).to(device)
         land_mask = (input_image_original != 0).float().to(device)
 
         mask = mask_generator.generate_mask(input_image.shape, land_mask)

@@ -14,7 +14,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
     noised_images = [None] * (ddpm.n_steps + 1)
     device = dd.get_device()
 
-    def denoise_one_step(noisy_img, noise_strat):
+    def denoise_one_step(noisy_img, noise_strat, t):
         time_tensor = torch.full((n_samples, 1), t, device=device, dtype=torch.long)
         epsilon_theta = ddpm.backward(noisy_img, time_tensor)
 
@@ -23,7 +23,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
 
         if dd.get_attribute('gaussian_scaling'):
             less_noised_img = (1 / alpha_t.sqrt()) * (
-                noisy_img - ((1 - alpha_t) / (1 - alpha_t_bar).sqrt()) * epsilon_theta
+                    noisy_img - ((1 - alpha_t) / (1 - alpha_t_bar).sqrt()) * epsilon_theta
             )
         else:
             less_noised_img = (1 / alpha_t.sqrt()) * (noisy_img - epsilon_theta)
@@ -61,12 +61,11 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
 
         for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
             for i in range(resample_steps):
-                x = denoise_one_step(x, noise_strat)
+                x = denoise_one_step(x, noise_strat, t)
                 x = noised_images[t] * (1 - mask) + (x * mask)
 
                 if (i + 1) < resample_steps:
                     x = noise_one_step(x, t, noise_strat)
-
     return x
 
 
