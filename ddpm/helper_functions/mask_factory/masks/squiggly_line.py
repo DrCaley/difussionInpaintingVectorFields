@@ -55,3 +55,6 @@ class SquigglyLineMaskGenerator(MaskGenerator):
 
     def __str__(self):
         return "SquigglyLine"
+
+    def get_num_lines(self):
+        return self.get_num_lines()

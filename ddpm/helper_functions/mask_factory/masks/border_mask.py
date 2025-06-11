@@ -4,6 +4,7 @@ import numpy as np
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
 
 class BorderMaskGenerator(MaskGenerator):
+
     def __init__(self, area_height=44, area_width=94, offset_top=0, offset_left=0):
         self.border_mask = None
         self.area_height = area_height
@@ -28,3 +29,6 @@ class BorderMaskGenerator(MaskGenerator):
 
     def __str__(self):
         return "BorderMask"
+
+    def get_num_lines(self):
+        return super().get_num_lines()

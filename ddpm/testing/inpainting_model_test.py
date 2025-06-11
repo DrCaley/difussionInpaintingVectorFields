@@ -15,7 +15,6 @@ from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 
-
 dd = DDInitializer()
 
 (training_tensor, validation_tensor, test_tensor) = dd.get_tensors()
@@ -69,14 +68,16 @@ except Exception as e:
     exit(1)
 
 # ======== Inpainting Evaluation Parameters ========
-line_numbers = [10, 20, 40]
-resample_nums = [5]
-mse_ddpm_list = []
+line_numbers = [10, 20, 40]          # Number of lines in the abstract_mask.py
+resample_nums = [5]                  # Number of resampling steps
+mse_ddpm_list = []                   # To store average MSEs per image
 
+# =========== Initializing Masks ==================
 masks_to_test = []
 for line in line_numbers:
     random_mask_thin = RandomPathMaskGenerator(num_lines=line, line_thickness=1, line_length=5)
     random_mask_thick = RandomPathMaskGenerator(num_lines=line, line_thickness=5, line_length=5)
+
     masks_to_test.append(random_mask_thin)
     masks_to_test.append(random_mask_thick)
 
@@ -89,52 +90,69 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
     num_images_to_process = dd.get_attribute('num_images_to_process')
     n_samples = dd.get_attribute('n_samples')
 
+    # ======== Loop Through Batches ========
     loader = train_loader
 
     for batch in loader:
+        logging.info("Processing batch")
         if image_counter >= num_images_to_process:
             break
 
-        input_image = batch[0].to(dd.get_device())
+        input_image = batch[0].to(dd.get_device()) # (Batch size, Channels, Height, Width)
+
+        # Convert back to unstandardized form for land masking
         input_image_original = dd.get_standardizer().unstandardize(input_image)
         land_mask = (input_image_original != 0).float().to(dd.get_device())
 
         mask = mask_generator.generate_mask(input_image.shape, land_mask)
-        mask = mask.to(dd.get_device())
         num_lines = mask_generator.num_lines
-        mask_name = f"{mask_generator.__class__.__name__}_lines{num_lines}"
 
+        mask = mask.to(dd.get_device())
+
+        # ======== Masking and Inpainting Loops ========
         for resample in resample_nums:
-            torch.save(mask, f"results/predicted/{mask_name}.pt")
-            mse_ddpm_samples = []
 
+            torch.save(mask, f"results/predicted/{mask_generator}_{num_lines}.pt")
+
+            mse_ddpm_samples = []
+            # ======== Generate Samples ========
             for i in range(n_samples):
                 final_image_ddpm = inpaint_generate_new_images(
                     best_model,
                     input_image,
                     mask,
-                    n_samples=1,
+                    n_samples=1, #number of samples to generate. I think it doesn't work, not sure
                     device=dd.get_device(),
                     resample_steps=resample
                 )
 
-                torch.save(final_image_ddpm, f"results/predicted/img{image_counter}_{mask_name}_resample{resample}.pt")
-                torch.save(mask_generator, f"results/predicted/mask{image_counter}_{mask_name}_resample{resample}.pt")
+                # Save inpainted result and mask.py
+                torch.save(final_image_ddpm,
+                           f"results/predicted/img{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                torch.save(mask_generator,
+                           f"results/predicted/mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
 
+                # Calculate MSE for masked region
                 mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
                 mse_ddpm_samples.append(mse_ddpm.item())
 
-                logging.info(f"MSE (DDPM Inpainting) with {num_lines} lines for image {image_counter}, sample {i}: {mse_ddpm.item()}")
+                logging.info(
+                    f"MSE (DDPM Inpainting) with {num_lines} lines for image {image_counter}, sample {i}: {mse_ddpm.item()}")
 
-                writer.writerow([image_counter, num_lines, resample, mse_ddpm.item()])
+                # Write result to CSV
+                output = [image_counter, num_lines, resample, mse_ddpm.item()]
+                writer.writerow(output)
 
                 del final_image_ddpm
                 torch.cuda.empty_cache()
+                logging.info("finished resampling")
 
         mean_mse_ddpm_samples = np.mean(mse_ddpm_samples)
         mse_ddpm_list.append(mean_mse_ddpm_samples)
 
         image_counter += 1
+        logging.info("Finished processing batch:")
+
 
     return image_counter
 

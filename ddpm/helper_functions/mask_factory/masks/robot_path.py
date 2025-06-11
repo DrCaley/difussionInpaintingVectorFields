@@ -103,3 +103,6 @@ class RobotPathMaskGenerator(MaskGenerator):
 
     def __str__(self):
         return "RobotPath"
+
+    def get_num_lines(self):
+        return super().get_num_lines()
