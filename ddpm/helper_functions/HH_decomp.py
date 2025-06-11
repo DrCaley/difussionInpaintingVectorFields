@@ -25,7 +25,6 @@ with open(csv_file, mode='w', newline='') as file:
 # I've lost the plot
 plot_file = os.path.join(output_dir, f"div_plot_validation_tensor.png")
 
-
 # Load your velocity field
 data_init = DDInitializer()
 u = data_init.validation_tensor[:, :, 0, 0]
@@ -53,7 +52,7 @@ def compute_divergence(u, v, dx):
 
 # Mask: 1 = valid region (ocean), 0 = land
 mask = np.ones((Nx, Ny), dtype=bool)
-mask[:, :] = 0  # no mask
+mask[Nx//3:Nx//2, :] = 0  # no mask
 
 
 
