@@ -26,20 +26,19 @@ max_beta = dd.get_attribute("max_beta")
 
 store_path = dd.get_attribute("store_path")
 
-if len(sys.argv) < 2 :
+if len(sys.argv) < 2:
     print("Usage: python3 inpainting_model_test.py <model file ending with .pt>")
     store_path = dd.get_attribute("model_path")
-else :
+else:
     if os.path.exists(sys.argv[1]):
         store_path = sys.argv[1]
-    else :
+    else:
         print(sys.argv[1], "not found, using:", store_path)
 
 # ======== Load DDPM Checkpoint ========
 checkpoint = torch.load(store_path, map_location=dd.get_device())
 model_state_dict = checkpoint.get('model_state_dict', checkpoint)
 
-# Create and load the DDPM model with UNet backbone
 best_model = MyDDPMGaussian(MyUNet(n_steps), n_steps=n_steps, device=dd.get_device())
 try:
     logging.info("Loading model")
@@ -50,17 +49,14 @@ except Exception as e:
     logging.error(f"Error loading model: {e}")
     exit(1)
 
-# ======== Dataset Loading & Splitting ========
+# ======== Dataset Loading ========
 try:
     logging.info("Preparing data")
-
     batch_size = dd.get_attribute("inpainting_batch_size")
-
     training_data = dd.get_training_data()
     test_data = dd.get_test_data()
     validation_data = dd.get_validation_data()
 
-    # Set up dataloaders
     train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_data, batch_size=batch_size)
     val_loader = DataLoader(validation_data, batch_size=batch_size)
@@ -84,19 +80,19 @@ for line in line_numbers:
     masks_to_test.append(random_mask_thin)
     masks_to_test.append(random_mask_thick)
 
-
-def inpaint_testing(mask_generator : MaskGenerator, loader = train_loader):
-    # writes data to csv file
+def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
     writer = csv.writer(file)
     header = ["image_num", "num_lines", "resample_steps", "mse"]
     writer.writerow(header)
+
     logging.info("Processing data")
-    image_counter = dd.get_attribute('image_counter')
     num_images_to_process = dd.get_attribute('num_images_to_process')
-    n_samples = dd.get_attribute('n_samples') # Number of samples per abstract_mask.py config
+    n_samples = dd.get_attribute('n_samples')
 
     # ======== Loop Through Batches ========
     batch_num = 1
+    loader = train_loader
+
     for batch in loader:
         logging.info("Processing batch:", batch_num)
         if image_counter >= num_images_to_process:
@@ -109,13 +105,12 @@ def inpaint_testing(mask_generator : MaskGenerator, loader = train_loader):
         land_mask = (input_image_original != 0).float()
 
         mask = mask_generator.generate_mask(input_image.shape, land_mask)
-        num_lines = mask_generator.get_num_lines()
+        num_lines = mask_generator.num_lines
 
         mask = mask.to(dd.get_device())
 
         # ======== Masking and Inpainting Loops ========
         for resample in resample_nums:
-            logging.info("resampling")
 
             torch.save(mask, f"results/predicted/{mask_generator}_{num_lines}.pt")
 
@@ -152,7 +147,6 @@ def inpaint_testing(mask_generator : MaskGenerator, loader = train_loader):
                 torch.cuda.empty_cache()
                 logging.info("finished resampling")
 
-        # Compute average MSE over all samples for this abstract_mask.py config
         mean_mse_ddpm_samples = np.mean(mse_ddpm_samples)
         mse_ddpm_list.append(mean_mse_ddpm_samples)
 
@@ -161,15 +155,17 @@ def inpaint_testing(mask_generator : MaskGenerator, loader = train_loader):
         batch_num += 1
 
 
-    # ======== Log Final Averages ========
-    mean_mse_ddpm = np.mean(mse_ddpm_list)
-    logging.info(f"Mean MSE (DDPM Inpainting): {mean_mse_ddpm}")
+    return image_counter
 
 # ======== CSV Output File for Results ========
 with open("inpainting-xl-data.csv", "w", newline="") as file:
     try:
+        image_counter = dd.get_attribute("image_counter")
         for mask in masks_to_test:
-            inpaint_testing(mask)
+            image_counter = inpaint_testing(mask, image_counter)
     except Exception as e:
         logging.error(f"Error during processing: {e}")
         exit(1)
+
+mean_mse_ddpm = np.mean(mse_ddpm_list)
+logging.info(f"Mean MSE (DDPM Inpainting): {mean_mse_ddpm}")
