@@ -100,7 +100,7 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
         input_image = batch[0].to(dd.get_device()) # (Batch size, Channels, Height, Width)
 
         # Convert back to unstandardized form for land masking
-        input_image_original = dd.get_standardizer().unstandardize(input_image)
+        input_image_original = dd.get_standardizer().unstandardize(input_image).to(dd.get_device())
         land_mask = (input_image_original != 0).float().to(dd.get_device())
 
         mask = mask_generator.generate_mask(input_image.shape, land_mask)
