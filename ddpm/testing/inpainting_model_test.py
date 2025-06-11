@@ -85,7 +85,7 @@ for line in line_numbers:
     masks_to_test.append(random_mask_thick)
 
 
-def inpaint_testing(mask_generator : MaskGenerator):
+def inpaint_testing(mask_generator : MaskGenerator, loader = train_loader):
     # writes data to csv file
     writer = csv.writer(file)
     header = ["image_num", "num_lines", "resample_steps", "mse"]
@@ -95,10 +95,10 @@ def inpaint_testing(mask_generator : MaskGenerator):
     num_images_to_process = dd.get_attribute('num_images_to_process')
     n_samples = dd.get_attribute('n_samples') # Number of samples per abstract_mask.py config
 
-    loader = train_loader  # change to test_loader, val_loader depending on what you want to test
-
     # ======== Loop Through Batches ========
+    batch_num = 1
     for batch in loader:
+        logging.info("Processing batch:", batch_num)
         if image_counter >= num_images_to_process:
             break
 
@@ -115,6 +115,7 @@ def inpaint_testing(mask_generator : MaskGenerator):
 
         # ======== Masking and Inpainting Loops ========
         for resample in resample_nums:
+            logging.info("resampling")
 
             torch.save(mask, f"results/predicted/{mask_generator}_{num_lines}.pt")
 
@@ -149,12 +150,16 @@ def inpaint_testing(mask_generator : MaskGenerator):
 
                 del final_image_ddpm
                 torch.cuda.empty_cache()
+                logging.info("finished resampling")
 
         # Compute average MSE over all samples for this abstract_mask.py config
         mean_mse_ddpm_samples = np.mean(mse_ddpm_samples)
         mse_ddpm_list.append(mean_mse_ddpm_samples)
 
         image_counter += 1
+        logging.info("Finished processing batch:", batch_num)
+        batch_num += 1
+
 
     # ======== Log Final Averages ========
     mean_mse_ddpm = np.mean(mse_ddpm_list)
