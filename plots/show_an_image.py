@@ -6,7 +6,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import imageio
-from plot_data_tool import plot_vector_field
+from plot_vector_field_tool import plot_vector_field
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), './../')))
 from data_prep.data_initializer import DDInitializer

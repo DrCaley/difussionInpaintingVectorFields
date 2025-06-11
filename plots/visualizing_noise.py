@@ -6,7 +6,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import imageio
-from plot_data_tool import plot_vector_field
+from plot_vector_field_tool import plot_vector_field
 
 # Setup paths
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), './../')))
@@ -14,7 +14,7 @@ from data_prep.data_initializer import DDInitializer
 from ddpm.helper_functions.compute_divergence import compute_divergence
 
 # Types of noise to test
-from noising_process.incompressible_gp.adding_noise.divergence_free_noise import exact_div_free_field_from_stream, divergence_free_noise, normalized_divergence_free_noise, gaussian_at_end_divergence_free_noise, gaussian_each_step_divergence_free_noise, stream_function_noise
+from noising_process.incompressible_gp.adding_noise.divergence_free_noise import exact_div_free_field_from_stream, gaussian_each_step_divergence_free_noise
 
 
 
