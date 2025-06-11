@@ -101,7 +101,7 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
 
         # Convert back to unstandardized form for land masking
         input_image_original = dd.get_standardizer().unstandardize(input_image)
-        land_mask = (input_image_original != 0).float()
+        land_mask = (input_image_original != 0).float().to(dd.get_device())
 
         mask = mask_generator.generate_mask(input_image.shape, land_mask)
         num_lines = mask_generator.num_lines
@@ -120,8 +120,8 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
                     best_model,
                     input_image,
                     mask,
-                        n_samples=1, #number of samples to generate. I think it doesn't work, not sure
-                        device=dd.get_device(),
+                    n_samples=1, #number of samples to generate. I think it doesn't work, not sure
+                    device=dd.get_device(),
                     resample_steps=resample
                 )
 

@@ -6,7 +6,7 @@ from ddpm.helper_functions.model_evaluation import noise_strat
 
 dd = DDInitializer()
 
-def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
+def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=dd.get_device(),
                                 resample_steps=1, channels=1, height=64, width=128):
     """
     Given a DDPM model, an input image, and a mask, generates in-painted samples.
@@ -38,13 +38,11 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         return less_noised_img
 
     def noise_one_step(unnoised_img, t, noise_strat):
-        epsilon = noise_strat(unnoised_img, torch.tensor([t], device=unnoised_img.device))
+        epsilon = noise_strat(unnoised_img, torch.tensor([t], device=device))
         noised_img = ddpm(unnoised_img, t, epsilon, one_step=True)
         return noised_img
 
     with torch.no_grad():
-        if device is None:
-            device = ddpm.device
 
         noise_strat = dd.get_noise_strategy()
 
