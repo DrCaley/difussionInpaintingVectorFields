@@ -7,6 +7,8 @@ from ddpm.neural_networks.ddpm import MyDDPMGaussian
 
 from ddpm.helper_functions.inpainting_utils import calculate_mse, avg_pixel_value, inpaint_generate_new_images
 
+dd = DDInitializer()
+
 @pytest.fixture
 def dummy_data():
     # 4x4 test image, channel=1
@@ -50,7 +52,7 @@ def test_inpaint_generate_new_images_runs():
     # Mock DDPM and supporting structures
     dummy_ddpm = MagicMock()
     dummy_ddpm.n_steps = 3
-    dummy_ddpm.device = torch.device("cpu")
+    dummy_ddpm.device = torch.device(dd.get_device())
     dummy_ddpm.alphas = torch.tensor([0.9, 0.8, 0.7])
     dummy_ddpm.alpha_bars = torch.tensor([0.9, 0.72, 0.5])
     dummy_ddpm.betas = torch.tensor([0.1, 0.2, 0.3])
@@ -91,7 +93,7 @@ def test_inpaint_generate_new_images_runs():
 
 def test_forward_reconstructs_image():
     # Setup
-    device = torch.device("cpu")
+    device = torch.device(dd.get_device())
     batch_size, channels, height, width = 1, 2, 64, 128
     t_idx = 50  # middle of the diffusion process
 

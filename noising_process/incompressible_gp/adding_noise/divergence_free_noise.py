@@ -74,8 +74,8 @@ import torch.nn.functional as F
 
 # Used for gaussian divergence free noise
 
-def generate_div_free_noise(batch_size, height, width, device="cpu"):
-    psi = torch.randn(batch_size, 1, height, width, device=device)
+def generate_div_free_noise(batch_size, height, width, device=get_dd_initializer().get_device()):
+    psi = torch.randn(batch_size, 1, height, width, device=get_dd_initializer().get_device())
 
     dy = psi[:, :, 1:, :] - psi[:, :, :-1, :]
     dx = psi[:, :, :, 1:] - psi[:, :, :, :-1]
@@ -89,7 +89,7 @@ def generate_div_free_noise(batch_size, height, width, device="cpu"):
     noise = torch.cat([u, v], dim=1)  # shape: (B, 2, H, W)
     return noise
 
-def layered_div_free_noise(batch_size, height, width, device="cpu", n_layers=10):
+def layered_div_free_noise(batch_size, height, width, device=get_dd_initializer().get_device(), n_layers=10):
     noise = torch.zeros(batch_size, 2, height, width, device=device)
     for _ in range(n_layers):
         noise += generate_div_free_noise(batch_size, height, width, device)
