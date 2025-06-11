@@ -96,16 +96,19 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int, loader=tr
         if image_counter >= num_images_to_process:
             break
 
-        input_image = batch[0].to(dd.get_device()) # (Batch size, Channels, Height, Width)
+        device = dd.get_device()
+
+        print("using", device)
+        input_image = batch[0].to(device) # (Batch size, Channels, Height, Width)
 
         # Convert back to unstandardized form for land masking
         input_image_original = dd.get_standardizer().unstandardize(input_image)
-        land_mask = (input_image_original != 0).float().to(dd.get_device())
+        land_mask = (input_image_original != 0).float().to(device)
 
         mask = mask_generator.generate_mask(input_image.shape, land_mask)
         num_lines = mask_generator.num_lines
 
-        mask = mask.to(dd.get_device())
+        mask = mask.to(device)
 
         # ======== Masking and Inpainting Loops ========
         for resample in resample_nums:
@@ -120,7 +123,7 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int, loader=tr
                     input_image,
                     mask,
                     n_samples=1, #number of samples to generate. I think it doesn't work, not sure
-                    device=dd.get_device(),
+                    device=device,
                     resample_steps=resample
                 )
 
