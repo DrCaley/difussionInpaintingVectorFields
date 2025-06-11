@@ -1,7 +1,10 @@
 import random
 import torch
 
+from data_prep.data_initializer import DDInitializer
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
+
+dd = DDInitializer()
 
 class RandomMaskGenerator(MaskGenerator):
 
@@ -28,6 +31,9 @@ class RandomMaskGenerator(MaskGenerator):
             if torch.all(input_image_original[:, :, start_h:start_h + mask_h, start_w:start_w + mask_w] != 0):
                 mask[:, :, start_h:start_h + mask_h, start_w:start_w + mask_w] = 1
                 break
+        device = dd.get_device()
+
+        mask = mask.to(device)
 
         return mask
 
