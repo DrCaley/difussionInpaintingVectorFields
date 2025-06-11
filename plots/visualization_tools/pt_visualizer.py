@@ -92,14 +92,12 @@ def load_and_visualize_pt(file_path, title="loaded_tensor", save_dir="pt_visuali
     Loads a .pt file and visualizes (saves) the tensor it contains.
     Passes optional args to the visualizer.
     """
-    tensor = torch.load(file_path, map_location='cpu')
-    tensor = dd.get_standardizer().unstandardize(tensor)
-    visualize_tensor(compute_divergence(tensor[0,0],tensor[0,1]), title='divergence', save_dir=save_dir, **kwargs)
+    tensor = torch.load(file_path, map_location='cpu', weights_only=False)
     visualize_tensor(tensor, title=title, save_dir=save_dir, **kwargs)
 
 load_and_visualize_pt(
-    '../../ddpm/testing/results/predicted/img6809_RandomPath_resample5_num_lines_10.pt',
-    'img6809_RandomPath_resample5_num_lines_10',
+    '../../ddpm/testing/results/predicted/mask6809_RandomPath_resample5_num_lines_10.pt',
+    'mask6809_0_RandomPath_resample5_num_lines_10',
     height_range=(0, 44),
     width_range=(0, 94),
     vector_scale=0.15

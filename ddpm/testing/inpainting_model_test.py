@@ -128,10 +128,12 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
                     resample_steps=resample
                 )
 
+                final_image_ddpm = dd.get_standardizer().unstandardize(final_image_ddpm).to(device)
+
                 # Save inpainted result and mask.py
                 torch.save(final_image_ddpm,
                            f"{results_path}img{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
-                torch.save(mask_generator,
+                torch.save(mask,
                            f"{results_path}mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
                 torch.save(input_image_original,
                            f"{results_path}img_0_{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
