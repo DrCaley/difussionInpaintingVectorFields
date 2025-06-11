@@ -2,7 +2,7 @@ import unittest
 import torch
 from noising_process.incompressible_gp.adding_noise.divergence_free_noise import gaussian_each_step_divergence_free_noise
 from ddpm.helper_functions.compute_divergence import compute_divergence
-from plots.plot_data_tool import plot_vector_field
+from plots.plot_vector_field_tool import plot_vector_field
 
 class GaussianTest(unittest.TestCase):
     def test_test(self):
