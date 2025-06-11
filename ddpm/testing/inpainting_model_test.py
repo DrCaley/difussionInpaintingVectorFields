@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 import logging
 import csv
 import sys
+import traceback
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
@@ -166,6 +167,7 @@ with open("inpainting-xl-data.csv", "w", newline="") as file:
             image_counter = inpaint_testing(mask, image_counter)
     except Exception as e:
         logging.error(f"Error during processing: {e}")
+        logging.exception(f"Stack trace:")
         exit(1)
 
 mean_mse_ddpm = np.mean(mse_ddpm_list)
