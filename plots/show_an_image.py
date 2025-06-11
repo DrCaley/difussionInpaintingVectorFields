@@ -20,6 +20,7 @@ data_init = DDInitializer()
 # Directory to save images
 output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'outputs')
 
+
 # CSV
 csv_file = os.path.join(output_dir, f"divergences_test.csv")
 with open(csv_file, mode='w', newline='') as file:
@@ -35,7 +36,7 @@ filenames = []
 heatmap_filenames = []
 
 
-
+"""
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))
 
 # Initialize the heat map images with the first frame
@@ -50,23 +51,23 @@ cbar1 = fig.colorbar(im1, ax=axs[1])
 for ax in axs:
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
-
+"""
 
 
 divergences = []
 
 # IMAGE GENERATION LOOP
-for i in range(data_init.validation_tensor.shape[3]):
-    tensor_to_draw_x = data_init.validation_tensor[:, :, 0, i]
-    tensor_to_draw_y = data_init.validation_tensor[:, :, 1, i]
+for i in range(1):
+    tensor_to_draw_x = data_init.training_tensor[:, :, 0, 609]
+    tensor_to_draw_y = data_init.training_tensor[:, :, 1, 609]
 
     # Create vector field files
     filename = os.path.join(output_dir, f"vector_field{i:04}.png")
-    plot_vector_field(tensor_to_draw_x, tensor_to_draw_y, step = 2, scale=5, title=f"Vector Field {i}", file=filename)
+    plot_vector_field(tensor_to_draw_x, tensor_to_draw_y, step = 2, scale=6, title=f"Vector Field {i}", file=filename)
     filenames.append(filename)
 
     # Heat map gifs
-    
+    """
     im0.set_data(tensor_to_draw_x.numpy())
     axs[0].set_title(f'X-Component t={i}')
     im1.set_data(tensor_to_draw_y.numpy())
@@ -75,6 +76,7 @@ for i in range(data_init.validation_tensor.shape[3]):
     heatmap_file = os.path.join(output_dir, f"xy_heatmap_frame{i:04}.png")
     plt.savefig(heatmap_file, dpi=150, bbox_inches='tight')
     heatmap_filenames.append(heatmap_file)
+    """
 
     divergences.append(compute_divergence(tensor_to_draw_x, tensor_to_draw_y).nanmean().item())
 
@@ -83,6 +85,7 @@ for i in range(data_init.validation_tensor.shape[3]):
             writer.writerow([i + 1, divergences[i]])
 
 
+"""
 # Create GIFS
 images = [imageio.imread(f) for f in sorted(filenames)]
 imageio.mimsave(output_dir + "\\vector_fields_validation_tensor.gif", images, fps=20)  # Adjust fps as needed
@@ -107,3 +110,4 @@ plt.ylabel('Divergence')
 plt.legend()
 plt.title('Fields and Divergences')
 plt.savefig(plot_file)
+"""
