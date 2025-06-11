@@ -1,5 +1,6 @@
 import os
 import sys
+import csv
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,7 +13,17 @@ from data_prep.data_initializer import DDInitializer
 from plots.plot_data_tool import plot_vector_field
 
 
+
 output_dir = os.path.relpath('plots\outputs')
+
+# CSV
+csv_file = os.path.join(output_dir, f"testing_HH_decomps.csv")
+with open(csv_file, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['Number', 'Divergence'])
+
+# I've lost the plot
+plot_file = os.path.join(output_dir, f"div_plot_validation_tensor.png")
 
 
 # Load your velocity field
@@ -42,7 +53,7 @@ def compute_divergence(u, v, dx):
 
 # Mask: 1 = valid region (ocean), 0 = land
 mask = np.ones((Nx, Ny), dtype=bool)
-mask[Nx//4:3*Nx//4, :] = 0  # mask middle horizontal band
+mask[:, :] = 0  # no mask
 
 
 
