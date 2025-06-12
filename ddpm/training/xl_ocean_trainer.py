@@ -49,11 +49,20 @@ class TrainOceanXL():
 
         self.train_loader = DataLoader(dd.get_training_data(),
                                        batch_size=self.batch_size,
-                                       shuffle=True)
+                                       shuffle=True,
+                                       num_workers=4,
+                                       pin_memory=True,
+                                       persistent_workers=True)
         self.test_loader = DataLoader(dd.get_test_data(),
-                                      batch_size=self.batch_size)
+                                      batch_size=self.batch_size,
+                                      num_workers=4,
+                                      pin_memory=True,
+                                      persistent_workers=True)
         self.val_loader = DataLoader(dd.get_validation_data(),
-                                     batch_size=self.batch_size)
+                                     batch_size=self.batch_size,
+                                     num_workers=4,
+                                     pin_memory=True,
+                                     persistent_workers=True)
         self.continue_training = False
 
 
@@ -135,17 +144,17 @@ class TrainOceanXL():
         plot_file = f"{plot_file}_{self.timestamp}.png"
         self.plot_file = os.path.join(os.path.dirname(__file__), plot_file)
         
-    def set_model_file(self, model_file="ddpm_ocean_model"):
+    def set_model_file(self, initial_model_file="ddpm_ocean_model"):
         """
         Creates paths for saving the current model and best checkpoints.
 
         Args:
-            model_file (str, optional): Base name for model files.
+            initial_model_file (str, optional): Base name for model files.
         """
-        model_file = f"{model_file}_{self.timestamp}.pt"
-        best_model_weights = f"{model_file}_best_model_weights.pt"
-        best_model_checkpoint = f"{model_file}_best_checkpoint.pt"
-        self.model_file = os.path.join(os.path.dirname(__file__), model_file)
+        model_file = f"{initial_model_file}_{self.timestamp}"
+        best_model_weights = f"{initial_model_file}_best_model_weights.pt"
+        best_model_checkpoint = f"{initial_model_file}_best_checkpoint.pt"
+        self.model_file = os.path.join(os.path.dirname(__file__), f"{model_file}.pt")
         self.best_model_weights = os.path.join(os.path.dirname(__file__), best_model_weights)
         self.best_model_checkpoint = os.path.join(os.path.dirname(__file__), best_model_checkpoint)
         
@@ -338,6 +347,6 @@ class TrainOceanXL():
         print("best model weights saved in:", self.best_model_weights)
         print("best model checkpoint saved in:", self.best_model_checkpoint)
 
-
-trainer = TrainOceanXL()
-trainer.train()
+if __name__ == '__main__':
+    trainer = TrainOceanXL()
+    trainer.train()
