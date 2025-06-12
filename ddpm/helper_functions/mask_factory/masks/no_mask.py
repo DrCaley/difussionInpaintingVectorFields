@@ -21,7 +21,7 @@ class NoMask(MaskGenerator):
 
         _, _, h, w = image_shape
 
-        mask = torch.zeros((h, w)).to(device)
+        mask = torch.zeros((h, w)).to(dd.get_device())
 
         return mask
 
