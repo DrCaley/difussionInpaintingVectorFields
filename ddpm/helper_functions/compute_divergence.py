@@ -19,3 +19,18 @@ def compute_divergence(vx, vy):
 
     divergence = dvx_dx + dvy_dy
     return divergence
+
+"""
+After a few experiments, I conclude that this is equivalent to this function. -Matt
+
+# Grid setup
+Nx, Ny = 64, 64
+Lx, Ly = 2 * np.pi, 2 * np.pi
+dx, dy = Lx / Nx, Ly / Ny
+
+# Another divergence to use
+def compute_divergence1(u, v, dx):
+    dudx = np.gradient(u, dx, axis=0)
+    dvdy = np.gradient(v, dx, axis=1)
+    return dudx + dvdy
+"""
