@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
 
-from ddpm.helper_functions.inpainting_utils import calculate_mse, avg_pixel_value, inpaint_generate_new_images
+from ddpm.utils.inpainting_utils import calculate_mse, avg_pixel_value
 
 dd = DDInitializer()
 
@@ -74,7 +74,7 @@ def test_inpaint_generate_new_images_runs():
     mask = torch.ones_like(input_image)
 
     # Patch dd
-    import ddpm.helper_functions.inpainting_utils as inpaint_utils
+    import ddpm.utils.inpainting_utils as inpaint_utils
     inpaint_utils.dd = dummy_dd
 
     out = inpaint_utils.inpaint_generate_new_images(

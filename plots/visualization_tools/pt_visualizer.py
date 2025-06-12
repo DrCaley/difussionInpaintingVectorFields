@@ -93,13 +93,29 @@ def load_and_visualize_pt(file_path, title="loaded_tensor", save_dir="pt_visuali
     Passes optional args to the visualizer.
     """
     tensor = torch.load(file_path, map_location='cpu', weights_only=False)
-    visualize_tensor(tensor[0,0], title=title, save_dir=f"0_{save_dir}", **kwargs)
-    visualize_tensor(tensor[0,1], title=title, save_dir=f"1_{save_dir}", **kwargs)
+    visualize_tensor(tensor, title=title, save_dir=f"{save_dir}", **kwargs)
 
 load_and_visualize_pt(
-    '../../ddpm/testing/results/predicted/mask6809_RandomPath_resample5_num_lines_10.pt',
-    'mask6809_0_RandomPath_resample5_num_lines_10',
+    '../../ddpm/testing/results/img0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
+    'img0_GaussianNoiseBinaryMaskGenerator',
     height_range=(0, 44),
     width_range=(0, 94),
     vector_scale=0.15
 )
+load_and_visualize_pt(
+    '../../ddpm/testing/results/initial0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
+    'initial0_GaussianNoiseBinaryMaskGenerator',
+    height_range=(0, 44),
+    width_range=(0, 94),
+    vector_scale=0.15
+)
+load_and_visualize_pt(
+    '../../ddpm/testing/results/interpolated0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
+    'interpolated0_GaussianNoiseBinaryMaskGenerator',
+    height_range=(0, 44),
+    width_range=(0, 94),
+    vector_scale=0.15
+)
+tensor = torch.load('../../ddpm/testing/results/mask0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
+                    map_location='cpu')
+visualize_tensor(tensor[0,0], 'mask0_GaussianNoiseBinaryMaskGenerator', save_dir='pt_visualizer_images')

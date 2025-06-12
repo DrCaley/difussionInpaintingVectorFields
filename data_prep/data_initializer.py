@@ -10,7 +10,7 @@ from torchvision.transforms import Compose
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), './../')))
 from data_prep.ocean_image_dataset import OceanImageDataset
-from ddpm.helper_functions.noise_utils import NoiseStrategy, get_noise_strategy
+from ddpm.utils.noise_utils import NoiseStrategy, get_noise_strategy
 from ddpm.helper_functions.loss_functions import LossStrategy, get_loss_strategy
 from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import standardize_data
