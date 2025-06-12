@@ -1,5 +1,8 @@
 import torch
 
+# Should be used to depict directions of vectors in vector field,
+# never to be used for manipulating data to work with
+
 class normalize:
     def __init__(self, eps=1e-8):
         self.eps = eps

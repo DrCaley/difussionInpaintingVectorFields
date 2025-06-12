@@ -9,7 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 from plots.plot_vector_field_tool import plot_vector_field
 from ddpm.helper_functions.compute_divergence import compute_divergence
 from ddpm.helper_functions.standardize_data import standardize_data
-from ddpm.helper_functions.normalize import normalize
+from plots.visualization_tools.normalize import normalize
 
 
 
@@ -25,16 +25,11 @@ dy = Ly / Ny
 
 # === Define a sample vector field F = (u, v) ===
 # This one has both divergence-free and irrotational parts
-u = 0.25 * (X**2 + Y**2)         # u(x, y)
-v = 0.25 * (Y**2 - X**2)         # v(x, y)
+u = -np.sin(Y)          # u(x, y)
+v = np.sin(X)           # v(x, y)
 
 u = torch.from_numpy(u).float()
 v = torch.from_numpy(v).float()
-
-u_mean = u.mean()
-v_mean = v.mean()
-u_std = u.std()
-v_std = v.std()
 
 # === Solve Poisson equation in Fourier space: Δϕ = ∇ · F ===
 def solve_poisson_fft(rhs, dx, dy):
@@ -78,53 +73,28 @@ sol_total = torch.stack([u_sol, v_sol])
 
 
 
-plot_vector_field(og_total[0], og_total[1], scale=20, title="Original Field F", file="original_vector_field.png")
-plot_vector_field(irr_total[0], irr_total[1], scale=20, title="Irrotational Component ∇ϕ", file="irr_vector_field.png")
-plot_vector_field(sol_total[0], sol_total[1], scale=20, title="Divergence-Free Component", file="sol_vector_field.png")
+plot_vector_field(og_total[0], og_total[1], scale=10, title="Original Field F", file="original_vector_field.png")
+plot_vector_field(irr_total[0], irr_total[1], scale=10, title="Irrotational Component ∇ϕ", file="irr_vector_field.png")
+plot_vector_field(sol_total[0], sol_total[1], scale=10, title="Divergence-Free Component", file="sol_vector_field.png")
 
 
 print("Original field divergence: " + str(compute_divergence(og_total[0], og_total[1]).mean()))
 print("Irrotational field divergence: " + str(compute_divergence(irr_total[0], irr_total[1]).mean()))
 print("Solenoidal field divergence: " + str(compute_divergence(sol_total[0], sol_total[1]).mean()))
-print("\n\n")
+print("\n\n\n")
 
-normalizer = normalize()
+OGstandardize = standardize_data(u.mean(), u.std(), v.mean(), v.std())
+IRRstandardize = standardize_data(u_irr.mean(), u_irr.std(), v_irr.mean(), v_irr.std())
+SOLstandardize = standardize_data(u_sol.mean(), u_sol.std(), v_sol.mean(), v_sol.std())
 
-og_total = normalizer(og_total)
-irr_total = normalizer(irr_total)
-sol_total = normalizer(sol_total)
+og_total = OGstandardize(og_total)
+irr_total = IRRstandardize(irr_total)
+sol_total = SOLstandardize(sol_total)
 
-"""
-u_irr_mean = u_irr.mean()
-v_irr_mean = v_irr.mean()
-u_irr_std = u_irr.std()
-v_irr_std = v_irr.std()
+plot_vector_field(og_total[0], og_total[1], scale=10, title="Original Field F", file="original_vector_field_stand.png")
+plot_vector_field(irr_total[0], irr_total[1], scale=10, title="Irrotational Component ∇ϕ", file="irr_vector_field_stand.png")
+plot_vector_field(sol_total[0], sol_total[1], scale=10, title="Divergence-Free Component", file="sol_vector_field_stand.png")
 
-u_sol_mean = u_sol.mean()
-v_sol_mean = v_sol.mean()
-u_sol_std = u_sol.std()
-v_sol_std = v_sol.std()
-
-og_standardizer = standardize_data(u_mean, u_std, v_mean, v_std)
-irr_standardizer = standardize_data(u_irr_mean, u_irr_std, v_irr_mean, v_irr_std)
-sol_standardizer = standardize_data(u_sol_mean, u_sol_std, v_sol_mean, v_sol_std)
-
-# standardize (changes divs?)
-og_total = og_standardizer(og_total)
-irr_total = irr_standardizer(irr_total)
-sol_total = sol_standardizer(sol_total)
-
-# unstandardize (proves standardize and unstandardize are inverses)
-og_total = og_standardizer.unstandardize(og_total)
-irr_total = irr_standardizer.unstandardize(irr_total)
-sol_total = sol_standardizer.unstandardize(sol_total)
-"""
-
-# plotting and scheming
-plot_vector_field(og_total[0], og_total[1], scale=20, title="Original Field F", file="original_vector_field_normed.png")
-plot_vector_field(irr_total[0], irr_total[1], scale=20, title="Irrotational Component ∇ϕ", file="irr_vector_field_normed.png")
-plot_vector_field(sol_total[0], sol_total[1], scale=20, title="Divergence-Free Component", file="sol_vector_field_normed.png")
-
-print("Original field divergence: " + str(compute_divergence(og_total[0], og_total[1]).mean()))
-print("Irrotational field divergence: " + str(compute_divergence(irr_total[0], irr_total[1]).mean()))
-print("Solenoidal field divergence: " + str(compute_divergence(sol_total[0], sol_total[1]).mean()))
+print("Original field divergence AFTER STANDARDIZING: " + str(compute_divergence(og_total[0], og_total[1]).mean()))
+print("Irrotational field divergence AFTER STANDARDIZING: " + str(compute_divergence(irr_total[0], irr_total[1]).mean()))
+print("Solenoidal field divergence AFTER STANDARDIZING: " + str(compute_divergence(sol_total[0], sol_total[1]).mean()))
