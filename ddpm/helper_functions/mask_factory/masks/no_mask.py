@@ -7,13 +7,14 @@ from data_prep.data_initializer import DDInitializer
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
 from ddpm.helper_functions.mask_factory.masks.border_mask import BorderMaskGenerator
 
-dd = DDInitializer
-
 class NoMask(MaskGenerator):
     def __init__(self):
         pass
 
     def generate_mask(self, image_shape = None, land_mask = None):
+
+        dd = DDInitializer()
+
         if image_shape is None:
             print("image_shape is None")
         if land_mask is None:
