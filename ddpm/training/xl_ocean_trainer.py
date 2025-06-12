@@ -1,0 +1,343 @@
+import csv
+import os
+import sys
+from datetime import datetime
+
+import torch
+from halo import Halo
+from matplotlib import pyplot as plt
+from torch.optim import Adam
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+from ddpm.helper_functions.model_evaluation import evaluate
+from ddpm.neural_networks.ddpm import MyDDPMGaussian
+from ddpm.neural_networks.unets.unet_xl import MyUNet
+from data_prep.data_initializer import DDInitializer
+from concurrent.futures import ThreadPoolExecutor
+
+class TrainOceanXL():
+    """
+       Trains a DDPM model on ocean data using configurable UNet architecture.
+
+       Handles data loading, checkpointing, model evaluation, loss tracking,
+       and saving logs + best weights across epochs.
+    """
+    def __init__(self):
+        """
+        Initializes model, datasets, loaders, and all training configs using DDInitializer.
+        """
+        dd = DDInitializer()
+        self._setup_paths_and_files()
+
+        self.device = dd.get_device()
+        self.n_steps = dd.get_attribute('n_steps')
+        self.min_beta = dd.get_attribute('min_beta')
+        self.max_beta = dd.get_attribute('max_beta')
+        self.ddpm = MyDDPMGaussian(MyUNet(self.n_steps),
+                                   n_steps=self.n_steps,
+                                   min_beta=self.min_beta,
+                                   max_beta=self.max_beta,
+                                   device=self.device)
+        self.noise_strategy = dd.noise_strategy
+        self.loss_strategy = dd.loss_strategy
+        self.training_mode = dd.get_attribute('training_mode')
+        self.batch_size = dd.get_attribute('batch_size')
+        self.n_epochs = dd.get_attribute('n_epochs')
+        self.lr = dd.get_attribute('lr')
+
+        self.train_loader = DataLoader(dd.get_training_data(),
+                                       batch_size=self.batch_size,
+                                       shuffle=True)
+        self.test_loader = DataLoader(dd.get_test_data(),
+                                      batch_size=self.batch_size)
+        self.val_loader = DataLoader(dd.get_validation_data(),
+                                     batch_size=self.batch_size)
+        self.continue_training = False
+
+
+    def retrain_this(self, path: str):
+        """
+        Sets the path of a model to resume training from.
+
+        Args:
+            path (str): Path to a saved checkpoint file.
+        """
+        if not os.path.exists(path):
+            print("path doesn't exist")
+        else :
+            self.model_to_retrain = path
+            self.continue_training = True
+
+    def _setup_paths_and_files(self):
+        """
+        Prepares all output paths for saving models, plots, and logs.
+        """
+        self.set_timestamp()
+        self.set_output_directory()
+        self.set_csv_file()
+        self.set_model_file()
+        self.set_plot_file()
+        self.set_csv_description()
+
+    def load_checkpoint(self, optimizer : torch.optim.Optimizer):
+        """
+        Loads a model + optimizer state from a checkpoint file.
+
+        Args:
+            optimizer (torch.optim.Optimizer): Optimizer to restore.
+
+        Returns:
+            dict: Loaded checkpoint containing all training state.
+        """
+        checkpoint = torch.load(self.model_to_retrain)
+        self.ddpm.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        return checkpoint
+
+    def set_timestamp(self, timestamp = datetime.now().strftime("%h%d_%H%M")):
+        """
+        Sets the training session timestamp for naming outputs.
+
+        Args:
+            timestamp (str, optional): Override timestamp value.
+        """
+        self.timestamp = timestamp
+        
+    def set_output_directory(self, training_output = "training_output"):
+        """
+        Creates the output directory for this training run.
+
+        Args:
+            training_output (str, optional): Name of the output directory.
+        """
+        self.output_directory = os.path.join(os.path.dirname(__file__), training_output)
+        os.makedirs(self.output_directory, exist_ok=True)
+
+    def set_csv_file(self, csv_file="training_log"):
+        """
+        Creates the path to the CSV log file using the timestamp.
+
+        Args:
+            csv_file (str, optional): Base name for CSV file.
+        """
+        csv_file = f"{csv_file}_{self.timestamp}.csv"
+        self.csv_file = os.path.join(os.path.dirname(__file__), csv_file)
+        
+    def set_plot_file(self, plot_file="training_test_loss_xl"):
+        """
+        Creates the path to the loss plot file.
+
+        Args:
+            plot_file (str, optional): Base name for plot image.
+        """
+        plot_file = f"{plot_file}_{self.timestamp}.png"
+        self.plot_file = os.path.join(os.path.dirname(__file__), plot_file)
+        
+    def set_model_file(self, model_file="ddpm_ocean_model"):
+        """
+        Creates paths for saving the current model and best checkpoints.
+
+        Args:
+            model_file (str, optional): Base name for model files.
+        """
+        model_file = f"{model_file}_{self.timestamp}.pt"
+        best_model_weights = f"{model_file}_best_model_weights.pt"
+        best_model_checkpoint = f"{model_file}_best_checkpoint.pt"
+        self.model_file = os.path.join(os.path.dirname(__file__), model_file)
+        self.best_model_weights = os.path.join(os.path.dirname(__file__), best_model_weights)
+        self.best_model_checkpoint = os.path.join(os.path.dirname(__file__), best_model_checkpoint)
+        
+    def set_csv_description(self, description = "hello world!"):
+        """
+        Sets a description header to store at the top of the CSV file.
+
+        Args:
+            description (str): Any short text.
+        """
+        self.description = description
+        
+    def set_ddpm(self, ddpm : torch.nn.Module):
+        """
+        Replaces the current DDPM model.
+
+        Args:
+            ddpm (torch.nn.Module): New DDPM model instance.
+        """
+        self.ddpm = ddpm
+
+    def set_epochs(self, epochs : int):
+        """
+        Sets the number of training epochs.
+
+        Args:
+            epochs (int): Number of epochs.
+        """
+        self.epochs = epochs
+
+    def training_loop(self, optim : torch.optim.Optimizer, loss_function : callable):
+        """
+        Main training logic. Trains DDPM over epochs, logs results, evaluates with multi-threading,
+        and saves the best model based on test loss.
+
+        Args:
+            optim (torch.optim.Optimizer): Optimizer.
+            loss_function (callable, optional): Loss function for training.
+        """
+        best_test_loss = float("inf")
+
+        epoch_losses = []
+        train_losses = []
+        test_losses = []
+
+        start_epoch = 0
+
+        ddpm = self.ddpm
+        device = self.device
+        csv_file = self.csv_file
+        n_epochs = self.n_epochs
+        plot_file = self.plot_file
+        n_steps = self.ddpm.n_steps
+        model_file = self.model_file
+        test_loader = self.test_loader
+        train_loader = self.train_loader
+        noise_function = self.noise_strategy
+        best_model_weights = self.best_model_weights
+        best_model_checkpoint = self.best_model_checkpoint
+
+        if self.continue_training:
+            checkpoint = self.load_checkpoint(optim)
+            start_epoch = checkpoint['epoch'] + 1
+            epoch_losses = checkpoint['epoch_losses']
+            train_losses = checkpoint['train_losses']
+            test_losses = checkpoint['test_losses']
+            best_test_loss = checkpoint['best_test_loss']
+            print(f"Resuming training from epoch {start_epoch}")
+
+        # CSV output setup
+        with open(self.csv_file, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow([self.description])
+            writer.writerow(['Epoch', 'Epoch Loss', 'Train Loss', 'Test Loss'])
+
+        # Training arc
+        for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
+            epoch_loss = 0.0
+            ddpm.train()
+            for step, batch in enumerate(
+                    tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{n_epochs}", colour="#005500")):
+                x0 = batch[0].to(device).float()
+                n = len(x0)
+
+                t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps
+
+                if noise_function is not None:  # Generate noise
+                    noise = noise_function(x0, t).to(device)
+                else:
+                    noise = torch.randn_like(x0).to(device)
+
+                noisy_imgs = ddpm(x0, t, noise)
+                predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))
+
+                loss = loss_function(predicted_noise, noise)
+
+                optim.zero_grad()
+                loss.backward()
+                optim.step()
+
+                epoch_loss += loss.item() * len(x0) / len(train_loader.dataset)
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                spinner = Halo("Evaluating DDPM...", spinner="dots")
+                spinner.start()
+                ddpm.eval()
+                spinner.succeed()
+
+                spinner = Halo("Evaluating average train loss...", spinner="dots")
+                spinner.start()
+                train_future = executor.submit(evaluate, ddpm, train_loader, device)
+
+                spinner = Halo("Evaluating average test loss...", spinner="dots")
+                spinner.start()
+                test_future = executor.submit(evaluate, ddpm, test_loader, device)
+
+                avg_train_loss = train_future.result()
+
+                spinner.succeed()
+                avg_test_loss = test_future.result()
+                spinner.succeed()
+
+            # What is all of this doing? Do we want evaluate(...) ONLY, instead of epoch_loss?
+            # I figure we may just want to toss epoch_loss.
+
+            ddpm.train()
+
+            epoch_losses.append(epoch_loss)
+            train_losses.append(avg_train_loss)
+            test_losses.append(avg_test_loss)
+
+            log_string = f"\nepoch {epoch + 1}: \n"
+            log_string += f"EPOCH Loss: {epoch_loss:.3f}\n"
+            log_string += f"TRAIN Loss: {avg_train_loss:.3f}\n"
+            log_string += f"TEST Loss: {avg_test_loss:.3f}\n"
+
+            # Append current epoch results to CSV
+            with open(csv_file, mode='a', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow([epoch + 1, epoch_loss, avg_train_loss, avg_test_loss])
+
+            checkpoint = {
+                'epoch': epoch,
+                'model_state_dict': ddpm.state_dict(),
+                'optimizer_state_dict': optim.state_dict(),
+                'epoch_losses': epoch_losses,
+                'train_losses': train_losses,
+                'test_losses': test_losses,
+                'best_test_loss': best_test_loss
+                }
+
+            if best_test_loss > avg_test_loss:
+                best_test_loss = avg_test_loss
+                torch.save(ddpm.state_dict(), best_model_weights)
+                torch.save(checkpoint, best_model_checkpoint)
+                log_string += " --> Best model ever (stored based on test loss)"
+
+            log_string += (f"\nAverage test loss: {avg_test_loss:.3f} -> best: {best_test_loss:.3f}\n"
+                           + f"Average train loss: {avg_train_loss:.3f}")
+
+            tqdm.write(log_string)
+
+            torch.save(checkpoint, model_file)
+
+            """
+            if display:
+                show_images(generate_new_images(ddpm, device=device), f"Images generated at epoch {epoch + 1}")
+            """
+
+        plt.figure(figsize=(20, 10))
+        plt.plot(epoch_losses, label='Epoch Loss')
+        plt.plot(train_losses, label='Train Loss')
+        plt.plot(test_losses, label='Test Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.title('training and Test Loss')
+        plt.savefig(plot_file)
+
+    def train(self):
+        """
+        Sets up optimizer and kicks off training based on config mode.
+        """
+        optimizer = Adam(self.ddpm.parameters(), lr=self.lr)
+
+        if self.training_mode :
+            self.training_loop(optimizer, self.loss_strategy)
+
+        print("last model saved in:", self.model_file)
+        print("best model weights saved in:", self.best_model_weights)
+        print("best model checkpoint saved in:", self.best_model_checkpoint)
+
+
+trainer = TrainOceanXL()
+trainer.train()
