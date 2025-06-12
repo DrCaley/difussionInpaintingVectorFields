@@ -10,7 +10,7 @@ import traceback
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
 from ddpm.helper_functions.mask_factory.masks.random_path import RandomPathMaskGenerator
-from ddpm.helper_functions.mask_factory.masks.no_mask import NoMask
+from ddpm.helper_functions.mask_factory.masks.gaussian_mask import GaussianNoiseBinaryMaskGenerator
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
@@ -78,9 +78,9 @@ resample_nums = [5]                  # Number of resampling steps
 mse_ddpm_list = []                   # To store average MSEs per image
 
 # =========== Initializing Masks ==================
-no_mask = NoMask()
+gaussian_mask = GaussianNoiseBinaryMaskGenerator(threshold=-1.0)
 
-masks_to_test = [no_mask]
+masks_to_test = [gaussian_mask]
 
 def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
     writer = csv.writer(file)
@@ -92,7 +92,7 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
     n_samples = dd.get_attribute('n_samples')
 
     # ======== Loop Through Batches ========
-    loader = train_loader
+    loader = val_loader
 
     for batch in loader:
         logging.info("Processing batch")

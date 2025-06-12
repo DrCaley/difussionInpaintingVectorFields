@@ -5,7 +5,7 @@ __pycache__/
 output/
 example_nn/
 /training_output/
-/plots/pt_visualizer_images
+/plots/visualization_tools/pt_visualizer_images
 /plots/outputs
 /plots/images
 *.csv
