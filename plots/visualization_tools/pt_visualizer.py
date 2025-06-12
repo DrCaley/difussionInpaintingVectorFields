@@ -116,3 +116,6 @@ load_and_visualize_pt(
     width_range=(0, 94),
     vector_scale=0.15
 )
+tensor = torch.load('../../ddpm/testing/results/mask0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
+                    map_location='cpu')
+visualize_tensor(tensor[0,0], 'mask0_GaussianNoiseBinaryMaskGenerator', save_dir='pt_visualizer_images')

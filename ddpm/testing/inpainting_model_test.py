@@ -5,7 +5,6 @@ from torch.utils.data import DataLoader
 import logging
 import csv
 import sys
-import traceback
 
 from tqdm import tqdm
 
@@ -13,11 +12,10 @@ from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
-from ddpm.helper_functions.mask_factory.masks.random_path import RandomPathMaskGenerator
 from ddpm.helper_functions.mask_factory.masks.gaussian_mask import GaussianNoiseBinaryMaskGenerator
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
-from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
+from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 
 dd = DDInitializer()

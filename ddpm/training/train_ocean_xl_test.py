@@ -110,10 +110,6 @@ def training_loop(ddpm, train_loader, test_loader, n_epochs, optim, device, disp
 
     start_epoch = 0
 
-    """ 
-    TODO: since each model has its own unique file name with timestamp, we are not able to train the same model
-    more than once, we need to implement a way to train the same model again. I'm talking to you future me!
-    """
     if continue_training :
         checkpoint = torch.load(model_to_retrain)
         ddpm.load_state_dict(checkpoint['model_state_dict'])
