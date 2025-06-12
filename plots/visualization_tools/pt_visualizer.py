@@ -96,8 +96,22 @@ def load_and_visualize_pt(file_path, title="loaded_tensor", save_dir="pt_visuali
     visualize_tensor(tensor, title=title, save_dir=f"{save_dir}", **kwargs)
 
 load_and_visualize_pt(
-    '../../ddpm/testing/results/img_0_1_GaussianNoiseBinaryMaskGenerator(threshold=-1.0, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
-    'img_0_1_GaussianNoiseBinaryMaskGenerator',
+    '../../ddpm/testing/results/img0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
+    'img0_GaussianNoiseBinaryMaskGenerator',
+    height_range=(0, 44),
+    width_range=(0, 94),
+    vector_scale=0.15
+)
+load_and_visualize_pt(
+    '../../ddpm/testing/results/initial0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
+    'initial0_GaussianNoiseBinaryMaskGenerator',
+    height_range=(0, 44),
+    width_range=(0, 94),
+    vector_scale=0.15
+)
+load_and_visualize_pt(
+    '../../ddpm/testing/results/interpolated0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
+    'interpolated0_GaussianNoiseBinaryMaskGenerator',
     height_range=(0, 44),
     width_range=(0, 94),
     vector_scale=0.15

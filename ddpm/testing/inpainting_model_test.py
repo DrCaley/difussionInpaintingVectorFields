@@ -9,6 +9,8 @@ import traceback
 
 from tqdm import tqdm
 
+from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
 from ddpm.helper_functions.mask_factory.masks.random_path import RandomPathMaskGenerator
@@ -79,9 +81,9 @@ resample_nums = dd.get_attribute("resample_nums")
 mse_ddpm_list = []
 
 # =========== Initializing Masks ==================
-gaussian_mask = GaussianNoiseBinaryMaskGenerator(threshold=-1.0)
+gaussian_mask_1 = GaussianNoiseBinaryMaskGenerator(threshold=-1)
 
-masks_to_test = [gaussian_mask]
+masks_to_test = [gaussian_mask_1]
 
 def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
     writer = csv.writer(file)
@@ -129,7 +131,9 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
                         resample_steps=resample
                     )
 
-                    final_image_ddpm = dd.get_standardizer().unstandardize(final_image_ddpm).to(device)
+                    standardizer = dd.get_standardizer()
+                    final_image_ddpm = standardizer.unstandardize(final_image_ddpm).to(device)
+                    interpolated_field = interpolate_masked_velocity_field(input_image_original[0], mask[0,0:1])
 
                     # Save inpainted result and mask.py
                     torch.save(final_image_ddpm,
@@ -137,7 +141,9 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
                     torch.save(mask,
                                f"{results_path}mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
                     torch.save(input_image_original,
-                               f"{results_path}img_0_{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                               f"{results_path}initial{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                    torch.save(interpolated_field,
+                               f"{results_path}interpolated{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
 
                     # Calculate MSE for masked region
                     mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
