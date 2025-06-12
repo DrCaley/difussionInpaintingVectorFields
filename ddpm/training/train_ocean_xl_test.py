@@ -49,27 +49,27 @@ model_file = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}.pt")
 best_model_weights = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}_best_weights.pt")
 best_model_checkpoint = os.path.join(output_dir, f"ddpm_ocean_model_{timestamp}_best_checkpoint.pt")
 
-data_init = DDInitializer()
+dd = DDInitializer()
 
 # CHANGE DESCRIPTION HERE, IT WILL ATTACH TO THE OUTPUT CSV:
 description = 'Using 0 physical loss, 1 MSE along with non divergent noise that has the gaussian applied at each step'
 
-n_steps = data_init.get_attribute('n_steps')
-min_beta = data_init.get_attribute('min_beta')
-max_beta = data_init.get_attribute('max_beta')
+n_steps = dd.get_attribute('n_steps')
+min_beta = dd.get_attribute('min_beta')
+max_beta = dd.get_attribute('max_beta')
 
-ddpm = MyDDPMGaussian(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=data_init.get_device())
-noise_strategy = data_init.noise_strategy
-loss_strategy = data_init.loss_strategy
+ddpm = MyDDPMGaussian(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=dd.get_device())
+noise_strategy = dd.noise_strategy
+loss_strategy = dd.loss_strategy
 
-training_mode = data_init.get_attribute('training_mode')
-batch_size = data_init.get_attribute('batch_size')
-n_epochs = data_init.get_attribute('n_epochs')
-lr = data_init.get_attribute('lr')
+training_mode = dd.get_attribute('training_mode')
+batch_size = dd.get_attribute('batch_size')
+n_epochs = dd.get_attribute('n_epochs')
+lr = dd.get_attribute('lr')
 
-training_data = data_init.get_training_data()
-test_data = data_init.get_test_data()
-validation_data = data_init.get_validation_data()
+training_data = dd.get_training_data()
+test_data = dd.get_test_data()
+validation_data = dd.get_validation_data()
 
 train_loader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=batch_size)
@@ -218,7 +218,7 @@ optimizer = Adam(ddpm.parameters(), lr=lr)
 
 if training_mode:
     training_loop(ddpm, train_loader, test_loader, n_epochs,
-                  optim=optimizer, device=data_init.get_device(),
+                  optim=optimizer, device=dd.get_device(),
                   loss_function=loss_strategy, noise_function=noise_strategy)
 
 print("last model saved in:", model_file)
