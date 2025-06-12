@@ -7,6 +7,8 @@ import csv
 import sys
 import traceback
 
+from tqdm import tqdm
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
 from ddpm.helper_functions.mask_factory.masks.random_path import RandomPathMaskGenerator
@@ -16,14 +18,14 @@ from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.helper_functions.inpainting_utils import inpaint_generate_new_images, calculate_mse
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 
-
-
 dd = DDInitializer()
+results_path = "./results/"
+
+if not os.path.exists(results_path):
+    os.makedirs(results_path, exist_ok=True)
 
 (training_tensor, validation_tensor, test_tensor) = dd.get_tensors()
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename="inpainting_model_test_log.txt")
-
-results_path = "./results/"
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename=f"{results_path}inpainting_model_test_log.txt")
 
 # ======== Model Configuration ========
 n_steps = dd.get_attribute("n_steps")
@@ -73,9 +75,8 @@ except Exception as e:
     exit(1)
 
 # ======== Inpainting Evaluation Parameters ========
-line_numbers = [10, 20, 40]          # Number of lines in the abstract_mask.py
-resample_nums = [5]                  # Number of resampling steps
-mse_ddpm_list = []                   # To store average MSEs per image
+resample_nums = dd.get_attribute("resample_nums")
+mse_ddpm_list = []
 
 # =========== Initializing Masks ==================
 gaussian_mask = GaussianNoiseBinaryMaskGenerator(threshold=-1.0)
@@ -93,77 +94,77 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
 
     # ======== Loop Through Batches ========
     loader = val_loader
+    total_images = min(len(loader.dataset), num_images_to_process)
 
-    for batch in loader:
-        logging.info("Processing batch")
-        if image_counter >= num_images_to_process:
-            break
+    with tqdm(total=total_images, desc=f"Mask: {mask_generator}", colour="#00ffff") as main_pbar:
+        for step, batch in enumerate(loader):
+            logging.info("Processing batch")
+            if image_counter >= num_images_to_process:
+                break
 
-        device = dd.get_device()
+            device = dd.get_device()
+            input_image = batch[0].to(device) # (Batch size, Channels, Height, Width)
 
-        input_image = batch[0].to(device) # (Batch size, Channels, Height, Width)
+            # Convert back to unstandardized form for land masking
+            input_image_original = dd.get_standardizer().unstandardize(input_image).to(device)
+            land_mask = (input_image_original != 0).float().to(device)
 
-        # Convert back to unstandardized form for land masking
-        input_image_original = dd.get_standardizer().unstandardize(input_image).to(device)
-        land_mask = (input_image_original != 0).float().to(device)
+            mask = mask_generator.generate_mask(input_image.shape, land_mask)
+            num_lines = mask_generator.get_num_lines()
 
-        mask = mask_generator.generate_mask(input_image.shape, land_mask)
-        num_lines = mask_generator.get_num_lines()
+            # ======== Masking and Inpainting Loops ========
+            for resample in resample_nums:
 
-        # ======== Masking and Inpainting Loops ========
-        for resample in resample_nums:
+                torch.save(mask, f"{results_path}{mask_generator}_{num_lines}.pt")
 
-            torch.save(mask, f"{results_path}{mask_generator}_{num_lines}.pt")
+                mse_ddpm_samples = []
+                # ======== Generate Samples ========
+                for i in tqdm(range(n_samples), leave=False, desc="Samples", colour="#006666"):
+                    final_image_ddpm = inpaint_generate_new_images(
+                        best_model,
+                        input_image,
+                        mask,
+                        n_samples=1, #number of samples to generate. I think it doesn't work, not sure
+                        device=device,
+                        resample_steps=resample
+                    )
 
-            mse_ddpm_samples = []
-            # ======== Generate Samples ========
-            for i in range(n_samples):
-                final_image_ddpm = inpaint_generate_new_images(
-                    best_model,
-                    input_image,
-                    mask,
-                    n_samples=1, #number of samples to generate. I think it doesn't work, not sure
-                    device=device,
-                    resample_steps=resample
-                )
+                    final_image_ddpm = dd.get_standardizer().unstandardize(final_image_ddpm).to(device)
 
-                final_image_ddpm = dd.get_standardizer().unstandardize(final_image_ddpm).to(device)
+                    # Save inpainted result and mask.py
+                    torch.save(final_image_ddpm,
+                               f"{results_path}img{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                    torch.save(mask,
+                               f"{results_path}mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                    torch.save(input_image_original,
+                               f"{results_path}img_0_{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
 
-                # Save inpainted result and mask.py
-                torch.save(final_image_ddpm,
-                           f"{results_path}img{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
-                torch.save(mask,
-                           f"{results_path}mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
-                torch.save(input_image_original,
-                           f"{results_path}img_0_{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                    # Calculate MSE for masked region
+                    mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
+                    mse_ddpm_samples.append(mse_ddpm.item())
 
+                    logging.info(
+                        f"MSE (DDPM Inpainting) with {num_lines} lines for image {image_counter}, sample {i}: {mse_ddpm.item()}")
 
-                # Calculate MSE for masked region
-                mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
-                mse_ddpm_samples.append(mse_ddpm.item())
+                    # Write result to CSV
+                    output = [image_counter, num_lines, resample, mse_ddpm.item()]
+                    writer.writerow(output)
 
-                logging.info(
-                    f"MSE (DDPM Inpainting) with {num_lines} lines for image {image_counter}, sample {i}: {mse_ddpm.item()}")
+                    del final_image_ddpm
+                    torch.cuda.empty_cache()
+                    logging.info("finished resampling")
 
-                # Write result to CSV
-                output = [image_counter, num_lines, resample, mse_ddpm.item()]
-                writer.writerow(output)
+            mean_mse_ddpm_samples = np.mean(mse_ddpm_samples)
+            mse_ddpm_list.append(mean_mse_ddpm_samples)
 
-                del final_image_ddpm
-                torch.cuda.empty_cache()
-                logging.info("finished resampling")
-
-        mean_mse_ddpm_samples = np.mean(mse_ddpm_samples)
-        mse_ddpm_list.append(mean_mse_ddpm_samples)
-
-        image_counter += 1
-        logging.info("Finished processing batch:")
-
+            image_counter += 1
+            main_pbar.update(1)
+            logging.info("Finished processing batch:")
 
     return image_counter
 
 # ======== CSV Output File for Results ========
-with open("inpainting_xl_data.csv", "w", newline="") as file:
+with open(f"{results_path}inpainting_xl_data.csv", "w", newline="") as file:
     try:
         image_counter = dd.get_attribute("image_counter")
         for mask in masks_to_test:
