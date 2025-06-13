@@ -66,11 +66,51 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                     x = noise_one_step(x, t, noise_strat)
     return x
 
-def calculate_mse(original_image, predicted_image, mask, flow=False):
-    masked_original = original_image * mask
-    masked_predicted = predicted_image * mask
-    mse = f.mse_loss(masked_predicted, masked_original, reduction='sum') / mask.sum()
-    return mse
+import torch.nn.functional as F
+
+def calculate_mse(original_image, predicted_image, mask):
+    """
+    Calculate average MSE per pixel by summing squared error over channels,
+    then averaging only over masked pixels.
+
+    Args:
+        original_image: Tensor of shape (1, 2, H, W)
+        predicted_image: Tensor of shape (1, 2, H, W)
+        mask: Tensor of shape (1, 2, H, W) with identical info on both channels (0/1)
+
+    Returns:
+        Scalar tensor: average MSE per pixel over masked region
+    """
+    single_mask = mask[:, 0:1, :, :]
+
+    squared_error = (original_image - predicted_image) ** 2  # shape (1, 2, H, W)
+    per_pixel_error = squared_error.sum(dim=1, keepdim=True)  # sum over channel => (1,1,H,W)
+
+    masked_error = per_pixel_error * single_mask  # mask applied per pixel
+
+    total_error = masked_error.sum()  # sum over all pixels
+    num_valid_pixels = single_mask.sum()
+
+    # Avoid division by zero
+    if num_valid_pixels == 0:
+        return torch.tensor(float('nan'))
+
+    mse_per_pixel = total_error / num_valid_pixels
+    return mse_per_pixel
+
+def top_left_crop(tensor, crop_h, crop_w):
+    """
+    Crop the top-left corner of a tensor of shape (1, 2, H, W).
+
+    Args:
+        tensor: PyTorch tensor of shape (1, 2, H, W)
+        crop_h: Desired crop height
+        crop_w: Desired crop width
+
+    Returns:
+        Cropped tensor of shape (1, 2, crop_h, crop_w)
+    """
+    return tensor[:, :, :crop_h, :crop_w]
 
 def avg_pixel_value(original_image, predicted_image, mask):
     avg_pixel_value = torch.sum(torch.abs(original_image * mask)) / mask.sum()

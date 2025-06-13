@@ -2,16 +2,12 @@ import os
 import sys
 import torch
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.fft import fft2, ifft2, fftfreq
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from plots.plot_vector_field_tool import plot_vector_field
 from ddpm.helper_functions.compute_divergence import compute_divergence
 from ddpm.helper_functions.standardize_data import standardize_data
-from plots.visualization_tools.normalize import normalize
-
-
 
 # === Create a non-square 2D grid ===
 Nx, Ny = 6, 6  # Can be any positive integers

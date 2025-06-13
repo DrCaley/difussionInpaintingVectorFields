@@ -15,7 +15,7 @@ from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
 from ddpm.helper_functions.mask_factory.masks.gaussian_mask import GaussianNoiseBinaryMaskGenerator
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
-from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse
+from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 
 dd = DDInitializer()
@@ -131,7 +131,12 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
 
                     standardizer = dd.get_standardizer()
                     final_image_ddpm = standardizer.unstandardize(final_image_ddpm).to(device)
-                    interpolated_field = interpolate_masked_velocity_field(input_image_original[0], mask[0,0:1])
+                    interpolated_field = interpolate_masked_velocity_field(input_image_original[0], mask[0,0:1]).unsqueeze(0).to(device)
+
+                    input_image_original = top_left_crop(input_image_original, 44, 94).to(device)
+                    final_image_ddpm = top_left_crop(final_image_ddpm, 44, 94).to(device)
+                    interpolated_field = top_left_crop(interpolated_field, 44, 94).to(device)
+                    mask = top_left_crop(mask, 44, 94).to(device)
 
                     # Save inpainted result and mask.py
                     torch.save(final_image_ddpm,
@@ -144,7 +149,7 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
                                f"{results_path}interpolated{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
 
                     # Calculate MSE for masked region
-                    mse_ddpm = calculate_mse(input_image, final_image_ddpm, mask)
+                    mse_ddpm = calculate_mse(input_image_original, final_image_ddpm, mask)
                     mse_ddpm_samples.append(mse_ddpm.item())
 
                     logging.info(
