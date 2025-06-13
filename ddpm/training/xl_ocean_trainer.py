@@ -225,7 +225,12 @@ class TrainOceanXL():
             ddpm.train()
 
             for _, (x0, t, noise), in enumerate( tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{n_epochs}", colour="#005500")):
+
                 n = len(x0)
+                x0 = x0.to(device)
+                t = t.to(device)
+                noise = noise.to(device)
+
                 noisy_imgs = ddpm(x0, t, noise)
                 predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
