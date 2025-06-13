@@ -7,7 +7,8 @@ import numpy as np
 import os
 
 from data_prep.data_initializer import DDInitializer
-from ddpm.helper_functions.compute_divergence import compute_divergence
+from plots.visualization_tools.error_visualization import save_mse_heatmap, save_angular_error_heatmap
+from ddpm.utils.inpainting_utils import calculate_mse
 dd = DDInitializer()
 
 def visualize_tensor(
@@ -98,24 +99,27 @@ def load_and_visualize_pt(file_path, title="loaded_tensor", save_dir="pt_visuali
 load_and_visualize_pt(
     '../../ddpm/testing/results/img0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
     'img0_GaussianNoiseBinaryMaskGenerator',
-    height_range=(0, 44),
-    width_range=(0, 94),
     vector_scale=0.15
 )
 load_and_visualize_pt(
     '../../ddpm/testing/results/initial0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
     'initial0_GaussianNoiseBinaryMaskGenerator',
-    height_range=(0, 44),
-    width_range=(0, 94),
     vector_scale=0.15
 )
 load_and_visualize_pt(
     '../../ddpm/testing/results/interpolated0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
     'interpolated0_GaussianNoiseBinaryMaskGenerator',
-    height_range=(0, 44),
-    width_range=(0, 94),
     vector_scale=0.15
 )
 tensor = torch.load('../../ddpm/testing/results/mask0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
                     map_location='cpu')
 visualize_tensor(tensor[0,0], 'mask0_GaussianNoiseBinaryMaskGenerator', save_dir='pt_visualizer_images')
+
+actual = torch.load("../../ddpm/testing/results/img0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt", map_location='cpu', weights_only=False)
+interpolation = torch.load("../../ddpm/testing/results/interpolated0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt", map_location='cpu', weights_only=False).unsqueeze(0)
+guess = torch.load("../../ddpm/testing/results/initial0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt", map_location='cpu', weights_only=False)
+mask = torch.load("../../ddpm/testing/results/mask0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt", map_location='cpu', weights_only=False)
+
+print(f"Average MSE per pixel over masked area in crop: {calculate_mse(actual,guess,mask):.6f}")
+save_mse_heatmap(actual,guess,mask)
+save_angular_error_heatmap(guess, actual, mask)
