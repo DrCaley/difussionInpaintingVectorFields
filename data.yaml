@@ -12,6 +12,7 @@ noise_function: gaussian
 loss_function: mse
 w1: 0.5
 w2: 0.5
+num_workers: 1
 
 n_steps: 100
 min_beta: 0.0001
