@@ -11,7 +11,9 @@ def evaluate(model, data_loader, device):
     criterion = nn.MSELoss()
 
     with torch.no_grad():
-        for x0, t, epsilon in data_loader:
+        for i, (x0, t, epsilon) in enumerate(data_loader):
+            if i > 20 : #perhaps we can evaluate a small sample instead of all data?
+                break
             x0 = x0.to(device)
             t = t.to(device)
             epsilon = epsilon.to(device)

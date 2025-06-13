@@ -222,12 +222,11 @@ class TrainOceanXL():
 
         # Training arc
         for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
-
+            pygame.mixer.music.play()
             epoch_loss = 0.0
             ddpm.train()
 
             for _, (x0, t, noise), in enumerate( tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{n_epochs}", colour="#005500")):
-
                 n = len(x0)
                 noisy_imgs = ddpm(x0, t, noise)
                 predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))
@@ -262,8 +261,6 @@ class TrainOceanXL():
                 avg_test_loss = test_future.result()
                 spinner.succeed()
 
-            ddpm.train()
-
             epoch_losses.append(epoch_loss)
             train_losses.append(avg_train_loss)
             test_losses.append(avg_test_loss)
@@ -272,11 +269,11 @@ class TrainOceanXL():
             log_string += f"EPOCH Loss: {epoch_loss:.3f}\n"
             log_string += f"TRAIN Loss: {avg_train_loss:.3f}\n"
             log_string += f"TEST Loss: {avg_test_loss:.3f}\n"
-
             # Append current epoch results to CSV
             with open(csv_file, mode='a', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow([epoch + 1, epoch_loss, avg_train_loss, avg_test_loss])
+            ddpm.train()
 
             checkpoint = {
                 'epoch': epoch,
@@ -300,6 +297,7 @@ class TrainOceanXL():
             tqdm.write(log_string)
 
             torch.save(checkpoint, model_file)
+            pygame.mixer.music.stop()
 
             """
             if display:
@@ -326,9 +324,8 @@ class TrainOceanXL():
             pygame.mixer.init()
             pygame.mixer.music.load("music.mp3")
             pygame.mixer.music.play()
-            while pygame.mixer.music.get_busy():
-                self.training_loop(optimizer, self.loss_strategy)
-                continue
+            self.training_loop(optimizer, self.loss_strategy)
+
 
         print("last model saved in:", self.model_file)
         print("best model weights saved in:", self.best_model_weights)
