@@ -6,7 +6,7 @@ from data_prep.data_initializer import DDInitializer
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
 from ddpm.helper_functions.mask_factory.masks.border_mask import BorderMaskGenerator
 
-dd = DDInitializer
+dd = DDInitializer()
 
 class StraightLineMaskGenerator(MaskGenerator):
     def __init__(self, num_lines=10, line_thickness=5):
@@ -52,4 +52,4 @@ class StraightLineMaskGenerator(MaskGenerator):
         return "StraightLineMaskGenerator"
 
     def get_num_lines(self):
-        return self.get_num_lines()
+        return self.num_lines

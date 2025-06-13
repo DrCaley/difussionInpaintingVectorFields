@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-def interpolate_masked_velocity_field(velocity: torch.Tensor, mask: torch.Tensor, max_iters: int = 500) -> torch.Tensor:
+def interpolate_masked_velocity_field(velocity: torch.Tensor, mask: torch.Tensor, max_iters: int = 2000) -> torch.Tensor:
     """
     PyTorch-only safe interpolation of a masked 2-channel velocity field.
     Ensures all masked regions are filled using neighbor propagation.
