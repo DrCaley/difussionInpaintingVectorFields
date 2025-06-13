@@ -12,7 +12,7 @@ from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
-from ddpm.helper_functions.mask_factory.masks.gaussian_mask import GaussianNoiseBinaryMaskGenerator
+from ddpm.helper_functions.mask_factory.masks.straigth_line import StraightLineMaskGenerator
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
@@ -79,9 +79,9 @@ resample_nums = dd.get_attribute("resample_nums")
 mse_ddpm_list = []
 
 # =========== Initializing Masks ==================
-gaussian_mask_1 = GaussianNoiseBinaryMaskGenerator(threshold=-1)
+robot_mask = StraightLineMaskGenerator(1,1)
 
-masks_to_test = [gaussian_mask_1]
+masks_to_test = [robot_mask]
 
 def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
     writer = csv.writer(file)
@@ -131,7 +131,7 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
 
                     standardizer = dd.get_standardizer()
                     final_image_ddpm = standardizer.unstandardize(final_image_ddpm).to(device)
-                    interpolated_field = interpolate_masked_velocity_field(input_image_original[0], mask[0,0:1]).unsqueeze(0).to(device)
+                    interpolated_field = interpolate_masked_velocity_field(input_image_original[0], mask[0,0:1],).unsqueeze(0).to(device)
 
                     input_image_original = top_left_crop(input_image_original, 44, 94).to(device)
                     final_image_ddpm = top_left_crop(final_image_ddpm, 44, 94).to(device)
@@ -140,7 +140,7 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
 
                     # Save inpainted result and mask.py
                     torch.save(final_image_ddpm,
-                               f"{results_path}img{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                               f"{results_path}ddpm{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
                     torch.save(mask,
                                f"{results_path}mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
                     torch.save(input_image_original,

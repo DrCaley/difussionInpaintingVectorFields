@@ -9,7 +9,22 @@ import os
 from data_prep.data_initializer import DDInitializer
 from plots.visualization_tools.error_visualization import save_mse_heatmap, save_angular_error_heatmap
 from ddpm.utils.inpainting_utils import calculate_mse
+
 dd = DDInitializer()
+
+# ======================== USER INPUT ========================
+noise_type = "StraightLineMaskGenerator"  # e.g. "RobotPath", "NoisyField", etc.
+sample_num = 1            # Which numbered sample to visualize
+vector_scale = 0.15       # Adjust for better vector field visibility
+num_lines = 1
+# ============================================================
+
+base_path = f"../../ddpm/testing/results"
+save_dir = "pt_visualizer_images"
+prefixes = ['ddpm', 'interpolated', 'initial', 'mask']
+
+def build_filename(prefix):
+    return f"{prefix}{sample_num}_{noise_type}_resample5_num_lines_{num_lines}.pt"
 
 def visualize_tensor(
     tensor,
@@ -19,10 +34,6 @@ def visualize_tensor(
     width_range=None,
     vector_scale=1.0
 ):
-    """
-    Visualizes and saves 2D/3D/4D tensors (e.g. masks, vector fields, grayscale images).
-    Optionally selects a subregion and adjusts vector arrow scale.
-    """
     tensor = tensor.squeeze()
     os.makedirs(save_dir, exist_ok=True)
 
@@ -34,7 +45,6 @@ def visualize_tensor(
         return t
 
     if tensor.ndim == 2:
-        # Single 2D array (e.g., mask)
         tensor = crop(tensor)
         plt.imshow(tensor.cpu(), cmap='gray')
         plt.title(title)
@@ -44,13 +54,11 @@ def visualize_tensor(
 
     elif tensor.ndim == 3:
         if tensor.shape[0] == 2:
-            # Vector field: tensor shape (2, H, W)
             tensor = crop(tensor)
             u, v = tensor[0], tensor[1]
             H, W = u.shape
             x, y = np.meshgrid(np.arange(W), np.arange(H))
 
-            # Dynamically set figure size preserving aspect ratio, max dimension ~8
             max_dim = 8
             if W > H:
                 figsize = (max_dim, max_dim * H / W)
@@ -61,11 +69,10 @@ def visualize_tensor(
             plt.quiver(x, y, u.cpu(), v.cpu(), scale=1.0/vector_scale)
             plt.title(title + " (Vector Field)")
             plt.gca().invert_yaxis()
-            plt.gca().set_aspect('equal', adjustable='box')  # preserve aspect ratio
+            plt.gca().set_aspect('equal', adjustable='box')
             plt.savefig(os.path.join(save_dir, f"{title}_vector_field.png"))
             plt.close()
         else:
-            # Grayscale channels
             tensor = crop(tensor)
             for i in range(tensor.shape[0]):
                 plt.imshow(tensor[i].cpu(), cmap='gray')
@@ -89,37 +96,32 @@ def visualize_tensor(
         print("Unsupported tensor shape:", tensor.shape)
 
 def load_and_visualize_pt(file_path, title="loaded_tensor", save_dir="pt_visualizer_images", **kwargs):
-    """
-    Loads a .pt file and visualizes (saves) the tensor it contains.
-    Passes optional args to the visualizer.
-    """
     tensor = torch.load(file_path, map_location='cpu', weights_only=False)
-    visualize_tensor(tensor, title=title, save_dir=f"{save_dir}", **kwargs)
+    visualize_tensor(tensor, title=title, save_dir=save_dir, **kwargs)
+    return tensor
 
-load_and_visualize_pt(
-    '../../ddpm/testing/results/img0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
-    'img0_GaussianNoiseBinaryMaskGenerator',
-    vector_scale=0.15
-)
-load_and_visualize_pt(
-    '../../ddpm/testing/results/initial0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
-    'initial0_GaussianNoiseBinaryMaskGenerator',
-    vector_scale=0.15
-)
-load_and_visualize_pt(
-    '../../ddpm/testing/results/interpolated0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
-    'interpolated0_GaussianNoiseBinaryMaskGenerator',
-    vector_scale=0.15
-)
-tensor = torch.load('../../ddpm/testing/results/mask0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt',
-                    map_location='cpu')
-visualize_tensor(tensor[0,0], 'mask0_GaussianNoiseBinaryMaskGenerator', save_dir='pt_visualizer_images')
+# ========================== MAIN ============================
 
-actual = torch.load("../../ddpm/testing/results/img0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt", map_location='cpu', weights_only=False)
-interpolation = torch.load("../../ddpm/testing/results/interpolated0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt", map_location='cpu', weights_only=False).unsqueeze(0)
-guess = torch.load("../../ddpm/testing/results/initial0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt", map_location='cpu', weights_only=False)
-mask = torch.load("../../ddpm/testing/results/mask0_GaussianNoiseBinaryMaskGenerator(threshold=-1, mean=0.0, std=1.0)_resample5_num_lines_0.pt", map_location='cpu', weights_only=False)
+# Load and visualize each type
+data = {}
+for prefix in prefixes:
+    file_path = os.path.join(base_path, build_filename(prefix))
+    title = build_filename(prefix).replace('.pt', '')
+    try:
+        if prefix == 'mask':
+            tensor = torch.load(file_path, map_location='cpu', weights_only=False)
+            visualize_tensor(tensor[0,0], title, save_dir=save_dir)
+        else:
+            tensor = load_and_visualize_pt(file_path, title=title, save_dir=save_dir, vector_scale=vector_scale)
+        data[prefix] = tensor
+    except Exception as e:
+        print(f"Failed to load or visualize {title}: {e}")
 
-print(f"Average MSE per pixel over masked area in crop: {calculate_mse(actual,guess,mask):.6f}")
-save_mse_heatmap(actual,guess,mask)
-save_angular_error_heatmap(guess, actual, mask)
+# Compute and save error visualizations
+try:
+    mse = calculate_mse(data['ddpm'], data['initial'], data['mask'])
+    print(f"Average MSE per pixel over masked area in crop: {mse:.6f}")
+    save_mse_heatmap(data['ddpm'], data['initial'], data['mask'])
+    save_angular_error_heatmap(data['initial'], data['ddpm'], data['mask'])
+except Exception as e:
+    print(f"Failed to compute/save error heatmaps: {e}")
