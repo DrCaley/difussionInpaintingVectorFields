@@ -2,6 +2,7 @@ import csv
 import os
 import sys
 from datetime import datetime
+import pygame
 
 import torch
 from halo import Halo
@@ -18,23 +19,18 @@ from data_prep.data_initializer import DDInitializer
 from concurrent.futures import ThreadPoolExecutor
 
 class TrainOceanXL():
-    """
-       Trains a DDPM model on ocean data using configurable UNet architecture.
 
-       Handles data loading, checkpointing, model evaluation, loss tracking,
-       and saving logs + best weights across epochs.
-    """
     def __init__(self):
         """
         Initializes model, datasets, loaders, and all training configs using DDInitializer.
         """
         dd = DDInitializer()
         self._setup_paths_and_files()
-
         self.device = dd.get_device()
         self.n_steps = dd.get_attribute('n_steps')
         self.min_beta = dd.get_attribute('min_beta')
         self.max_beta = dd.get_attribute('max_beta')
+        self.num_workers = dd.get_attribute('num_workers')
         self.ddpm = MyDDPMGaussian(MyUNet(self.n_steps),
                                    n_steps=self.n_steps,
                                    min_beta=self.min_beta,
@@ -50,21 +46,20 @@ class TrainOceanXL():
         self.train_loader = DataLoader(dd.get_training_data(),
                                        batch_size=self.batch_size,
                                        shuffle=True,
-                                       num_workers=4,
+                                       num_workers=self.num_workers,
                                        pin_memory=True,
                                        persistent_workers=True)
         self.test_loader = DataLoader(dd.get_test_data(),
                                       batch_size=self.batch_size,
-                                      num_workers=4,
+                                      num_workers=self.num_workers,
                                       pin_memory=True,
                                       persistent_workers=True)
         self.val_loader = DataLoader(dd.get_validation_data(),
                                      batch_size=self.batch_size,
-                                     num_workers=4,
+                                     num_workers=self.num_workers,
                                      pin_memory=True,
                                      persistent_workers=True)
         self.continue_training = False
-
 
     def retrain_this(self, path: str):
         """
@@ -195,23 +190,18 @@ class TrainOceanXL():
             loss_function (callable, optional): Loss function for training.
         """
         best_test_loss = float("inf")
-
         epoch_losses = []
         train_losses = []
         test_losses = []
-
         start_epoch = 0
-
         ddpm = self.ddpm
         device = self.device
         csv_file = self.csv_file
         n_epochs = self.n_epochs
         plot_file = self.plot_file
-        n_steps = self.ddpm.n_steps
         model_file = self.model_file
         test_loader = self.test_loader
         train_loader = self.train_loader
-        noise_function = self.noise_strategy
         best_model_weights = self.best_model_weights
         best_model_checkpoint = self.best_model_checkpoint
 
@@ -232,20 +222,13 @@ class TrainOceanXL():
 
         # Training arc
         for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
+
             epoch_loss = 0.0
             ddpm.train()
-            for step, batch in enumerate(
-                    tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{n_epochs}", colour="#005500")):
-                x0 = batch[0].to(device).float()
+
+            for _, (x0, t, noise), in enumerate( tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{n_epochs}", colour="#005500")):
+
                 n = len(x0)
-
-                t = torch.randint(0, n_steps, (n,)).to(device)  # Random time steps
-
-                if noise_function is not None:  # Generate noise
-                    noise = noise_function(x0, t).to(device)
-                else:
-                    noise = torch.randn_like(x0).to(device)
-
                 noisy_imgs = ddpm(x0, t, noise)
                 predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
@@ -257,6 +240,8 @@ class TrainOceanXL():
 
                 epoch_loss += loss.item() * len(x0) / len(train_loader.dataset)
 
+            # What is all of this doing? Do we want evaluate(...) ONLY, instead of epoch_loss?
+            # I figure we may just want to toss epoch_loss.
             with ThreadPoolExecutor(max_workers=2) as executor:
                 spinner = Halo("Evaluating DDPM...", spinner="dots")
                 spinner.start()
@@ -276,9 +261,6 @@ class TrainOceanXL():
                 spinner.succeed()
                 avg_test_loss = test_future.result()
                 spinner.succeed()
-
-            # What is all of this doing? Do we want evaluate(...) ONLY, instead of epoch_loss?
-            # I figure we may just want to toss epoch_loss.
 
             ddpm.train()
 
@@ -341,7 +323,12 @@ class TrainOceanXL():
         optimizer = Adam(self.ddpm.parameters(), lr=self.lr)
 
         if self.training_mode :
-            self.training_loop(optimizer, self.loss_strategy)
+            pygame.mixer.init()
+            pygame.mixer.music.load("music.mp3")
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy():
+                self.training_loop(optimizer, self.loss_strategy)
+                continue
 
         print("last model saved in:", self.model_file)
         print("best model weights saved in:", self.best_model_weights)

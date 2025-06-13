@@ -13,6 +13,8 @@ class OceanImageDataset(Dataset):
 
     def __init__(
         self, data_tensor: Tensor,
+        n_steps,
+        noise_strategy=None,
         transform=None,
         boundaries: Optional[str] = None,
         data_fraction: Optional[float] = None,
@@ -28,6 +30,8 @@ class OceanImageDataset(Dataset):
             data_fraction (float, optional): Fraction of the dataset to use (between 0 and 1).
             max_samples (int, optional): Maximum number of samples to use.
         """
+        self.n_steps = n_steps
+        self.noise_strategy = noise_strategy
         assert data_tensor.ndim == 4 and data_tensor.shape[2] == 2, "Expected shape (94, 44, 2, n)"
         total_timesteps = data_tensor.shape[3]
 
@@ -59,10 +63,13 @@ class OceanImageDataset(Dataset):
         return len(self.tensor_arr)
 
     def __getitem__(self, idx):
-        tensor = self.tensor_arr[idx]
+        x0 = self.tensor_arr[idx]
         if self.transform:
-            tensor = self.transform(tensor)
-        return tensor, idx
+            x0 = self.transform(x0)
+        t = torch.randint(0, self.n_steps, (1,)).item()
+
+        noise = self.noise_strategy(x0.unsqueeze(0), torch.tensor([t])).squeeze(0)
+        return x0, t, noise
 
     def load_array(self, n: int) -> Tensor:
         """
