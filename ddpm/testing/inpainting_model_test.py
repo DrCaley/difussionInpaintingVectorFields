@@ -8,10 +8,12 @@ import sys
 
 from tqdm import tqdm
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field
 from ddpm.helper_functions.masks.gaussian_mask import GaussianNoiseBinaryMaskGenerator
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+from ddpm.helper_functions.masks.better_robot_path import BetterRobotPathGenerator
 from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
 from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator
 from data_prep.data_initializer import DDInitializer
@@ -81,7 +83,7 @@ mse_ddpm_list = []
 
 # =========== Initializing Masks ==================
 robot_mask = StraightLineMaskGenerator(1,1)
-cool_robot_mask = GaussianNoiseBinaryMaskGenerator()
+cool_robot_mask = BetterRobotPathGenerator(0.5)
 
 masks_to_test = [cool_robot_mask]
 
