@@ -1,109 +1,76 @@
-import torch
 import numpy as np
-from PIL import Image
+import torch
+from skimage.draw import ellipse, polygon
+from ddpm.helper_functions.masks.abstract_mask import MaskGenerator  # Adjust import as needed
 
-from data_prep.data_initializer import DDInitializer
-from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
-from ddpm.helper_functions.masks.border_mask import BorderMaskGenerator
+class SmileyMaskGenerator(MaskGenerator):
+    def __init__(self):
+        super().__init__()
+        self.symbol_height = 44
+        self.symbol_width = 94
+        self.symbol_mask = self._create_symbol_mask()
 
-dd = DDInitializer()
+    def _create_symbol_mask(self):
+        mask = np.zeros((44, 94), dtype=np.uint8)
 
-class SmileyFaceMaskGenerator(MaskGenerator):
+        # Face circle
+        rr, cc = ellipse(22, 47, 20, 40, shape=mask.shape)
+        mask[rr, cc] = 1
 
-    def __init__(self, scale=1.0, center=True):
-        self.scale = scale
-        self.center = center  # center or place randomly
+        # Eyes blank out (cut out)
+        rr, cc = ellipse(12, 32, 4, 6, shape=mask.shape)
+        mask[rr, cc] = 0
+        rr, cc = ellipse(12, 62, 4, 6, shape=mask.shape)
+        mask[rr, cc] = 0
+
+        # Pupils filled in
+        rr, cc = ellipse(12, 32, 2, 3, shape=mask.shape)
+        mask[rr, cc] = 1
+        rr, cc = ellipse(12, 62, 2, 3, shape=mask.shape)
+        mask[rr, cc] = 1
+
+        # Smile polygon (cut out shape to simulate a smile)
+        smile_points = np.array([
+            [32, 30],
+            [36, 34],
+            [38, 42],
+            [36, 50],
+            [32, 54],
+            [30, 52],
+            [34, 42],
+            [30, 34],
+        ])
+        rr, cc = polygon(smile_points[:, 0], smile_points[:, 1], shape=mask.shape)
+        mask[rr, cc] = 0
+
+        return mask
 
     def generate_mask(self, image_shape=None, land_mask=None):
         if image_shape is None:
-            print("image_shape is None")
-        if land_mask is None:
-            print("land_mask is None")
+            raise ValueError("image_shape must be provided")
+        if isinstance(image_shape, torch.Size):
+            image_shape = tuple(image_shape)
 
-        _, _, h, w = image_shape
-        device = dd.get_device()
+        if len(image_shape) != 4 or image_shape[0] != 1 or image_shape[1] != 2:
+            raise ValueError(f"Expected shape (1, 2, H, W), got {image_shape}")
 
-        # Initialize empty mask
-        mask = np.zeros((h, w), dtype=np.float32)
+        _, _, H, W = image_shape
+        symbol_h, symbol_w = self.symbol_mask.shape
 
-        # Generate land and border masks
-        border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape, land_mask=land_mask)
-        land_mask_np = land_mask.squeeze().cpu().numpy()
-        border_mask_np = border_mask.squeeze().cpu().numpy()
-        valid_mask = land_mask_np * border_mask_np
+        if symbol_h > H or symbol_w > W:
+            raise ValueError(f"Image shape too small to fit symbol: got {(H, W)}, symbol needs {(symbol_h, symbol_w)}")
 
-        # Define pixel-art smiley pattern
-        smiley_pattern = [
-            "0" * 94, "0" * 94, "0" * 94, "0" * 94, "0" * 94, "0" * 94, "0" * 94,
-            "000000000000111111111111111111100000000000000000000000000001111111111111111111000000000000",
-            "000000000111111111111111111111111000000000000000000000000111111111111111111111110000000000",
-            "000000001111111111111111111111111100000000000000000000011111111111111111111111111000000000",
-            "000000011111111111111111111111111110000000000000000000111111111111111111111111111100000000",
-            "000000011111111111111111111111111110000000000000000000111111111111111111111111111100000000",
-            "000000111111111111111111111111111111000000000000000001111111111111111111111111111110000000",
-            "000000011111111111111111111111111110000000000000000000111111111111111111111111111100000000",
-            "000000011111111111111111111111111110000000000000000000111111111111111111111111111100000000",
-            "000000001111111111111111111111111100000000000000000000011111111111111111111111111000000000",
-            "000000000111111111111111111111111000000000000000000000001111111111111111111111110000000000",
-            "000000000000111111111111111111100000000000000000000000000001111111111111111111000000000000",
-            "0" * 94, "0" * 94, "0" * 94, "0" * 94, "0" * 94, "0" * 94,
-            "000000000000000000000000000000000000111111111111111111111111111111000000000000000000000000",
-            "000000000000000000000000000000001111111111111111111111111111111111111000000000000000000000",
-            "000000000000000000000000000011111111111111111111111111111111111111111110000000000000000000",
-            "000000000000000000000000111111111111111111111111111111111111111111111111000000000000000000",
-            "000000000000000000001111111111111111111111111111111111111111111111111111100000000000000000",
-            "000000000000000001111111111111111111111111111111111111111111111111111111111000000000000000",
-            "000000000000000111111111111111111111111111111111111111111111111111111111111110000000000000",
-            "000000000000001111111111111111111111111111111111111111111111111111111111111111000000000000",
-            "000000000000001111111111111111111111111111111111111111111111111111111111111111000000000000",
-            "000000000000000111111111111111111111111111111111111111111111111111111111111110000000000000",
-            "000000000000000011111111111111111111111111111111111111111111111111111111111100000000000000",
-            "000000000000000000111111111111111111111111111111111111111111111111111111110000000000000000",
-            "000000000000000000001111111111111111111111111111111111111111111111111111000000000000000000",
-            "000000000000000000000011111111111111111111111111111111111111111111111100000000000000000000",
-            "000000000000000000000000111111111111111111111111111111111111111111110000000000000000000000",
-            "000000000000000000000000001111111111111111111111111111111111111111000000000000000000000000",
-            "0" * 94, "0" * 94, "0" * 94, "0" * 94,
-        ]
+        # Place symbol in the TOP-LEFT corner (start at 0,0)
+        full_mask = np.zeros((H, W), dtype=np.uint8)
+        full_mask[0:symbol_h, 0:symbol_w] = self.symbol_mask
 
-        # Convert to binary array
-        symbol = np.array([[int(c) for c in row] for row in smiley_pattern], dtype=np.float32)
-        sym_h, sym_w = symbol.shape
-
-        # Resize according to scale
-        new_h, new_w = int(h * self.scale), int(w * self.scale)
-        pil_img = Image.fromarray(symbol * 255)
-        resized = pil_img.resize((new_w, new_h), Image.NEAREST)
-        binary_symbol = (np.array(resized) > 127).astype(np.float32)
-
-        sh, sw = binary_symbol.shape
-
-        if self.center:
-            top = (h - sh) // 2
-            left = (w - sw) // 2
-        else:
-            valid_yx = np.argwhere(valid_mask == 1)
-            if len(valid_yx) == 0:
-                raise ValueError("No valid placement for smiley face.")
-            top, left = valid_yx[np.random.choice(len(valid_yx))]
-            top = max(0, min(top, h - sh))
-            left = max(0, min(left, w - sw))
-
-        # Apply symbol only on valid region
-        subregion = valid_mask[top:top+sh, left:left+sw]
-        symbol_mask = binary_symbol * subregion
-        mask[top:top+sh, left:left+sw] = symbol_mask
-
-        mask = torch.tensor(mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
-        land_mask = land_mask.to(device)
-        border_mask = border_mask.to(device)
-
-        mask = mask * land_mask * border_mask
-        mask = torch.cat([mask, mask.clone()], dim=1)  # (1, 2, H, W)
-        return mask
+        # Convert to tensor shape (1, 2, H, W)
+        tensor_mask = torch.tensor(full_mask, dtype=torch.float32)
+        tensor_mask = tensor_mask.unsqueeze(0).repeat(2, 1, 1)  # (2, H, W)
+        return tensor_mask.unsqueeze(0)  # (1, 2, H, W)
 
     def __str__(self):
-        return "SmileyFace"
+        return "SmileyMaskGenerator(size=44x94, top-left)"
 
     def get_num_lines(self):
-        return super().get_num_lines()
+        return 1

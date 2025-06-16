@@ -19,7 +19,6 @@ from ddpm.helper_functions.masks.better_robot_path import BetterRobotPathGenerat
 from ddpm.helper_functions.masks.smile_mask import SmileyFaceMaskGenerator
 from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
 from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator
-
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
@@ -90,9 +89,8 @@ mse_ddpm_list = []
 # =========== Initializing Masks ==================
 robot_mask = StraightLineMaskGenerator(1,1)
 cool_robot_mask = BetterRobotPathGenerator(0.5)
-smiling_mask = SmileyFaceMaskGenerator(1,1)
 
-masks_to_test = [robot_mask]
+masks_to_test = [cool_robot_mask]
 
 def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
     writer = csv.writer(file)
