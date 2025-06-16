@@ -3,8 +3,8 @@ import torch
 import numpy as np
 
 from data_prep.data_initializer import DDInitializer
-from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
-from ddpm.helper_functions.mask_factory.masks.border_mask import BorderMaskGenerator
+from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
+from ddpm.helper_functions.masks.border_mask import BorderMaskGenerator
 
 dd = DDInitializer()
 

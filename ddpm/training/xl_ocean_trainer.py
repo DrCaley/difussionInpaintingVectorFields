@@ -46,19 +46,13 @@ class TrainOceanXL():
         self.train_loader = DataLoader(dd.get_training_data(),
                                        batch_size=self.batch_size,
                                        shuffle=True,
-                                       num_workers=self.num_workers,
-                                       pin_memory=True,
-                                       persistent_workers=True)
+                                       )
         self.test_loader = DataLoader(dd.get_test_data(),
                                       batch_size=self.batch_size,
-                                      num_workers=self.num_workers,
-                                      pin_memory=True,
-                                      persistent_workers=True)
+                                      )
         self.val_loader = DataLoader(dd.get_validation_data(),
                                      batch_size=self.batch_size,
-                                     num_workers=self.num_workers,
-                                     pin_memory=True,
-                                     persistent_workers=True)
+                                     )
         self.continue_training = False
 
     def retrain_this(self, path: str):
@@ -74,6 +68,9 @@ class TrainOceanXL():
             self.model_to_retrain = path
             self.continue_training = True
 
+    def set_music(self, music_path = 'music.mp3'):
+        self.music_path = os.path.join(os.path.dirname(__file__), music_path)
+
     def _setup_paths_and_files(self):
         """
         Prepares all output paths for saving models, plots, and logs.
@@ -84,6 +81,7 @@ class TrainOceanXL():
         self.set_model_file()
         self.set_plot_file()
         self.set_csv_description()
+        self.set_music()
 
     def load_checkpoint(self, optimizer : torch.optim.Optimizer):
         """
@@ -116,7 +114,7 @@ class TrainOceanXL():
         Args:
             training_output (str, optional): Name of the output directory.
         """
-        self.output_directory = os.path.join(os.path.dirname(__file__), training_output)
+        self.output_directory = os.path.join(os.path.dirname(__file__), f"{training_output}/")
         os.makedirs(self.output_directory, exist_ok=True)
 
     def set_csv_file(self, csv_file="training_log"):
@@ -126,7 +124,7 @@ class TrainOceanXL():
         Args:
             csv_file (str, optional): Base name for CSV file.
         """
-        csv_file = f"{csv_file}_{self.timestamp}.csv"
+        csv_file = f"{self.output_directory}{csv_file}_{self.timestamp}.csv"
         self.csv_file = os.path.join(os.path.dirname(__file__), csv_file)
         
     def set_plot_file(self, plot_file="training_test_loss_xl"):
@@ -136,7 +134,7 @@ class TrainOceanXL():
         Args:
             plot_file (str, optional): Base name for plot image.
         """
-        plot_file = f"{plot_file}_{self.timestamp}.png"
+        plot_file = f"{self.output_directory}{plot_file}_{self.timestamp}.png"
         self.plot_file = os.path.join(os.path.dirname(__file__), plot_file)
         
     def set_model_file(self, initial_model_file="ddpm_ocean_model"):
@@ -146,9 +144,9 @@ class TrainOceanXL():
         Args:
             initial_model_file (str, optional): Base name for model files.
         """
-        model_file = f"{initial_model_file}_{self.timestamp}"
-        best_model_weights = f"{initial_model_file}_best_model_weights.pt"
-        best_model_checkpoint = f"{initial_model_file}_best_checkpoint.pt"
+        model_file = f"{self.output_directory}{initial_model_file}_{self.timestamp}"
+        best_model_weights = f"{self.output_directory}{initial_model_file}_best_model_weights.pt"
+        best_model_checkpoint = f"{self.output_directory}{initial_model_file}_best_checkpoint.pt"
         self.model_file = os.path.join(os.path.dirname(__file__), f"{model_file}.pt")
         self.best_model_weights = os.path.join(os.path.dirname(__file__), best_model_weights)
         self.best_model_checkpoint = os.path.join(os.path.dirname(__file__), best_model_checkpoint)
@@ -222,13 +220,17 @@ class TrainOceanXL():
 
         # Training arc
         for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
-
+            # pygame.mixer.music.play()
             epoch_loss = 0.0
             ddpm.train()
 
             for _, (x0, t, noise), in enumerate( tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{n_epochs}", colour="#005500")):
 
                 n = len(x0)
+                x0 = x0.to(device)
+                t = t.to(device)
+                noise = noise.to(device)
+
                 noisy_imgs = ddpm(x0, t, noise)
                 predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
@@ -262,8 +264,6 @@ class TrainOceanXL():
                 avg_test_loss = test_future.result()
                 spinner.succeed()
 
-            ddpm.train()
-
             epoch_losses.append(epoch_loss)
             train_losses.append(avg_train_loss)
             test_losses.append(avg_test_loss)
@@ -272,11 +272,11 @@ class TrainOceanXL():
             log_string += f"EPOCH Loss: {epoch_loss:.3f}\n"
             log_string += f"TRAIN Loss: {avg_train_loss:.3f}\n"
             log_string += f"TEST Loss: {avg_test_loss:.3f}\n"
-
             # Append current epoch results to CSV
             with open(csv_file, mode='a', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow([epoch + 1, epoch_loss, avg_train_loss, avg_test_loss])
+            ddpm.train()
 
             checkpoint = {
                 'epoch': epoch,
@@ -300,6 +300,7 @@ class TrainOceanXL():
             tqdm.write(log_string)
 
             torch.save(checkpoint, model_file)
+            # pygame.mixer.music.stop()
 
             """
             if display:
@@ -323,12 +324,11 @@ class TrainOceanXL():
         optimizer = Adam(self.ddpm.parameters(), lr=self.lr)
 
         if self.training_mode :
-            pygame.mixer.init()
-            pygame.mixer.music.load("music.mp3")
-            pygame.mixer.music.play()
-            while pygame.mixer.music.get_busy():
-                self.training_loop(optimizer, self.loss_strategy)
-                continue
+            # pygame.mixer.init()
+            # pygame.mixer.music.load(self.music_path)
+            # pygame.mixer.music.play()
+            self.training_loop(optimizer, self.loss_strategy)
+
 
         print("last model saved in:", self.model_file)
         print("best model weights saved in:", self.best_model_weights)

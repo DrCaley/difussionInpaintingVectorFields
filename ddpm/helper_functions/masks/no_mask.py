@@ -1,11 +1,8 @@
-import random
 import torch
-import numpy as np
-from torch.xpu import device
 
 from data_prep.data_initializer import DDInitializer
-from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
-from ddpm.helper_functions.mask_factory.masks.border_mask import BorderMaskGenerator
+from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
+
 
 class NoMask(MaskGenerator):
     def __init__(self):

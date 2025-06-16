@@ -1,5 +1,5 @@
 import torch
-from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
+from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
 
 
 class GaussianNoiseBinaryMaskGenerator(MaskGenerator):

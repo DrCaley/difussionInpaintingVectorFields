@@ -61,26 +61,30 @@ class DDInitializer:
         self.test_tensor = torch.from_numpy(test_data_np).float()
 
     def _setup_datasets(self, boundaries_file):
+        size = self._config.get('max_size')
         self.training_data = OceanImageDataset(
             n_steps=self._config["n_steps"],
             noise_strategy=self.noise_strategy,
             data_tensor=self.training_tensor,
             boundaries=boundaries_file,
-            transform=self.transform
+            transform=self.transform,
+            max_size=size
             )
         self.test_data = OceanImageDataset(
             data_tensor=self.test_tensor,
             n_steps=self._config["n_steps"],
             noise_strategy=self.noise_strategy,
             boundaries=boundaries_file,
-            transform=self.transform
+            transform=self.transform,
+            max_size=size
             )
         self.validation_data = OceanImageDataset(
             data_tensor=self.validation_tensor,
             n_steps=self._config["n_steps"],
             noise_strategy=self.noise_strategy,
             boundaries=boundaries_file,
-            transform=self.transform
+            transform=self.transform,
+            max_size=size
             )
 
     def _setup_noise_strategy(self):
