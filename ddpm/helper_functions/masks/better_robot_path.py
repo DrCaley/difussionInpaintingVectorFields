@@ -1,6 +1,6 @@
-import numpy as np
-import torch
 import random
+import torch
+import numpy as np
 from collections import deque
 
 from data_prep.data_initializer import DDInitializer
@@ -10,56 +10,76 @@ from ddpm.helper_functions.masks.border_mask import BorderMaskGenerator
 dd = DDInitializer()
 
 class BetterRobotPathGenerator(MaskGenerator):
+
     def __init__(self, coverage_ratio=0.2):
-        self.coverage_ratio = coverage_ratio  # How much of the area to explore
+        self.coverage_ratio = coverage_ratio  # percent of valid area to explore
 
     def generate_mask(self, image_shape=None, land_mask=None):
         if image_shape is None:
-            raise ValueError("image_shape is None")
+            print("image_shape is None")
         if land_mask is None:
-            raise ValueError("land_mask is None")
+            print("land_mask is None")
 
         _, _, h, w = image_shape
+
         device = dd.get_device()
 
-        land_mask = land_mask.to(device)
-        border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape, land_mask=land_mask).to(device)
-
-        valid_area = (land_mask * border_mask).squeeze().cpu().numpy()
-        visited = np.zeros((h, w), dtype=bool)
+        # Initial full-zero mask
         mask = np.zeros((h, w), dtype=np.float32)
 
-        # Seed: start in the middle or any random valid spot
-        yx = np.argwhere(valid_area == 1)
-        if len(yx) == 0:
-            raise ValueError("No valid area to explore.")
-        start_y, start_x = random.choice(yx)
+        # Generate border mask
+        border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape, land_mask=land_mask)
+
+        # Send to device and squeeze
+        land_mask = land_mask.to(device)
+        border_mask = border_mask.to(device)
+
+
+        valid_mask = (land_mask * border_mask).squeeze().cpu().numpy()
+        if valid_mask.ndim == 3:
+            valid_mask = valid_mask[0]
+
+        visited = np.zeros_like(valid_mask, dtype=bool)
+        # Choose a valid start point
+        valid_points = np.argwhere(valid_mask == 1)
+        if len(valid_points) == 0:
+            raise ValueError("No valid points to explore in land+border mask")
+
+        start_y, start_x = random.choice(valid_points.tolist())
+
         queue = deque([(start_y, start_x)])
         visited[start_y, start_x] = True
         mask[start_y, start_x] = 1.0
 
-        target_explore = int(self.coverage_ratio * np.sum(valid_area))
+        target_cells = int(self.coverage_ratio * np.sum(valid_mask))
         explored = 1
 
-        directions = [(-1,0), (1,0), (0,-1), (0,1)]
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # N, S, W, E
 
-        while queue and explored < target_explore:
+        while queue and explored < target_cells:
             y, x = queue.popleft()
-            random.shuffle(directions)  # Randomize path
+            random.shuffle(directions)
 
             for dy, dx in directions:
                 ny, nx = y + dy, x + dx
                 if 0 <= ny < h and 0 <= nx < w:
-                    if valid_area[ny, nx] == 1 and not visited[ny, nx]:
+                    if valid_mask[ny, nx] == 1 and not visited[ny, nx]:
                         visited[ny, nx] = True
                         mask[ny, nx] = 1.0
                         queue.append((ny, nx))
                         explored += 1
-                        if explored >= target_explore:
+                        if explored >= target_cells:
                             break
 
-        final_mask = torch.tensor(mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
-        return final_mask
+        # Final tensor mask
+        mask = torch.tensor(mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
+        land_mask = land_mask.to(device)
+        border_mask = border_mask.to(device)
+
+        # Mask with constraints
+        mask = mask * land_mask * border_mask
+
+        return mask
 
     def __str__(self):
         return "BetterRobotPath"

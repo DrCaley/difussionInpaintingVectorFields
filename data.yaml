@@ -9,7 +9,7 @@ n_epochs: 2
 batch_size: 35
 lr: 0.001
 
-noise_function: div_free
+noise_function: div_gaussian
 loss_function: mse
 w1: 0.5
 w2: 0.5
@@ -27,4 +27,4 @@ n_samples: 1
 gaussian_scaling: False
 resample_nums: [5]
 
-model_path: "../trained_models/ddpm_ocean_model_best_checkpoint.pt"
+model_path: "data/weekend_ddpm_ocean_model.pt"

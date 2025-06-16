@@ -8,11 +8,10 @@ import sys
 
 from tqdm import tqdm
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field
 from ddpm.helper_functions.masks.better_robot_path import BetterRobotPathGenerator
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
 from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator
 from data_prep.data_initializer import DDInitializer
