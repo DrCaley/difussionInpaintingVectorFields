@@ -5,7 +5,7 @@ from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
 from data_prep.data_initializer import DDInitializer
 
 class ManualMaskDrawer(MaskGenerator):
-    def __init__(self, height=64, width=64, pixel_size=8):
+    def __init__(self, height=64, width=128, pixel_size=8):
         self.h = height
         self.w = width
         self.pixel_size = pixel_size  # Scale each pixel to appear bigger

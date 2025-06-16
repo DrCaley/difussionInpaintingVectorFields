@@ -5,12 +5,11 @@ from torch.utils.data import DataLoader
 import logging
 import csv
 import sys
-
 from tqdm import tqdm
 
-from ddpm.helper_functions.masks.mask_drawer import ManualMaskDrawer
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+
+from ddpm.helper_functions.masks.mask_drawer import ManualMaskDrawer
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field
 from ddpm.helper_functions.masks.gaussian_mask import GaussianNoiseBinaryMaskGenerator
@@ -86,7 +85,7 @@ mse_ddpm_list = []
 robot_mask = StraightLineMaskGenerator(1,1)
 cool_robot_mask = BetterRobotPathGenerator(0.5)
 
-manual_mask = ManualMaskDrawer(height=64, width=128, pixel_size=5)
+manual_mask = ManualMaskDrawer(pixel_size=5)
 
 masks_to_test = [manual_mask]
 
