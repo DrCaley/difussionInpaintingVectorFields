@@ -5,7 +5,7 @@ import numpy as np
 from data_prep.data_initializer import DDInitializer
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
 
-dd = DDInitializer
+dd = DDInitializer()
 
 class SquigglyLineMaskGenerator(MaskGenerator):
     def __init__(self, input_image_original, num_lines=5, line_thickness=2):

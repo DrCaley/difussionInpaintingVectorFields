@@ -53,7 +53,7 @@ def save_mse_heatmap(tensor1, tensor2, mask, save_path="mse_heatmap.png",
 
 
 def save_angular_error_heatmap(tensor1, tensor2, mask, save_path="angular_error_heatmap.png",
-                               crop_shape=(44, 94), mask_color="lightgray", cmap_name="viridis"):
+                               crop_shape=(44, 94), mask_color="lightgray", cmap_name="viridis", title="Masked Angular Error Heatmap"):
     # tensor shape: (1, 2, H, W)
     single_mask = mask[:, 0:1, :, :]
 
@@ -92,7 +92,7 @@ def save_angular_error_heatmap(tensor1, tensor2, mask, save_path="angular_error_
 
     plt.imshow(masked_angle, cmap=cmap, interpolation='nearest')
     plt.colorbar(label="Angular error (degrees)")
-    plt.title("Masked Angular Error Heatmap")
+    plt.title(title)
     plt.xlabel("Width")
     plt.ylabel("Height")
 

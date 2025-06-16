@@ -13,18 +13,19 @@ from ddpm.utils.inpainting_utils import calculate_mse
 dd = DDInitializer()
 
 # ======================== USER INPUT ========================
-noise_type = "StraightLineMaskGenerator"  # e.g. "RobotPath", "NoisyField", etc.
-sample_num = 1            # Which numbered sample to visualize
-vector_scale = 0.15       # Adjust for better vector field visibility
-num_lines = 1
+noise_type = "GaussianNoiseBinaryMaskGenerator(threshold=0.95, mean=0.0, std=1.0)"  # e.g. "RobotPath", "NoisyField", etc.
+sample_num = 2            # Which numbered sample to visualize
+vector_scale = 0.05       # Adjust for better vector field visibility
+num_lines = 0
+resamples = 5
 # ============================================================
 
 base_path = f"../../ddpm/testing/results"
 save_dir = "pt_visualizer_images"
-prefixes = ['ddpm', 'interpolated', 'initial', 'mask']
+prefixes = ['ddpm', 'interpolated', 'initial', 'mask', 'gp_field']
 
 def build_filename(prefix):
-    return f"{prefix}{sample_num}_{noise_type}_resample5_num_lines_{num_lines}.pt"
+    return f"{prefix}{sample_num}_{noise_type}_resample{resamples}_num_lines_{num_lines}.pt"
 
 def visualize_tensor(
     tensor,
@@ -60,10 +61,7 @@ def visualize_tensor(
             x, y = np.meshgrid(np.arange(W), np.arange(H))
 
             max_dim = 8
-            if W > H:
-                figsize = (max_dim, max_dim * H / W)
-            else:
-                figsize = (max_dim * W / H, max_dim)
+            figsize = (max_dim, max_dim * H / W) if W > H else (max_dim * W / H, max_dim)
 
             plt.figure(figsize=figsize)
             plt.quiver(x, y, u.cpu(), v.cpu(), scale=1.0/vector_scale)
@@ -110,18 +108,28 @@ for prefix in prefixes:
     try:
         if prefix == 'mask':
             tensor = torch.load(file_path, map_location='cpu', weights_only=False)
-            visualize_tensor(tensor[0,0], title, save_dir=save_dir)
+            visualize_tensor(tensor[0, 0], title, save_dir=save_dir)
         else:
             tensor = load_and_visualize_pt(file_path, title=title, save_dir=save_dir, vector_scale=vector_scale)
         data[prefix] = tensor
     except Exception as e:
         print(f"Failed to load or visualize {title}: {e}")
 
-# Compute and save error visualizations
-try:
-    mse = calculate_mse(data['ddpm'], data['initial'], data['mask'])
-    print(f"Average MSE per pixel over masked area in crop: {mse:.6f}")
-    save_mse_heatmap(data['ddpm'], data['initial'], data['mask'])
-    save_angular_error_heatmap(data['initial'], data['ddpm'], data['mask'])
-except Exception as e:
-    print(f"Failed to compute/save error heatmaps: {e}")
+# Compute MSEs and angular errors comparing everything to 'initial'
+mask_tensor = data.get("mask", None)
+initial_tensor = data.get("initial", None)
+
+if mask_tensor is not None and initial_tensor is not None:
+    for key in data:
+        if key in ("initial", "mask"):
+            continue
+        try:
+            tensor = data[key]
+            mse = calculate_mse(tensor, initial_tensor, mask_tensor)
+            print(f"MSE between {key} and initial: {mse:.6f}")
+            save_mse_heatmap(tensor, initial_tensor, mask_tensor, title=f"{key}_vs_initial",save_path=f"mse_{key}_vs_initial.png")
+            save_angular_error_heatmap(initial_tensor, tensor, mask_tensor, title=f"{key}_vs_initial",save_path=f"angular_{key}_vs_initial.png")
+        except Exception as e:
+            print(f"Failed to compute/save errors between {key} and initial: {e}")
+else:
+    print("Missing 'initial' or 'mask' tensor — skipping error comparisons.")

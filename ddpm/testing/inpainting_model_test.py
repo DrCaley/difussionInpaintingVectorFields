@@ -8,11 +8,12 @@ import sys
 
 from tqdm import tqdm
 
-from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field
+from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.mask_factory.masks.abstract_mask import MaskGenerator
-from ddpm.helper_functions.mask_factory.masks.straigth_line import StraightLineMaskGenerator
+from ddpm.helper_functions.mask_factory.masks.robot_path import RobotPathMaskGenerator
+from ddpm.helper_functions.mask_factory.masks.gaussian_mask import GaussianNoiseBinaryMaskGenerator
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
@@ -79,9 +80,10 @@ resample_nums = dd.get_attribute("resample_nums")
 mse_ddpm_list = []
 
 # =========== Initializing Masks ==================
-robot_mask = StraightLineMaskGenerator(1,1)
+robit = RobotPathMaskGenerator()
+gaussian = GaussianNoiseBinaryMaskGenerator()
 
-masks_to_test = [robot_mask]
+masks_to_test = [robit, gaussian]
 
 def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
     writer = csv.writer(file)
@@ -132,24 +134,28 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
                     standardizer = dd.get_standardizer()
                     final_image_ddpm = standardizer.unstandardize(final_image_ddpm).to(device)
                     interpolated_field = interpolate_masked_velocity_field(input_image_original[0], mask[0,0:1],).unsqueeze(0).to(device)
+                    gp_field = gp_fill(input_image_original, mask)
 
-                    input_image_original = top_left_crop(input_image_original, 44, 94).to(device)
-                    final_image_ddpm = top_left_crop(final_image_ddpm, 44, 94).to(device)
-                    interpolated_field = top_left_crop(interpolated_field, 44, 94).to(device)
-                    mask = top_left_crop(mask, 44, 94).to(device)
+                    input_image_original_cropped = top_left_crop(input_image_original, 44, 94).to(device)
+                    final_image_ddpm_cropped = top_left_crop(final_image_ddpm, 44, 94).to(device)
+                    interpolated_field_cropped = top_left_crop(interpolated_field, 44, 94).to(device)
+                    mask_cropped = top_left_crop(mask, 44, 94).to(device)
+                    gp_field_cropped = top_left_crop(gp_field, 44, 94).to(device)
 
                     # Save inpainted result and mask.py
-                    torch.save(final_image_ddpm,
+                    torch.save(final_image_ddpm_cropped,
                                f"{results_path}ddpm{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
-                    torch.save(mask,
+                    torch.save(mask_cropped,
                                f"{results_path}mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
-                    torch.save(input_image_original,
+                    torch.save(input_image_original_cropped,
                                f"{results_path}initial{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
-                    torch.save(interpolated_field,
+                    torch.save(interpolated_field_cropped,
                                f"{results_path}interpolated{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                    torch.save(gp_field_cropped,
+                               f"{results_path}gp_field{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
 
                     # Calculate MSE for masked region
-                    mse_ddpm = calculate_mse(input_image_original, final_image_ddpm, mask)
+                    mse_ddpm = calculate_mse(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped)
                     mse_ddpm_samples.append(mse_ddpm.item())
 
                     logging.info(
@@ -175,10 +181,10 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
 # ======== CSV Output File for Results ========
 with open(f"{results_path}inpainting_xl_data.csv", "w", newline="") as file:
     try:
-        image_counter = dd.get_attribute("image_counter")
         for mask in masks_to_test:
+            image_counter = 0
             logging.info(f"Running next mask: {mask}")
-            image_counter = inpaint_testing(mask, image_counter)
+            inpaint_testing(mask, image_counter)
     except Exception as e:
         logging.error(f"Error during processing: {e}")
         logging.exception(f"Stack trace:")
