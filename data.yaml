@@ -22,10 +22,9 @@ max_beta: 0.02
 training_mode: True
 inpainting_batch_size: 1
 
-image_counter: 0
 num_images_to_process: 5
 n_samples: 1
 gaussian_scaling: False
 resample_nums: [5]
 
-model_path: "../trained_models/weekend_ddpm_ocean_model.pt"
+model_path: "../trained_models/ddpm_ocean_model_best_checkpoint.pt"

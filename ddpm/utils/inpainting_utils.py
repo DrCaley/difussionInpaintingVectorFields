@@ -2,7 +2,6 @@ import torch
 import torch.nn.functional as f
 
 from data_prep.data_initializer import DDInitializer
-from ddpm.helper_functions.model_evaluation import noise_strat
 
 dd = DDInitializer()
 
@@ -65,8 +64,6 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                 if (i + 1) < resample_steps:
                     x = noise_one_step(x, t, noise_strat)
     return x
-
-import torch.nn.functional as F
 
 def calculate_mse(original_image, predicted_image, mask):
     """

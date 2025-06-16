@@ -46,3 +46,77 @@ def interpolate_masked_velocity_field(velocity: torch.Tensor, mask: torch.Tensor
         known_mask = torch.where(still_missing & (neighbor_count > 0), torch.tensor(1.0, device=device), known_mask)
 
     return filled
+
+def rbf_kernel(X1, X2, lengthscale=1.0, variance=1.0):
+    """
+    Compute the RBF (Gaussian) kernel between two sets of points.
+    """
+    dist_sq = torch.cdist(X1, X2).pow(2)
+    return variance * torch.exp(-0.5 * dist_sq / lengthscale**2)
+
+def gp_fill(tensor, mask, lengthscale=1.5, variance=1.0, noise=1e-5, use_double=True):
+    """
+    Fills in missing values (mask == 1) in a tensor using Gaussian Process regression.
+
+    Args:
+        tensor: Tensor of shape (1, 2, H, W)
+        mask: Binary mask of shape (1, 2, H, W), 0 = known, 1 = unknown
+        lengthscale: GP RBF kernel lengthscale
+        variance: GP RBF kernel variance
+        noise: small base noise added to kernel diagonal
+        use_double: whether to cast tensors to float64 for better numerical stability
+
+    Returns:
+        Tensor with missing values filled in.
+    """
+    dtype = torch.float64 if use_double else tensor.dtype
+    device = tensor.device
+
+    tensor = tensor.to(dtype)
+    mask = mask.to(dtype)
+
+    _, C, H, W = tensor.shape
+    filled = tensor.clone()
+
+    for c in range(C):
+        channel_data = tensor[0, c]
+        channel_mask = mask[0, c]
+
+        known_indices = (channel_mask == 0).nonzero(as_tuple=False)
+        unknown_indices = (channel_mask == 1).nonzero(as_tuple=False)
+
+        if known_indices.numel() == 0 or unknown_indices.numel() == 0:
+            continue  # nothing to fill
+
+        # Normalize coordinates
+        norm_factor = torch.tensor([H, W], dtype=dtype, device=device)
+        known_coords = known_indices.float() / norm_factor
+        unknown_coords = unknown_indices.float() / norm_factor
+
+        known_values = channel_data[known_indices[:, 0], known_indices[:, 1]]
+
+        # Compute covariance matrices
+        K = rbf_kernel(known_coords, known_coords, lengthscale, variance)
+        K_s = rbf_kernel(unknown_coords, known_coords, lengthscale, variance)
+
+        # Add noise (jitter) robustly
+        jitter = noise
+        max_tries = 5
+        for _ in range(max_tries):
+            try:
+                L = torch.linalg.cholesky(K + jitter * torch.eye(K.shape[0], device=device, dtype=dtype))
+                break
+            except RuntimeError:
+                jitter *= 10
+        else:
+            raise RuntimeError("Cholesky decomposition failed after increasing jitter.")
+
+        # GP posterior mean
+        alpha = torch.cholesky_solve(known_values.unsqueeze(-1), L)
+        pred_mean = K_s @ alpha  # shape (N_unknown, 1)
+
+        # Assign predictions
+        for idx, val in zip(unknown_indices, pred_mean):
+            filled[0, c, idx[0], idx[1]] = val.item()
+
+    return filled.to(torch.float32)  # Return to float32 for compatibility
