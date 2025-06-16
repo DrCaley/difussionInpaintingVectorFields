@@ -16,7 +16,7 @@ dd = DDInitializer()
 noise_type = "ManualMaskDrawer"  # e.g. "RobotPath", "NoisyField", etc.
 sample_num = 83           # Which numbered sample to visualize
 vector_scale = 0.15       # Adjust for better vector field visibility
-num_lines = 58
+num_lines = 240
 resamples = 5
 # ============================================================
 

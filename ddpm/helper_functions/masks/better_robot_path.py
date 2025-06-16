@@ -40,7 +40,7 @@ class BetterRobotPathGenerator(MaskGenerator):
 
         _, _, h, w = image_shape
         device = dd.get_device()
-        mask = np.zeros((h, w), dtype=np.float32)
+        mask = np.ones((h, w), dtype=np.float32)
 
         border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape, land_mask=land_mask)
 
@@ -82,7 +82,7 @@ class BetterRobotPathGenerator(MaskGenerator):
             if best_dir:
                 ny, nx = best_dir
                 visited[ny, nx] = True
-                mask[ny, nx] = 1.0
+                mask[ny, nx] = 0.0
                 queue.append((ny, nx))
                 explored += 1
 

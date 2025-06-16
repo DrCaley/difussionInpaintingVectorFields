@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
 from data_prep.data_initializer import DDInitializer
+from collections import deque
 
 class ManualMaskDrawer(MaskGenerator):
     def __init__(self, height=44, width=94, pixel_size=8):
@@ -12,18 +13,19 @@ class ManualMaskDrawer(MaskGenerator):
         self.mask = np.zeros((self.h, self.w), dtype=np.uint8)
 
         self.root = tk.Tk()
-        self.root.title("🎨 Mask Drawer - Left: Draw | Right: Erase | s: Save | c: Clear")
+        self.root.title("🎨 Mask Drawer - Left: Draw | Right: Erase | Middle: Fill | Shift+Middle: Erase Fill | s: Save | c: Clear")
         self.canvas = tk.Canvas(self.root, width=self.w * pixel_size, height=self.h * pixel_size, bg='white')
         self.canvas.pack()
 
         self.canvas.bind("<B1-Motion>", self._draw)
         self.canvas.bind("<B3-Motion>", self._erase)
+        self.canvas.bind("<Button-2>", self._handle_middle_click)
         self.root.bind("s", self._save_and_close)
         self.root.bind("c", self._clear)
 
         self.rect_refs = [[None for _ in range(self.w)] for _ in range(self.h)]
-
         self._draw_initial_grid()
+
         print("🖌️ Use mouse to draw mask. Press 's' to save, 'c' to clear.")
         self.root.mainloop()
 
@@ -52,6 +54,34 @@ class ManualMaskDrawer(MaskGenerator):
         if 0 <= x < self.w and 0 <= y < self.h:
             self.mask[y, x] = 0
             self.canvas.itemconfig(self.rect_refs[y][x], fill='white')
+
+    def _handle_middle_click(self, event):
+        x, y = event.x // self.pixel_size, event.y // self.pixel_size
+        if event.state & 0x0001:  # Shift key mask
+            self._flood_fill(x, y, erase=True)
+        else:
+            self._flood_fill(x, y, erase=False)
+
+    def _flood_fill(self, x, y, erase=False):
+        target = 1 if erase else 0
+        replace = 0 if erase else 1
+        fill_color = 'white' if erase else 'black'
+
+        if not (0 <= x < self.w and 0 <= y < self.h):
+            return
+        if self.mask[y, x] != target:
+            return
+
+        queue = deque()
+        queue.append((x, y))
+
+        while queue:
+            cx, cy = queue.popleft()
+            if 0 <= cx < self.w and 0 <= cy < self.h and self.mask[cy, cx] == target:
+                self.mask[cy, cx] = replace
+                self.canvas.itemconfig(self.rect_refs[cy][cx], fill=fill_color)
+                for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+                    queue.append((cx+dx, cy+dy))
 
     def _clear(self, event=None):
         self.mask[:, :] = 0
@@ -84,9 +114,8 @@ class ManualMaskDrawer(MaskGenerator):
         pad_H = H - mask_H
         pad_W = W - mask_W
 
-        # Pad bottom and right (top-left aligned)
         padded_mask = torch.nn.functional.pad(self.tensor_mask,
-                                              (0, pad_W, 0, pad_H),  # (left, right, top, bottom)
+                                              (0, pad_W, 0, pad_H),
                                               mode='constant', value=0)
         return padded_mask
 
