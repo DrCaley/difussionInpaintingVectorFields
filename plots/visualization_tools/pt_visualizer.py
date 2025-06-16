@@ -13,10 +13,10 @@ from ddpm.utils.inpainting_utils import calculate_mse
 dd = DDInitializer()
 
 # ======================== USER INPUT ========================
-noise_type = "GaussianNoiseBinaryMaskGenerator(threshold=0.95, mean=0.0, std=1.0)"  # e.g. "RobotPath", "NoisyField", etc.
-sample_num = 18           # Which numbered sample to visualize
-vector_scale = 0.001       # Adjust for better vector field visibility
-num_lines = 0
+noise_type = "SmileyMaskGenerator(size=44x94, top-left)"  # e.g. "RobotPath", "NoisyField", etc.
+sample_num = 83           # Which numbered sample to visualize
+vector_scale = 0.15       # Adjust for better vector field visibility
+num_lines = 1
 resamples = 5
 # ============================================================
 
