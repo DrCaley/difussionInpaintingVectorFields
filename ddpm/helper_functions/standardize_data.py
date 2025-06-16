@@ -11,7 +11,6 @@ class Standardizer(ABC):
     def unstandardize(self, tensor: torch.Tensor) -> torch.Tensor:
         pass
 
-# === Z-score implementation ===
 class ZScoreStandardizer(Standardizer):
     def __init__(self, u_mean, u_std, v_mean, v_std):
         self.u_mean = u_mean

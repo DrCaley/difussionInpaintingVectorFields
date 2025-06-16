@@ -6,7 +6,7 @@ from data_prep.data_initializer import DDInitializer
 dd = DDInitializer()
 
 def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
-                                resample_steps=1, channels=1, height=64, width=128):
+                                resample_steps=1, channels=2, height=64, width=128):
     """
     Given a DDPM model, an input image, and a mask, generates in-painted samples.
     """

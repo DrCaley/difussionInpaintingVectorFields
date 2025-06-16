@@ -1,7 +1,6 @@
 import os
 import sys
 import pickle
-
 import torch
 import random
 import numpy as np
@@ -13,7 +12,7 @@ from data_prep.ocean_image_dataset import OceanImageDataset
 from ddpm.utils.noise_utils import NoiseStrategy, get_noise_strategy
 from ddpm.helper_functions.loss_functions import LossStrategy, get_loss_strategy
 from ddpm.helper_functions.resize_tensor import resize_transform
-from ddpm.helper_functions.standardize_data import standardize_data
+from ddpm.helper_functions.standardize_data import STANDARDIZER_REGISTRY  # Updated import
 
 
 class DDInitializer:
@@ -70,7 +69,7 @@ class DDInitializer:
             boundaries=boundaries_file,
             transform=self.transform,
             max_size=size
-            )
+        )
         self.test_data = OceanImageDataset(
             data_tensor=self.test_tensor,
             n_steps=self._config["n_steps"],
@@ -78,7 +77,7 @@ class DDInitializer:
             boundaries=boundaries_file,
             transform=self.transform,
             max_size=size
-            )
+        )
         self.validation_data = OceanImageDataset(
             data_tensor=self.validation_tensor,
             n_steps=self._config["n_steps"],
@@ -86,10 +85,10 @@ class DDInitializer:
             boundaries=boundaries_file,
             transform=self.transform,
             max_size=size
-            )
+        )
 
     def _setup_noise_strategy(self):
-        noise_type = self._config.get("noise_function", "gaussian")  # default to Gaussian
+        noise_type = self._config.get("noise_function", "gaussian")
         try:
             self.noise_strategy: NoiseStrategy = get_noise_strategy(noise_type)
             print(f"Loaded noise strategy: {noise_type}")
@@ -123,10 +122,17 @@ class DDInitializer:
         torch.cuda.manual_seed_all(seed)
 
     def _setup_transforms(self):
-        self.standardizer = standardize_data(
-            self._config['u_training_mean'], self._config['u_training_std'],
-            self._config['v_training_mean'], self._config['v_training_std']
-        )
+        std_type = self._config.get('standardizer_type')
+
+        if std_type == 'zscore':
+            self.standardizer = STANDARDIZER_REGISTRY[std_type](
+                self._config['u_training_mean'], self._config['u_training_std'],
+                self._config['v_training_mean'], self._config['v_training_std']
+            )
+        elif std_type in STANDARDIZER_REGISTRY:
+            self.standardizer = STANDARDIZER_REGISTRY[std_type]()
+        else:
+            raise ValueError(f"Unknown standardizer_type: {std_type}")
 
         self.transform = Compose([
             resize_transform((2, 64, 128)),
@@ -149,9 +155,6 @@ class DDInitializer:
     def get_transform(self):
         return self.transform
 
-    def get_standarizer(self):
-        return self.standardizer
-
     def get_training_data(self):
         return self.training_data
 
@@ -166,7 +169,7 @@ class DDInitializer:
 
     def get_alphas(self):
         return self.alphas
-    
+
     def get_betas(self):
         return self.betas
 

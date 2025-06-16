@@ -14,8 +14,8 @@ dd = DDInitializer()
 
 # ======================== USER INPUT ========================
 noise_type = "GaussianNoiseBinaryMaskGenerator(threshold=0.95, mean=0.0, std=1.0)"  # e.g. "RobotPath", "NoisyField", etc.
-sample_num = 2            # Which numbered sample to visualize
-vector_scale = 0.05       # Adjust for better vector field visibility
+sample_num = 18           # Which numbered sample to visualize
+vector_scale = 0.001       # Adjust for better vector field visibility
 num_lines = 0
 resamples = 5
 # ============================================================
