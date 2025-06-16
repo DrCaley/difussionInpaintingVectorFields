@@ -28,4 +28,4 @@ n_samples: 1
 gaussian_scaling: False
 resample_nums: [5]
 
-model_path: "../trained_models/weekend_ddpm_ocean_model.pt"
+model_path: "C:\\Users\\Matthew\\Documents\\GitHub\\difussionInpaintingVectorFields\\ddpm\\trained_models\\ddpm_ocean_model_best_checkpoint.pt"
