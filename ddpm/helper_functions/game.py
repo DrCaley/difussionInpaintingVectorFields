@@ -38,6 +38,8 @@ player_vel = [0.0, 0.0]
 gravity = 0.5
 on_ground = False
 alive = True
+invulnerable_timer = 0
+death_noise_threshold = 2.0
 
 # Platform
 platform = pygame.Rect(0, HEIGHT - 50, WIDTH, 50)
@@ -46,6 +48,16 @@ platform = pygame.Rect(0, HEIGHT - 50, WIDTH, 50)
 goomba = pygame.Rect(WIDTH - 200, platform.top - 50, 50, 50)
 goomba_alive = True
 goomba_vel = -1.0
+
+# Zombies and Bullets
+zombies = []
+zombie_spawn_timer = 0
+zombie_spawn_interval = 180
+zombie_speed = 1.2
+
+bullets = []
+bullet_speed = 10
+gun_cooldown = 0
 
 # Death messages
 death_messages = [
@@ -69,15 +81,14 @@ frame_count = 0
 fps = 60
 resize_timer = 0
 
-
 def get_noise_value(x, y):
     xi = int(np.clip((x / WIDTH) * noise_res[1], 0, noise_res[1] - 1))
     yi = int(np.clip((y / HEIGHT) * noise_res[0], 0, noise_res[0] - 1))
     return u_field[yi, xi], v_field[yi, xi]
 
-
 def reset():
-    global player, player_vel, alive, on_ground, current_death_message, goomba_alive, goomba
+    global player, player_vel, alive, on_ground, current_death_message
+    global goomba_alive, goomba, invulnerable_timer, zombie_spawn_timer
     player.x, player.y = 100, 100
     player_vel = [0.0, 0.0]
     alive = True
@@ -86,7 +97,10 @@ def reset():
     goomba_alive = True
     goomba.x = WIDTH - 200
     goomba.y = platform.top - 50
-
+    bullets.clear()
+    zombies.clear()
+    zombie_spawn_timer = -60  # Delay zombie spawn to avoid instant death
+    invulnerable_timer = 0
 
 # Main loop
 running = True
@@ -98,12 +112,10 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-    # Regenerate field every 90 frames
     if frame_count % 90 == 0:
         u_field, v_field = generate_div_free_field(noise_res)
         fps = int(np.clip(60 + np.mean(u_field) * 60, 15, 120))
 
-    # Resize window randomly every 120 frames
     if resize_timer > 120:
         WIDTH = int(np.clip(800 + np.mean(v_field) * 600, 400, 1600))
         HEIGHT = int(np.clip(600 + np.mean(u_field) * 400, 300, 1000))
@@ -130,11 +142,20 @@ while running:
             player_vel[1] = -12 + v * 8
             on_ground = False
 
-        if keys[pygame.K_d]:
-            if np.abs(u + v) > 1.2:
+        if keys[pygame.K_d] and invulnerable_timer <= 0:
+            noise_mag = np.hypot(u, v)
+            if noise_mag > death_noise_threshold:
                 alive = False
-                idx = int(np.clip(int(np.abs(u * 10)), 0, len(death_messages) - 1))
+                idx = int(np.clip(int(noise_mag * 5), 0, len(death_messages) - 1))
                 current_death_message = death_messages[idx]
+
+        # Gun shooting
+        if gun_cooldown > 0:
+            gun_cooldown -= 1
+        if keys[pygame.K_f] and gun_cooldown <= 0:
+            bullet = pygame.Rect(player.centerx, player.centery, 10, 5)
+            bullets.append(bullet)
+            gun_cooldown = 15
 
         # Apply movement
         player.x += int(player_vel[0])
@@ -145,7 +166,7 @@ while running:
             player_vel[1] = 0
             on_ground = True
 
-        # Goomba behavior
+        # Goomba logic
         if goomba_alive:
             goomba.x += int(goomba_vel)
             if goomba.left <= 0 or goomba.right >= WIDTH:
@@ -156,6 +177,7 @@ while running:
                     if np.abs(u + v) > 0.5:
                         goomba_alive = False
                         player_vel[1] = -8
+                        invulnerable_timer = 60
                     else:
                         alive = False
                         idx = int(np.clip(int(np.abs(v * 10)), 0, len(death_messages) - 1))
@@ -164,6 +186,39 @@ while running:
                     alive = False
                     idx = int(np.clip(int(np.abs(v * 10)), 0, len(death_messages) - 1))
                     current_death_message = death_messages[idx]
+
+        # Spawn zombies
+        zombie_spawn_timer += 1
+        if zombie_spawn_timer >= zombie_spawn_interval:
+            zombie = pygame.Rect(WIDTH, platform.top - 50, 40, 50)
+            zombies.append(zombie)
+            zombie_spawn_timer = 0
+
+        for zombie in zombies[:]:
+            direction = np.sign(player.centerx - zombie.centerx)
+            zombie.x += int(direction * zombie_speed)
+
+            if zombie.colliderect(player) and invulnerable_timer <= 0:
+                alive = False
+                current_death_message = "You were munched on by a zombie."
+                zombies.remove(zombie)
+
+        # Move bullets
+        for bullet in bullets[:]:
+            bullet.x += bullet_speed
+            if bullet.x > WIDTH:
+                bullets.remove(bullet)
+
+        # Bullet-zombie collision
+        for zombie in zombies[:]:
+            for bullet in bullets[:]:
+                if zombie.colliderect(bullet):
+                    zombies.remove(zombie)
+                    bullets.remove(bullet)
+                    break
+
+        if invulnerable_timer > 0:
+            invulnerable_timer -= 1
 
     else:
         death_text = big_font.render(current_death_message, True, (0, 0, 0))
@@ -176,13 +231,22 @@ while running:
         if keys[pygame.K_r]:
             reset()
 
+    # Draw stuff
     pygame.draw.rect(screen, (80, 50, 50), platform)
     if goomba_alive:
         pygame.draw.rect(screen, (180, 50, 50), goomba)
-    if alive:
-        pygame.draw.rect(screen, (50, 200, 50), player)
 
-    # Overlay info
+    if alive:
+        if invulnerable_timer % 10 < 5:
+            pygame.draw.rect(screen, (50, 200, 50), player)
+
+    for zombie in zombies:
+        pygame.draw.rect(screen, (50, 100, 50), zombie)
+
+    for bullet in bullets:
+        pygame.draw.rect(screen, (0, 0, 0), bullet)
+
+    # HUD
     vel_text = font.render(f"Field Vel: ({u:.2f}, {v:.2f})", True, (0, 0, 0))
     screen.blit(vel_text, (10, 10))
 
