@@ -220,7 +220,7 @@ class TrainOceanXL():
 
         # Training arc
         for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
-            # pygame.mixer.music.play()
+            pygame.mixer.music.play()
             epoch_loss = 0.0
             ddpm.train()
 
@@ -300,7 +300,7 @@ class TrainOceanXL():
             tqdm.write(log_string)
 
             torch.save(checkpoint, model_file)
-            # pygame.mixer.music.stop()
+            pygame.mixer.music.stop()
 
             """
             if display:
@@ -324,9 +324,9 @@ class TrainOceanXL():
         optimizer = Adam(self.ddpm.parameters(), lr=self.lr)
 
         if self.training_mode :
-            # pygame.mixer.init()
-            # pygame.mixer.music.load(self.music_path)
-            # pygame.mixer.music.play()
+            pygame.mixer.init()
+            pygame.mixer.music.load(self.music_path)
+            pygame.mixer.music.play()
             self.training_loop(optimizer, self.loss_strategy)
 
 
