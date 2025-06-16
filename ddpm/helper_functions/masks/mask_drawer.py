@@ -5,10 +5,10 @@ from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
 from data_prep.data_initializer import DDInitializer
 
 class ManualMaskDrawer(MaskGenerator):
-    def __init__(self, height=64, width=64, pixel_size=8):
+    def __init__(self, height=44, width=94, pixel_size=8):
         self.h = height
         self.w = width
-        self.pixel_size = pixel_size  # Scale each pixel to appear bigger
+        self.pixel_size = pixel_size
         self.mask = np.zeros((self.h, self.w), dtype=np.uint8)
 
         self.root = tk.Tk()
@@ -28,8 +28,9 @@ class ManualMaskDrawer(MaskGenerator):
         self.root.mainloop()
 
         dd = DDInitializer()
-        self.tensor_mask = torch.tensor(self.mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
-        self.tensor_mask = self.tensor_mask.to(dd.get_device())
+        base_mask = torch.tensor(self.mask, dtype=torch.float32).unsqueeze(0)  # (1, H, W)
+        self.tensor_mask = base_mask.repeat(2, 1, 1)  # (2, H, W)
+        self.tensor_mask = self.tensor_mask.unsqueeze(0).to(dd.get_device())  # (1, 2, H, W)
 
     def _draw_initial_grid(self):
         for y in range(self.h):
@@ -64,10 +65,33 @@ class ManualMaskDrawer(MaskGenerator):
         self.root.destroy()
 
     def generate_mask(self, image_shape=None, land_mask=None):
-        return self.tensor_mask
+        if image_shape is None:
+            return self.tensor_mask
+
+        if isinstance(image_shape, torch.Size):
+            image_shape = tuple(image_shape)
+
+        if len(image_shape) != 4 or image_shape[0] != 1 or image_shape[1] != 2:
+            raise ValueError(f"Expected image shape (1, 2, H, W), got {image_shape}")
+
+        _, _, H, W = image_shape
+        mask_H, mask_W = self.tensor_mask.shape[-2:]
+
+        if mask_H > H or mask_W > W:
+            raise ValueError(f"Drawn mask is larger than the image. "
+                             f"Image: ({H}, {W}), Mask: ({mask_H}, {mask_W})")
+
+        pad_H = H - mask_H
+        pad_W = W - mask_W
+
+        # Pad bottom and right (top-left aligned)
+        padded_mask = torch.nn.functional.pad(self.tensor_mask,
+                                              (0, pad_W, 0, pad_H),  # (left, right, top, bottom)
+                                              mode='constant', value=0)
+        return padded_mask
 
     def __str__(self):
         return "ManualMaskDrawer"
 
     def get_num_lines(self):
-        return int(np.sum(self.mask))  # Could be pixel count or real line count if needed
+        return int(np.sum(self.mask))

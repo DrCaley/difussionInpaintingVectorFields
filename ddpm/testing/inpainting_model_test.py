@@ -8,8 +8,6 @@ import sys
 
 from tqdm import tqdm
 
-from ddpm.helper_functions.masks.mask_drawer import ManualMaskDrawer
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field
@@ -18,7 +16,7 @@ from ddpm.helper_functions.masks.smile_mask import SmileyMaskGenerator
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.masks.better_robot_path import BetterRobotPathGenerator
 from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
-from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator
+from ddpm.helper_functions.masks.mask_drawer import ManualMaskDrawer
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
@@ -85,7 +83,7 @@ resample_nums = dd.get_attribute("resample_nums")
 mse_ddpm_list = []
 
 # =========== Initializing Masks ==================
-bat_mask = SmileyMaskGenerator()
+bat_mask = ManualMaskDrawer()
 
 masks_to_test = [bat_mask]
 
