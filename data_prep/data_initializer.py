@@ -34,7 +34,8 @@ class DDInitializer:
 
         self._instance._setup_yaml_file(os.path.join(prefix, config_path))
         self._instance._setup_tensors(os.path.join(prefix, pickle_path))
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.gpu = self._config.get('gpu_to_use')
+        self.device = torch.device(f"cuda:{self.gpu}" if torch.cuda.is_available() else "cpu")
         print("we are running on the:", self.device)
         self._setup_transforms()
         self._set_random_seed()

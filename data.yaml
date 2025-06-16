@@ -2,6 +2,7 @@ u_training_mean: -0.0692955942994962
 u_training_std: 0.13580055497160493
 v_training_mean: -0.032393779611754124
 v_training_std: 0.08899177232117583
+gpu_to_use: 0
 
 testSeed: 0
 n_epochs: 2
