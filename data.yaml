@@ -10,7 +10,7 @@ batch_size: 35
 lr: 0.001
 
 standardizer_type: zscore
-noise_function: gaussian
+noise_function: cached_div
 loss_function: mse
 w1: 0.5
 w2: 0.5

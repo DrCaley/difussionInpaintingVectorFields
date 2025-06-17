@@ -8,6 +8,7 @@ example_nn/
 /plots/visualization_tools/pt_visualizer_images
 /plots/outputs
 /plots/images
+/noise/
 *.csv
 *.txt
 *.pt

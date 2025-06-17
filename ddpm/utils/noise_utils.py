@@ -73,16 +73,21 @@ class CachedNoisedStrategy(NoiseStrategy):
         batch_size = shape[0]
         assert t is not None and len(t) == batch_size, "Timestep tensor must match batch size"
 
-        # Query noise for each t, assume each is (1, H, W)
         noises = []
         for timestep in t:
-            sample = self.noise_query.get(int(timestep.item()))  # shape (1, H, W)
-            sample = sample.squeeze(0)  # → (H, W)
-            # Duplicate channels → (2, H, W)
-            sample = sample.unsqueeze(0).repeat(2, 1, 1)
+            sample = self.noise_query.get(int(timestep.item()))  # shape: (1, 2, H, W)
+
+            print("Noise shape at t", timestep.item(), ":", sample.shape)
+            if sample.ndim == 4 and sample.shape[1] == 2:
+                sample = sample.squeeze(0)  # (2, H, W)
+            elif sample.ndim == 3:
+                pass  # assume already (2, H, W)
+            else:
+                raise RuntimeError(f"Unexpected noise shape: {sample.shape}")
+
             noises.append(sample)
 
-        return torch.stack(noises, dim=0)  # → (B, 2, H, W)
+        return torch.stack(noises, dim=0)  # Final shape: (B, 2, H, W)
 
     def get_gaussian_scaling(self) -> bool:
         return False
