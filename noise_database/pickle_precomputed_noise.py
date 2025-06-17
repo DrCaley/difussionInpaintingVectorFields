@@ -1,34 +1,47 @@
 import os
 import pickle
 import random
+import sys
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
-from data_prep.data_initializer import DDInitializer
-from noising_process.incompressible_gp.adding_noise.divergence_free_noise import \
-    generate_div_free_noise, layered_div_free_noise
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-dd = DDInitializer
 
-timesteps: int = 10
-noise_path = "noise"
-height = 100
-width = 100
-batch_size = 1
+def get_dd_initializer():
+    from data_prep.data_initializer import DDInitializer
+    return DDInitializer()
+
+batches_of_noise = 10
+timesteps_per_batch = 100
 num_samples = 10
-device = dd.get_device()
+total_timesteps = batches_of_noise * timesteps_per_batch
+
+noise_path = "noise"
+height = 64
+width = 128
+batch_size = 1
+device = get_dd_initializer().get_device()
 os.makedirs(noise_path, exist_ok=True)
 
-print(f"creating {noise_strat} noise for "
-      f"{timesteps} timesteps in {noise_path}")
+print(f"creating noise for "
+      f"{total_timesteps} timesteps in {noise_path}")
 
+from noising_process.incompressible_gp.adding_noise.divergence_free_noise import generate_div_free_noise
 samples = []
-for _ in range(timesteps):
+for _ in range(total_timesteps):
     t_noise_samples = []
     for i in range(num_samples):
-
+        noise = generate_div_free_noise(batch_size, height, width, device)
+        if i - 1 > 0:
+            noise += t_noise_samples[i - 1]
+        t_noise_samples.append(noise)
     samples.append(t_noise_samples)
 
-with open(f"", 'wb') as f:
-    pickle.dump(samples, f)
+for noise_batch in range(batches_of_noise):
+    start_idx = noise_batch * timesteps_per_batch
+    end_idx = (noise_batch + 1) * timesteps_per_batch
+    filename = f"{start_idx + 1}-{end_idx}.pickle"
+
+    with open(os.path.join(noise_path, filename), 'wb') as f:
+        pickle.dump(samples[start_idx:end_idx], f)
 
 print("You have been pickled")
