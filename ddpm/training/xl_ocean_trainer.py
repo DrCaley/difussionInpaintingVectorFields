@@ -19,6 +19,17 @@ from data_prep.data_initializer import DDInitializer
 from concurrent.futures import ThreadPoolExecutor
 
 class TrainOceanXL():
+    """
+    This file is being used to train the best model of all time baybee.
+    There's never been a model better than this one, we got the best epsilons,
+    our loss function becomes our win function, truly remarkable stuff.
+    Absolute model
+        | o |
+        \ | /
+          |
+         / \
+        |   |
+    """
 
     def __init__(self):
         """

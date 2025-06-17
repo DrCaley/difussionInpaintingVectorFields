@@ -1,6 +1,8 @@
 import torch
 import os
 
+from skimage.util import noise
+
 # Get the directory where this script lives
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
