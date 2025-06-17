@@ -5,7 +5,9 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import sys
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from data_prep.data_initializer import DDInitializer
 from plots.visualization_tools.error_visualization import save_mse_heatmap, save_angular_error_heatmap
 from ddpm.utils.inpainting_utils import calculate_mse
@@ -14,13 +16,15 @@ dd = DDInitializer()
 
 # ======================== USER INPUT ========================
 noise_type = "ManualMaskDrawer"  # e.g. "RobotPath", "NoisyField", etc.
-sample_num = 83           # Which numbered sample to visualize
+sample_num = 7           # Which numbered sample to visualize
 vector_scale = 0.15       # Adjust for better vector field visibility
-num_lines = 240
+num_lines = 988
 resamples = 5
 # ============================================================
 
-base_path = f"../../ddpm/testing/results"
+# Matt hack lmao
+#base_path = f"../../ddpm/testing/results"
+base_path = f"C:\\Users\\Matthew\\Documents\\GitHub\\difussionInpaintingVectorFields\\results"
 save_dir = "pt_visualizer_images"
 prefixes = ['ddpm', 'interpolated', 'initial', 'mask', 'gp_field']
 

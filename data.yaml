@@ -5,13 +5,13 @@ v_training_std: 0.08899177232117583
 gpu_to_use: 0
 
 testSeed: 0
-n_epochs: 2
+n_epochs: 1
 batch_size: 35
 lr: 0.001
 
 standardizer_type: zscore
 noise_function: gaussian
-loss_function: mse
+loss_function: physical
 w1: 0.5
 w2: 0.5
 num_workers: 0
@@ -27,4 +27,4 @@ num_images_to_process: 5
 n_samples: 1
 resample_nums: [5]
 
-model_path: "../trained_models/ddpm_ocean_model_Jun17_1000.pt"
+model_path: "C:\\Users\\Matthew\\Documents\\GitHub\\difussionInpaintingVectorFields\\ddpm\\trained_models\\ddpm_ocean_model_Jun17_1551.pt"
