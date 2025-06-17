@@ -271,9 +271,9 @@ class TrainOceanXL():
             test_losses.append(avg_test_loss)
 
             log_string = f"\nepoch {epoch + 1}: \n"
-            log_string += f"EPOCH Loss: {epoch_loss:.3f}\n"
-            log_string += f"TRAIN Loss: {avg_train_loss:.3f}\n"
-            log_string += f"TEST Loss: {avg_test_loss:.3f}\n"
+            log_string += f"EPOCH Loss: {epoch_loss:.7f}\n"
+            log_string += f"TRAIN Loss: {avg_train_loss:.7f}\n"
+            log_string += f"TEST Loss: {avg_test_loss:.7f}\n"
             # Append current epoch results to CSV
             with open(csv_file, mode='a', newline='') as file:
                 writer = csv.writer(file)
@@ -298,8 +298,8 @@ class TrainOceanXL():
                 torch.save(checkpoint, best_model_checkpoint)
                 log_string += " --> Best model ever (stored based on test loss)"
 
-            log_string += (f"\nAverage test loss: {avg_test_loss:.3f} -> best: {best_test_loss:.3f}\n"
-                           + f"Average train loss: {avg_train_loss:.3f}")
+            log_string += (f"\nAverage test loss: {avg_test_loss:.7f} -> best: {best_test_loss:.7f}\n"
+                           + f"Average train loss: {avg_train_loss:.7f}")
 
             tqdm.write(log_string)
 
