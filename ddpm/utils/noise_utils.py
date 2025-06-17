@@ -17,6 +17,8 @@ class NoiseStrategy:
     ) -> torch.Tensor:
         raise NotImplementedError("Noise strategy must implement generate()")
 
+    def get_gaussian_scaling(self) -> bool: return True
+
 class GaussianNoise(NoiseStrategy):
     def generate(
         self,
@@ -25,6 +27,9 @@ class GaussianNoise(NoiseStrategy):
         device: torch.device = None
     ) -> torch.Tensor:
         return torch.randn(shape, device=device)
+
+    def get_gaussian_scaling(self):
+        return True
 
 class DivergenceFreeNoise(NoiseStrategy):
     def generate(
@@ -37,6 +42,9 @@ class DivergenceFreeNoise(NoiseStrategy):
         batch, _, H, W = shape
         return gaussian_each_step_divergence_free_noise(shape=shape, t=t, device=device)
 
+    def get_gaussian_scaling(self):
+        return False
+
 class DivergenceFreeGaussianNoise(NoiseStrategy):
     def generate(
         self,
@@ -47,6 +55,9 @@ class DivergenceFreeGaussianNoise(NoiseStrategy):
         assert shape[1] == 2, "Divergence-free noise expects 2 channels"
         batch, _, H, W = shape
         return layered_div_free_noise(batch, H, W, device=device)
+
+    def get_gaussian_scaling(self):
+        return True
 
 NOISE_REGISTRY = {
     "gaussian": GaussianNoise,

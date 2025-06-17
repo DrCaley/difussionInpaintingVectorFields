@@ -43,7 +43,7 @@ class MyDDPMGaussian(nn.Module):
         # - Scale the original image by sqrt(a_bar)
         # - Scale the noise by sqrt(1 - a_bar)
         # - Combine the scaled original image and scaled noise to get the noisy image
-        if dd.get_attribute('gaussian_scaling'):
+        if dd.get_noise_strategy().get_gaussian_scaling():
             noisy = a_bar.sqrt().reshape(n, 1, 1, 1) * x0 + (1 - a_bar).sqrt().reshape(n, 1, 1, 1) * epsilon
         else:
             noisy = a_bar.sqrt().reshape(n, 1, 1, 1) * x0 + epsilon

@@ -20,7 +20,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         alpha_t = ddpm.alphas[t].to(device)
         alpha_t_bar = ddpm.alpha_bars[t].to(device)
 
-        if dd.get_attribute('gaussian_scaling'):
+        if noise_strat.get_gaussian_scaling():
             less_noised_img = (1 / alpha_t.sqrt()) * (
                     noisy_img - ((1 - alpha_t) / (1 - alpha_t_bar).sqrt()) * epsilon_theta
             )
