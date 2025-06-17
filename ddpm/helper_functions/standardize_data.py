@@ -46,14 +46,26 @@ class MaxMagnitudeStandardizer(Standardizer):
             raise ValueError("Must call __call__ before unstandardize.")
         return tensor * self.last_max_mag
 
-class UnitVectors:
+class UnitVectorNormalizer(Standardizer):
     def __init__(self, eps=1e-8):
         self.eps = eps
+        self.last_magnitudes = None  # Store per-vector magnitudes
 
     def __call__(self, tensor):
+        # Compute per-vector magnitude
         mag = torch.sqrt(tensor[0:1]**2 + tensor[1:2]**2 + self.eps)
+        self.last_magnitudes = mag  # Save magnitudes for later
+
         u = tensor[0:1] / mag
         v = tensor[1:2] / mag
+        return torch.cat((u, v), dim=0)
+    
+    def unstandardize(self, tensor):
+        if self.last_magnitudes is None:
+            raise ValueError("Must call __call__ before unstandardize.")
+
+        u = tensor[0:1] * self.last_magnitudes
+        v = tensor[1:2] * self.last_magnitudes
         return torch.cat((u, v), dim=0)
 
 
@@ -61,5 +73,5 @@ class UnitVectors:
 STANDARDIZER_REGISTRY = {
     "zscore": ZScoreStandardizer,
     "maxmag": MaxMagnitudeStandardizer,
-    "units": UnitVectors,
+    "units": UnitVectorNormalizer,
 }
