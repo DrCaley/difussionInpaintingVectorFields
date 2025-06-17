@@ -1,44 +1,34 @@
-import os.path
+import os
 import pickle
-from collections import OrderedDict
-
-base_dir = os.path.dirname(os.path.abspath(__file__))
+import random
+import re
 
 class QueryNoise:
-    def __init__(self):
-        self.cache = OrderedDict()
-        pass
+    def __init__(self, noise_dir):
+        self.noise_dir = noise_dir
+        self.cache = []
+        self.cache_range = (None, None)  # (start_t, end_t)
 
-    def get(self, t):
-        return self._fetch_noise(t)
+    def _find_file_for_timestep(self, t: int):
+        """Find the pickle file covering the given timestep."""
+        for fname in os.listdir(self.noise_dir):
+            match = re.match(r"(\d+)-(\d+)\.pickle", fname)
+            if match:
+                start, end = map(int, match.groups())
+                if start <= t + 1 <= end:  # +1 since filenames are 1-based
+                    return os.path.join(self.noise_dir, fname), start
+        raise FileNotFoundError(f"No pickle file found containing timestep {t + 1}")
 
-    def set(self, key: int, value):
-        self.cache[key] = value
-        while len(self.cache) > 1000:
-            self.cache.popitem(last=False)
+    def _load_if_needed(self, t: int):
+        """Load correct pickle file if t isn't in current cache."""
+        start, end = self.cache_range
+        if start is None or not (start <= t + 1 <= end):  # +1 since filenames are 1-based
+            file_path, file_start = self._find_file_for_timestep(t)
+            with open(file_path, 'rb') as f:
+                self.cache = pickle.load(f)
+                self.cache_range = (file_start, file_start + len(self.cache) - 1)
 
-    def delete(self, key):
-        del self.cache[key]
-
-    def _fetch_noise(self, t):
-        noise = self.cache.get(t)
-
-        if noise :
-            return noise
-
-        else:
-            for i in range(100):
-                key = t - i
-                if key < 0:
-                    break
-                noise = self._fetch_noise_from_pickle(i)
-                self.set(key, noise)
-            return noise
-
-    def _fetch_noise_from_pickle(self, t):
-        path = f"./div_free_noise_{t}"
-        if not os.path.exists(path) :
-            raise f"Noise {t} does not exist"
-        with open(path, 'rb') as f:
-            noise = pickle.load(f)
-        return noise
+    def get(self, t: int):
+        self._load_if_needed(t)
+        local_index = t - (self.cache_range[0] - 1)  # convert global t to index in cache
+        return random.choice(self.cache[local_index])
