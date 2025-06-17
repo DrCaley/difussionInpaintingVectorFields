@@ -6,7 +6,7 @@ from data_prep.data_initializer import DDInitializer
 dd = DDInitializer()
 
 def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
-                                resample_steps=1, channels=2, height=64, width=128):
+                                resample_steps=1, channels=2, height=64, width=128, noise_strategy = dd.get_noise_strategy()):
     """
     Given a DDPM model, an input image, and a mask, generates in-painted samples.
     """
@@ -43,7 +43,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         return noised_img
 
     with torch.no_grad():
-        noise_strat = dd.get_noise_strategy()
+        noise_strat = noise_strategy
 
         input_img = input_image.clone().to(device)
         mask = mask.to(device)

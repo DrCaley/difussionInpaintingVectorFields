@@ -10,8 +10,6 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
-from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field
-from ddpm.helper_functions.masks.gaussian_mask import GaussianNoiseBinaryMaskGenerator
 
 # https://genius.com/22643703/Dream-mask/Thats-what-the-mask-is-thats-what-the-point-of-the-mask-is
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
@@ -35,11 +33,6 @@ if not os.path.exists(results_path):
 (training_tensor, validation_tensor, test_tensor) = dd.get_tensors()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename=f"{results_path}inpainting_model_test_log.txt")
 
-# ======== Model Configuration ========
-n_steps = dd.get_attribute("n_steps")
-min_beta = dd.get_attribute("min_beta")
-max_beta = dd.get_attribute("max_beta")
-
 store_path = dd.get_attribute("store_path")
 
 if len(sys.argv) < 2:
@@ -51,9 +44,16 @@ else:
     else:
         print(sys.argv[1], "not found, using:", store_path)
 
-# ======== Load DDPM Checkpoint ========
-checkpoint = torch.load(store_path, map_location=dd.get_device())
+# ======== Model Configuration ========
+checkpoint = torch.load(store_path, map_location=dd.get_device(), weights_only=False)
 model_state_dict = checkpoint.get('model_state_dict', checkpoint)
+
+n_steps = checkpoint.get('n_steps', dd.get_attribute("n_steps"))
+min_beta = checkpoint.get('min_beta', dd.get_attribute("min_beta"))
+max_beta = checkpoint.get('max_beta', dd.get_attribute("max_beta"))
+noise_strategy = checkpoint.get('noise_strategy', dd.get_noise_strategy())
+
+# ======== Load DDPM Checkpoint ========
 
 best_model = MyDDPMGaussian(MyUNet(n_steps), n_steps=n_steps, device=dd.get_device())
 try:
@@ -134,17 +134,16 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
                         mask,
                         n_samples=1, #number of samples to generate. I think it doesn't work, not sure
                         device=device,
-                        resample_steps=resample
+                        resample_steps=resample,
+                        noise_strategy=noise_strategy
                     )
 
                     standardizer = dd.get_standardizer()
                     final_image_ddpm = standardizer.unstandardize(final_image_ddpm).to(device)
-                    interpolated_field = interpolate_masked_velocity_field(input_image_original[0], mask[0,0:1],).unsqueeze(0).to(device)
                     gp_field = gp_fill(input_image_original, mask)
 
                     input_image_original_cropped = top_left_crop(input_image_original, 44, 94).to(device)
                     final_image_ddpm_cropped = top_left_crop(final_image_ddpm, 44, 94).to(device)
-                    interpolated_field_cropped = top_left_crop(interpolated_field, 44, 94).to(device)
                     mask_cropped = top_left_crop(mask, 44, 94).to(device)
                     gp_field_cropped = top_left_crop(gp_field, 44, 94).to(device)
 
@@ -155,8 +154,6 @@ def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
                                f"{results_path}mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
                     torch.save(input_image_original_cropped,
                                f"{results_path}initial{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
-                    torch.save(interpolated_field_cropped,
-                               f"{results_path}interpolated{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
                     torch.save(gp_field_cropped,
                                f"{results_path}gp_field{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
 

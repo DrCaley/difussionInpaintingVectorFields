@@ -6,6 +6,8 @@ import pygame
 
 import torch
 from halo import Halo
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
 from matplotlib import pyplot as plt
 from torch.optim import Adam
 from torch.utils.data import DataLoader
@@ -285,7 +287,9 @@ class TrainOceanXL():
                 'epoch_losses': epoch_losses,
                 'train_losses': train_losses,
                 'test_losses': test_losses,
-                'best_test_loss': best_test_loss
+                'best_test_loss': best_test_loss,
+                'n_steps': self.n_steps,
+                'noise_strategy' : self.noise_strategy,
                 }
 
             if best_test_loss > avg_test_loss:
