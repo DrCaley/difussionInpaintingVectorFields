@@ -26,15 +26,12 @@ from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 
-
-
 dd = DDInitializer()
 results_path = "./results/"
 
 if not os.path.exists(results_path):
     os.makedirs(results_path, exist_ok=True)
 
-(training_tensor, validation_tensor, test_tensor) = dd.get_tensors()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename=f"{results_path}inpainting_model_test_log.txt")
 
 store_path = dd.get_attribute("store_path")
