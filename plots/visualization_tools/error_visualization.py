@@ -46,17 +46,21 @@ def save_mse_heatmap(tensor1, tensor2, mask, save_path="mse_heatmap.png",
 
     plt.imshow(masked_array, cmap=cmap, interpolation='nearest')
     plt.colorbar(label="Pixel MSE")
-    plt.title(title)
+    full_title = f"{title}\nAverage MSE: {avg_mse:.6f}"
+    plt.title(full_title)
     plt.xlabel("Width")
     plt.ylabel("Height")
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.close()
 
-
 def save_angular_error_heatmap(tensor1, tensor2, mask, save_path="angular_error_heatmap.png",
                                crop_shape=(44, 94), mask_color="lightgray", cmap_name="viridis",
                                title="Masked Angular Error Heatmap"):
     save_path = ensure_save_path(save_path)
+
+    assert tensor1.shape == tensor2.shape, "Tensors must be the same shape"
+    assert tensor1.shape[1] == 2, "Expected tensors with shape (1, 2, H, W)"
+    assert mask.shape == (1, 2, tensor1.shape[2], tensor1.shape[3]), "Mask must be shape (1, 2, H, W)"
 
     single_mask = mask[:, 0:1, :, :]
 
@@ -72,7 +76,7 @@ def save_angular_error_heatmap(tensor1, tensor2, mask, save_path="angular_error_
     cos_angle = dot / (norm_pred * norm_true)
     cos_angle = torch.clamp(cos_angle, -1.0, 1.0)
     angle = torch.acos(cos_angle)
-    angle_deg = angle * (180.0 / 3.14159265)
+    angle_deg = angle * (180.0 / np.pi)
 
     angle_np = angle_deg.squeeze().cpu().numpy()
     mask_np = single_mask.squeeze().cpu().numpy()
@@ -82,7 +86,7 @@ def save_angular_error_heatmap(tensor1, tensor2, mask, save_path="angular_error_
     cropped_mask = mask_np[:crop_h, :crop_w]
 
     masked_angle = np.where(cropped_mask == 1, cropped_angle, np.nan)
-    avg_angle_error = cropped_angle[cropped_mask == 1].mean()
+    avg_angle_error = cropped_angle[cropped_mask == 1].mean() if np.any(cropped_mask == 1) else float('nan')
     print(f"Average angular error (degrees) over masked crop: {avg_angle_error:.3f}")
 
     plt.figure(figsize=(8, 6))
@@ -91,7 +95,8 @@ def save_angular_error_heatmap(tensor1, tensor2, mask, save_path="angular_error_
 
     plt.imshow(masked_angle, cmap=cmap, interpolation='nearest')
     plt.colorbar(label="Angular error (degrees)")
-    plt.title(title)
+    full_title = f"{title}\nAverage Angular Error: {avg_angle_error:.3f}°"
+    plt.title(full_title)
     plt.xlabel("Width")
     plt.ylabel("Height")
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
