@@ -1,7 +1,7 @@
 import torch
 import os
 
-from skimage.util import noise
+
 
 # Get the directory where this script lives
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -73,6 +73,50 @@ def gaussian_each_step_divergence_free_noise(shape: torch.Size, t: torch.Tensor,
             output[i, 1] += vy
 
     return output
+
+
+
+def gaussian_divergence_free_noise(shape: torch.Size, t: torch.Tensor, device='cpu') -> torch.Tensor:
+    dd = get_dd_initializer()
+    device = dd.get_device()
+
+    u_mean = dd.get_attribute('u_training_mean')
+    v_mean = dd.get_attribute('v_training_mean')
+
+    alpha_bars = dd.get_alpha_bars()
+
+    os.makedirs("noise_images", exist_ok=True)
+
+    batch, _, height, width = shape
+    output = torch.zeros((batch, 2, height, width), device=device)
+
+    for i in range(batch):
+        t_i = int(t[i].item())  # Make this once and use below
+        alpha_bar_val = alpha_bars[t_i].to(device)  # Move to device if needed
+
+        mean = torch.tensor(alpha_bar_val, device=device)
+        std = torch.sqrt(1 - alpha_bar_val)
+
+        freq = torch.normal(mean, std)
+        vx, vy = exact_div_free_field_from_stream(width, height, freq, device=device)
+
+        magnitude = torch.sqrt(vx ** 2 + vy ** 2)
+        max_val = torch.max(magnitude)
+
+        if max_val > 0:
+            vx /= max_val
+            vy /= max_val
+
+        mag_scale = torch.normal(mean, std)
+        vx *= mag_scale
+        vy *= mag_scale
+
+        output[i, 0] += vx
+        output[i, 1] += vy
+
+    return output
+
+
 
 import torch
 import torch.nn.functional as F

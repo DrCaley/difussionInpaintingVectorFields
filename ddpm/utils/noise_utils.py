@@ -4,7 +4,7 @@ import torch
 from typing import Optional
 
 from noising_process.incompressible_gp.adding_noise.divergence_free_noise import \
-    gaussian_each_step_divergence_free_noise, layered_div_free_noise
+    gaussian_each_step_divergence_free_noise, layered_div_free_noise, gaussian_divergence_free_noise
 from noise_database.noise_query import QueryNoise
 
 
@@ -43,7 +43,7 @@ class DivergenceFreeNoise(NoiseStrategy):
     ) -> torch.Tensor:
         assert shape[1] == 2, "Divergence-free noise expects 2 channels"
         batch, _, H, W = shape
-        return gaussian_each_step_divergence_free_noise(shape=shape, t=t, device=device)
+        return gaussian_divergence_free_noise(shape=shape, t=t, device=device)
 
     def get_gaussian_scaling(self):
         return False
