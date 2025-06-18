@@ -33,6 +33,8 @@ def exact_div_free_field_from_stream(H, W, freq, device='cpu'):
 
     return vx, vy
 
+# Changed this to betas, shooould be equivalent to doing alphas only once???
+# TODO: FIX THIS, MAKE BETAS MAKE SENSE
 def gaussian_each_step_divergence_free_noise(shape: torch.Size, t: torch.Tensor, device='cpu') -> torch.Tensor:
     dd = get_dd_initializer()
     device = dd.get_device()
@@ -40,7 +42,7 @@ def gaussian_each_step_divergence_free_noise(shape: torch.Size, t: torch.Tensor,
     u_mean = dd.get_attribute('u_training_mean')
     v_mean = dd.get_attribute('v_training_mean')
 
-    alpha_bars = dd.get_alpha_bars()
+    betas = dd.get_betas()
 
     os.makedirs("noise_images", exist_ok=True)
 
@@ -49,11 +51,11 @@ def gaussian_each_step_divergence_free_noise(shape: torch.Size, t: torch.Tensor,
 
     for i in range(batch):
         t_i = int(t[i].item())  # Make this once and use below
-        alpha_bar_val = alpha_bars[t_i].to(device)  # Move to device if needed
+        beta_val = betas[t_i].to(device)  # Move to device if needed
 
         for _ in range(t_i):
             mean = torch.tensor((u_mean + v_mean) / 2, device=device)
-            std = torch.sqrt(alpha_bar_val)
+            std = torch.sqrt(beta_val)
 
             freq = torch.normal(mean, std)
             vx, vy = exact_div_free_field_from_stream(width, height, freq, device=device)

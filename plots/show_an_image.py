@@ -1,118 +1,39 @@
 import os
 import sys
-import csv
+import torch
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import imageio
 from plot_vector_field_tool import plot_vector_field
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), './../')))
 from data_prep.data_initializer import DDInitializer
 from ddpm.helper_functions.compute_divergence import compute_divergence
+from ddpm.utils.noise_utils import DivergenceFreeNoise
 
-
-
-# Can be deleted at a moment's notice (should be in a garbage.txt folder imo) -Matt
-
-
-# Initialize data
+# Initialize data and output dir
 data_init = DDInitializer()
+output_dir = 'noise_images'
+os.makedirs(output_dir, exist_ok=True)
 
-# Directory to save images
-output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'outputs')
+# Extract vector components as PyTorch tensors
+tensor_to_draw_x = data_init.training_tensor[:, :, 0, 0]
+tensor_to_draw_y = data_init.training_tensor[:, :, 1, 0]
 
+if isinstance(tensor_to_draw_x, np.ndarray):
+    tensor_to_draw_x = torch.from_numpy(tensor_to_draw_x)
+    tensor_to_draw_y = torch.from_numpy(tensor_to_draw_y)
 
-# CSV
-csv_file = os.path.join(output_dir, f"divergences_test.csv")
-with open(csv_file, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['Number', 'Divergence'])
+# Rebuild full field tensor in shape (1, 2, H, W) for the noise generator
+vec_field_tensor = torch.stack([tensor_to_draw_x, tensor_to_draw_y], dim=0).unsqueeze(0)  # (1, 2, H, W)
 
-# I've lost the plot
-plot_file = os.path.join(output_dir, f"div_plot_validation_tensor.png")
+# Generate divergence-free noise
+noise_gen = DivergenceFreeNoise()
+t = torch.tensor([500])  # Dummy timestep
+noise = noise_gen.generate(vec_field_tensor.shape, t).squeeze(0)  # (2, H, W)
 
+# Plotting
+plot_vector_field(tensor_to_draw_x, tensor_to_draw_y, scale=10, file=os.path.join(output_dir, f"vector_field.png"))
 
-# Generate vector field images
-filenames = []
-heatmap_filenames = []
-
-
-"""
-fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-
-# Initialize the heat map images with the first frame
-im0 = axs[0].imshow(data_init.validation_tensor[:, :, 0, 0].numpy(), cmap='viridis')
-axs[0].set_title(f'X-Component t=0')
-cbar0 = fig.colorbar(im0, ax=axs[0])
-
-im1 = axs[1].imshow(data_init.validation_tensor[:, :, 1, 0].numpy(), cmap='viridis')
-axs[1].set_title(f'Y-Component t=0')
-cbar1 = fig.colorbar(im1, ax=axs[1])
-
-for ax in axs:
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-"""
-
-
-divergences = []
-
-# IMAGE GENERATION LOOP
-for i in range(1):
-    tensor_to_draw_x = data_init.training_tensor[:, :, 0, 609]
-    tensor_to_draw_y = data_init.training_tensor[:, :, 1, 609]
-
-    # Create vector field files
-    filename = os.path.join(output_dir, f"vector_field{i:04}.png")
-    plot_vector_field(tensor_to_draw_x, tensor_to_draw_y, step = 2, scale=6, title=f"Vector Field {i}", file=filename)
-    filenames.append(filename)
-
-    # Heat map gifs
-    """
-    im0.set_data(tensor_to_draw_x.numpy())
-    axs[0].set_title(f'X-Component t={i}')
-    im1.set_data(tensor_to_draw_y.numpy())
-    axs[1].set_title(f'Y-Component t={i}')
-
-    heatmap_file = os.path.join(output_dir, f"xy_heatmap_frame{i:04}.png")
-    plt.savefig(heatmap_file, dpi=150, bbox_inches='tight')
-    heatmap_filenames.append(heatmap_file)
-    """
-
-    divergences.append(compute_divergence(tensor_to_draw_x, tensor_to_draw_y).nanmean().item())
-
-    with open(csv_file, mode='a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow([i + 1, divergences[i]])
-
-
-
-# Create GIFS
-images = [imageio.imread(f) for f in sorted(filenames)]
-imageio.mimsave(output_dir + "\\vector_fields_validation_tensor.gif", images, fps=20)  # Adjust fps as needed
-
-heat_images = [imageio.imread(f) for f in heatmap_filenames]
-imageio.mimsave(output_dir + "\\heat_map_validation_tensor.gif", heat_images, fps=20)
-
-
-# No more 1000+ image pushes :(
-for f in filenames + heatmap_filenames:
-    try:
-        os.remove(f)
-    except OSError as e:
-        print(f"Error deleting file {f}: {e}")
-
-
-"""
-
-# Make the plot
-plt.figure(figsize=(20, 10))
-plt.plot(divergences, label='Divergence')
-plt.xlabel('Field')
-plt.ylabel('Divergence')
-plt.legend()
-plt.title('Fields and Divergences')
-plt.savefig(plot_file)
-"""
+plot_vector_field(noise[0], noise[1], scale=10, file=os.path.join(output_dir, f"noise_field.png"))

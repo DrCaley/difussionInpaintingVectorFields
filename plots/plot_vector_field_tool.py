@@ -39,14 +39,15 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
         scale=scale,
         color='blue'
     )
-    my_path = os.path.dirname(os.path.abspath(__file__))
+    #my_path = os.path.dirname(os.path.abspath(__file__))
 
     plt.gca().invert_yaxis()
     plt.axis("equal")
     plt.title(title)
     plt.grid(True)
 
-    output_path = os.path.join(my_path, 'outputs', os.path.basename(file))
-    plt.savefig(output_path)
+    #output_path = os.path.join(my_path, 'outputs', os.path.basename(file))
+    #plt.savefig(output_path)
+    plt.savefig(file)
     plt.close()
 

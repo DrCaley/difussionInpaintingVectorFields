@@ -61,6 +61,7 @@ class DivergenceFreeGaussianNoise(NoiseStrategy):
 
     def get_gaussian_scaling(self):
         return True
+    
 class CachedNoisedStrategy(NoiseStrategy):
     def __init__(self,):
         if os.path.exists("../..noise"):
