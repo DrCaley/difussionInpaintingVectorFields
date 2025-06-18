@@ -14,6 +14,9 @@ from ddpm.helper_functions.compute_divergence import compute_divergence
 
 
 
+# Can be deleted at a moment's notice (should be in a garbage.txt folder imo) -Matt
+
+
 # Initialize data
 data_init = DDInitializer()
 
@@ -85,7 +88,7 @@ for i in range(1):
             writer.writerow([i + 1, divergences[i]])
 
 
-"""
+
 # Create GIFS
 images = [imageio.imread(f) for f in sorted(filenames)]
 imageio.mimsave(output_dir + "\\vector_fields_validation_tensor.gif", images, fps=20)  # Adjust fps as needed
@@ -101,6 +104,8 @@ for f in filenames + heatmap_filenames:
     except OSError as e:
         print(f"Error deleting file {f}: {e}")
 
+
+"""
 
 # Make the plot
 plt.figure(figsize=(20, 10))

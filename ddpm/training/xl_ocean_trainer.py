@@ -21,13 +21,24 @@ from data_prep.data_initializer import DDInitializer
 from concurrent.futures import ThreadPoolExecutor
 
 class TrainOceanXL():
+    """
+    This file is being used to train the best model of all time baybee.
+    There's never been a model better than this one, we got the best epsilons,
+    our loss function becomes our win function, truly remarkable stuff.
+    Absolute model
+        | o |
+        \ | /
+          |
+         / \
+        |   |
+    """
 
     def __init__(self):
         """
         Initializes model, datasets, loaders, and all training configs using DDInitializer.
         """
         dd = DDInitializer()
-        self._setup_paths_and_files()
+        self._setup_paths_and_files(dd)
         self.device = dd.get_device()
         self.n_steps = dd.get_attribute('n_steps')
         self.min_beta = dd.get_attribute('min_beta')
@@ -73,7 +84,7 @@ class TrainOceanXL():
     def set_music(self, music_path = 'music.mp3'):
         self.music_path = os.path.join(os.path.dirname(__file__), music_path)
 
-    def _setup_paths_and_files(self):
+    def _setup_paths_and_files(self, dd):
         """
         Prepares all output paths for saving models, plots, and logs.
         """
@@ -82,7 +93,7 @@ class TrainOceanXL():
         self.set_csv_file()
         self.set_model_file()
         self.set_plot_file()
-        self.set_csv_description()
+        self.set_csv_description(dd)
         self.set_music()
 
     def load_checkpoint(self, optimizer : torch.optim.Optimizer):
@@ -153,14 +164,8 @@ class TrainOceanXL():
         self.best_model_weights = os.path.join(os.path.dirname(__file__), best_model_weights)
         self.best_model_checkpoint = os.path.join(os.path.dirname(__file__), best_model_checkpoint)
         
-    def set_csv_description(self, description = "hello world!"):
-        """
-        Sets a description header to store at the top of the CSV file.
-
-        Args:
-            description (str): Any short text.
-        """
-        self.description = description
+    def set_csv_description(self, dd:DDInitializer):
+        self.description = f"Standardization Method: {dd.get_attribute('standardizer_type')} | Noise: {dd.get_attribute('noise_function')} | Loss: {dd.get_attribute('loss_function')}  "
         
     def set_ddpm(self, ddpm : torch.nn.Module):
         """
@@ -271,9 +276,9 @@ class TrainOceanXL():
             test_losses.append(avg_test_loss)
 
             log_string = f"\nepoch {epoch + 1}: \n"
-            log_string += f"EPOCH Loss: {epoch_loss:.3f}\n"
-            log_string += f"TRAIN Loss: {avg_train_loss:.3f}\n"
-            log_string += f"TEST Loss: {avg_test_loss:.3f}\n"
+            log_string += f"EPOCH Loss: {epoch_loss:.7f}\n"
+            log_string += f"TRAIN Loss: {avg_train_loss:.7f}\n"
+            log_string += f"TEST Loss: {avg_test_loss:.7f}\n"
             # Append current epoch results to CSV
             with open(csv_file, mode='a', newline='') as file:
                 writer = csv.writer(file)
@@ -298,8 +303,8 @@ class TrainOceanXL():
                 torch.save(checkpoint, best_model_checkpoint)
                 log_string += " --> Best model ever (stored based on test loss)"
 
-            log_string += (f"\nAverage test loss: {avg_test_loss:.3f} -> best: {best_test_loss:.3f}\n"
-                           + f"Average train loss: {avg_train_loss:.3f}")
+            log_string += (f"\nAverage test loss: {avg_test_loss:.7f} -> best: {best_test_loss:.7f}\n"
+                           + f"Average train loss: {avg_train_loss:.7f}")
 
             tqdm.write(log_string)
 

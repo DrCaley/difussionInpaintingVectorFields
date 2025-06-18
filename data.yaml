@@ -12,8 +12,8 @@ lr: 0.001
 standardizer_type: zscore
 noise_function: gaussian
 loss_function: mse
-w1: 0
-w2: 1
+w1: 0.5
+w2: 0.5
 num_workers: 0
 max_size: 50
 
@@ -23,7 +23,7 @@ max_beta: 0.02
 training_mode: True
 inpainting_batch_size: 1
 
-num_images_to_process: 1
+num_images_to_process: 5
 n_samples: 1
 resample_nums: [5]
 
