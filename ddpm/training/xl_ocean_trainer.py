@@ -38,7 +38,7 @@ class TrainOceanXL():
         Initializes model, datasets, loaders, and all training configs using DDInitializer.
         """
         dd = DDInitializer()
-        self._setup_paths_and_files()
+        self._setup_paths_and_files(dd)
         self.device = dd.get_device()
         self.n_steps = dd.get_attribute('n_steps')
         self.min_beta = dd.get_attribute('min_beta')
@@ -84,7 +84,7 @@ class TrainOceanXL():
     def set_music(self, music_path = 'music.mp3'):
         self.music_path = os.path.join(os.path.dirname(__file__), music_path)
 
-    def _setup_paths_and_files(self):
+    def _setup_paths_and_files(self, dd):
         """
         Prepares all output paths for saving models, plots, and logs.
         """
@@ -93,7 +93,7 @@ class TrainOceanXL():
         self.set_csv_file()
         self.set_model_file()
         self.set_plot_file()
-        self.set_csv_description()
+        self.set_csv_description(dd)
         self.set_music()
 
     def load_checkpoint(self, optimizer : torch.optim.Optimizer):
@@ -164,14 +164,8 @@ class TrainOceanXL():
         self.best_model_weights = os.path.join(os.path.dirname(__file__), best_model_weights)
         self.best_model_checkpoint = os.path.join(os.path.dirname(__file__), best_model_checkpoint)
         
-    def set_csv_description(self, description = "hello world!"):
-        """
-        Sets a description header to store at the top of the CSV file.
-
-        Args:
-            description (str): Any short text.
-        """
-        self.description = description
+    def set_csv_description(self, dd:DDInitializer):
+        self.description = f"Standardization Method: {dd.get_attribute('standardizer_type')} | Noise: {dd.get_attribute('noise_function')} | Loss: {dd.get_attribute('loss_function')}  "
         
     def set_ddpm(self, ddpm : torch.nn.Module):
         """

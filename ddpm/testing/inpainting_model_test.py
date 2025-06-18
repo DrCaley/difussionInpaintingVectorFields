@@ -8,6 +8,8 @@ import sys
 
 from tqdm import tqdm
 
+from ddpm.helper_functions.masks.robot_path import RobotPathMaskGenerator
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
 
@@ -16,6 +18,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 from ddpm.helper_functions.masks.better_robot_path import BetterRobotPathGenerator
 from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
 from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator
+from ddpm.helper_functions.masks.gaussian_mask import GaussianNoiseBinaryMaskGenerator
+from ddpm.helper_functions.masks.squiggly_line import SquigglyLineMaskGenerator
 from ddpm.helper_functions.masks.mask_drawer import ManualMaskDrawer
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
@@ -87,9 +91,9 @@ resample_nums = dd.get_attribute("resample_nums")
 mse_ddpm_list = []
 
 # =========== Initializing Masks ==================
-cool_robot_mask = ManualMaskDrawer()
+manual = BetterRobotPathGenerator()
 
-masks_to_test = [cool_robot_mask]
+masks_to_test = [manual]
 
 def inpaint_testing(mask_generator: MaskGenerator, image_counter: int) -> int:
     writer = csv.writer(file)
