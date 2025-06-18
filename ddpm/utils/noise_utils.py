@@ -1,3 +1,5 @@
+import os
+
 import torch
 from typing import Optional
 
@@ -61,7 +63,11 @@ class DivergenceFreeGaussianNoise(NoiseStrategy):
         return True
 class CachedNoisedStrategy(NoiseStrategy):
     def __init__(self,):
-        self.noise_query = QueryNoise(noise_dir="../../noise")
+        if os.path.exists("../..noise"):
+            self.noise_query = QueryNoise(noise_dir="../../noise")
+        else :
+            self.noise_query = QueryNoise(noise_dir="./noise")
+
 
     def generate(
             self,
@@ -77,7 +83,6 @@ class CachedNoisedStrategy(NoiseStrategy):
         for timestep in t:
             sample = self.noise_query.get(int(timestep.item()))  # shape: (1, 2, H, W)
 
-            print("Noise shape at t", timestep.item(), ":", sample.shape)
             if sample.ndim == 4 and sample.shape[1] == 2:
                 sample = sample.squeeze(0)  # (2, H, W)
             elif sample.ndim == 3:
