@@ -118,9 +118,13 @@ class ModelInpainter:
 
                 # Convert back to unstandardized form for land masking
                 input_image_original = dd.get_standardizer().unstandardize(input_image).to(device)
-                land_mask = (input_image_original != 0).float().to(device)
+                land_mask = (input_image_original <= 0.05).float().to(device) #adjust the decimal point to capture land
 
-                mask = mask_generator.generate_mask(input_image.shape, land_mask)
+                raw_mask = mask_generator.generate_mask(input_image.shape, land_mask)
+                mask = raw_mask * land_mask
+
+                print("Land mask coverage:", land_mask.sum().item(), "out of", land_mask.numel())
+
                 num_lines = mask_generator.get_num_lines()
 
                 # ======== Masking and Inpainting Loops ========
