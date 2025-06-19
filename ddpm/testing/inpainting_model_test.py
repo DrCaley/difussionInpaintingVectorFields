@@ -8,6 +8,7 @@ import sys
 
 from tqdm import tqdm
 
+from ddpm.helper_functions.masks.n_coverage_mask import CoverageMaskGenerator
 from ddpm.helper_functions.masks.robot_path import RobotPathMaskGenerator
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
@@ -88,7 +89,7 @@ resample_nums = dd.get_attribute("resample_nums")
 mse_ddpm_list = []
 
 # =========== Initializing Masks ==================
-manual = BetterRobotPathGenerator()
+manual = CoverageMaskGenerator(coverage_ratio=0.5)
 
 masks_to_test = [manual]
 

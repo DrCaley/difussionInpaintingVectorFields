@@ -15,10 +15,10 @@ from ddpm.utils.inpainting_utils import calculate_mse
 dd = DDInitializer()
 
 # ======================== USER INPUT ========================
-noise_type = "ManualMaskDrawer"  # e.g. "RobotPath", "NoisyField", etc.
+noise_type = "coverage"  # e.g. "RobotPath", "NoisyField", etc.
 sample_num = 83           # Which numbered sample to visualize
 vector_scale = 0.15       # Adjust for better vector field visibility
-num_lines = 240
+num_lines = 0.25
 resamples = 5
 # ============================================================
 

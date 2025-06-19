@@ -8,6 +8,8 @@ import sys
 
 from tqdm import tqdm
 
+from ddpm.helper_functions.masks.n_coverage_mask import CoverageMaskGenerator
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.masks.robot_path import RobotPathMaskGenerator
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
@@ -201,6 +203,5 @@ class ModelInpainter:
 
 if __name__ == '__main__':
     mi = ModelInpainter()
-    mi.use_this_model("./weekend_ddpm_ocean_model.pt")
-    mi.add_mask(RobotPathMaskGenerator())
+    mi.add_mask(CoverageMaskGenerator(coverage_ratio=0.25))
     mi.begin_inpainting()
