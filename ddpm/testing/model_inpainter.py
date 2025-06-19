@@ -218,6 +218,6 @@ class ModelInpainter:
 
 if __name__ == '__main__':
     mi = ModelInpainter()
-    mi.add_mask(CoverageMaskGenerator(coverage_ratio=0.25))
+    mi.add_mask(ManualMaskDrawer())
     mi.visualize_images()
     mi.begin_inpainting()

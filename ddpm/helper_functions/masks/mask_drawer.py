@@ -27,6 +27,8 @@ class ManualMaskDrawer(MaskGenerator):
         self._draw_initial_grid()
 
         print("🖌️ Use mouse to draw mask. Press 's' to save, 'c' to clear.")
+        print("Black = Mask, White = Prediction")
+
         self.root.mainloop()
 
         dd = DDInitializer()
@@ -117,7 +119,7 @@ class ManualMaskDrawer(MaskGenerator):
         padded_mask = torch.nn.functional.pad(self.tensor_mask,
                                               (0, pad_W, 0, pad_H),
                                               mode='constant', value=0)
-        return padded_mask
+        return 1.0 - padded_mask
 
     def __str__(self):
         return "ManualMaskDrawer"
