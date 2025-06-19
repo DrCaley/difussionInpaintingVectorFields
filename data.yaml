@@ -4,7 +4,8 @@ v_training_mean: -0.032393779611754124
 v_training_std: 0.08899177232117583
 gpu_to_use: 0
 
-testSeed: 3
+training_mode: True
+testSeed: 0
 n_epochs: 2
 batch_size: 35
 lr: 0.001
@@ -18,11 +19,10 @@ num_workers: 0
 max_size: 50
 
 n_steps: 1000
-min_beta: 0
-max_beta: 1
+min_beta: 0.0001
+max_beta: 0.02
 training_mode: True
 inpainting_batch_size: 1
-
 num_images_to_process: 5
 n_samples: 1
 resample_nums: [5]

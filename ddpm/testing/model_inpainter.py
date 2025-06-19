@@ -9,6 +9,8 @@ import sys
 from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+from ddpm.helper_functions.masks.n_coverage_mask import CoverageMaskGenerator
+from plots.visualization_tools.pt_visualizer_plus import PTVisualizer
 from ddpm.helper_functions.masks.robot_path import RobotPathMaskGenerator
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
 # https://genius.com/22643703/Dream-mask/Thats-what-the-mask-is-thats-what-the-point-of-the-mask-is
@@ -31,11 +33,12 @@ class ModelInpainter:
         self.use_this_model()
         self.masks_to_use = []
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename=f"{self.results_path}inpainting_model_test_log.txt")
-        self.resample_nums = self.dd.get_attribute("resample_nums")
+        self.resamples = self.dd.get_attribute("resample_nums")
         self.mse_ddpm_list = []
         self._configure_model()
         self._load_checkpoint()
         self._load_dataset()
+        self.visualizer = False
 
     def set_results_path(self, results_path = "./results/"):
         self.results_path = results_path
@@ -115,16 +118,19 @@ class ModelInpainter:
 
                 # Convert back to unstandardized form for land masking
                 input_image_original = dd.get_standardizer().unstandardize(input_image).to(device)
-                land_mask = (input_image_original != 0).float().to(device)
+                land_mask = (input_image_original <= 0.05).float().to(device) #adjust the decimal point to capture land
 
-                mask = mask_generator.generate_mask(input_image.shape, land_mask)
+                raw_mask = mask_generator.generate_mask(input_image.shape, land_mask)
+                mask = raw_mask * land_mask
+
+                print("Land mask coverage:", land_mask.sum().item(), "out of", land_mask.numel())
+
                 num_lines = mask_generator.get_num_lines()
 
                 # ======== Masking and Inpainting Loops ========
-                for resample in self.resample_nums:
+                for resample in self.resamples:
 
                     torch.save(mask, f"{self.results_path}{mask_generator}_{num_lines}.pt")
-
                     mse_ddpm_samples = []
                     # ======== Generate Samples ========
                     for i in tqdm(range(n_samples), leave=False, desc="Samples", colour="#006666"):
@@ -160,6 +166,17 @@ class ModelInpainter:
                         # Calculate MSE for masked region
                         mse_ddpm = calculate_mse(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped)
                         mse_ddpm_samples.append(mse_ddpm.item())
+
+                        if self.visualizer:
+                            ptv = PTVisualizer(
+                                    mask_type=mask_generator,
+                                    sample_num=batch[1].item(),
+                                    vector_scale = self.vector_scale,
+                                    num_lines=num_lines,
+                                    resamples = resample
+                                )
+                            ptv.visualize()
+                            ptv.calc()
 
                         logging.info(
                             f"MSE (DDPM Inpainting) with {num_lines} lines for image {image_counter}, sample {i}: {mse_ddpm.item()}")
@@ -199,8 +216,12 @@ class ModelInpainter:
             mean_mse_ddpm = np.mean(self.mse_ddpm_list)
             logging.info(f"Mean MSE (DDPM Inpainting): {mean_mse_ddpm}")
 
+    def visualize_images(self, vector_scale = 0.15):
+        self.visualizer = True
+        self.vector_scale = vector_scale
+
 if __name__ == '__main__':
     mi = ModelInpainter()
-    mi.use_this_model("./weekend_ddpm_ocean_model.pt")
-    mi.add_mask(RobotPathMaskGenerator())
+    mi.add_mask(ManualMaskDrawer())
+    mi.visualize_images()
     mi.begin_inpainting()
