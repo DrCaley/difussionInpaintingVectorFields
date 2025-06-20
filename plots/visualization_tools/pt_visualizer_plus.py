@@ -134,8 +134,6 @@ class PTVisualizer():
                     continue
                 try:
                     tensor = data[key]
-                    mse = calculate_mse(tensor, initial_tensor, mask_tensor)
-                    print(f"MSE between {key} and initial: {mse:.6f}")
                     save_mse_heatmap(tensor, initial_tensor, mask_tensor, title=f"{key}_vs_initial",
                                      save_path=f"{self.error_path}/mse_{key}_vs_initial.png")
                     save_angular_error_heatmap(initial_tensor, tensor, mask_tensor, title=f"{key}_vs_initial",
