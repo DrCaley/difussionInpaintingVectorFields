@@ -148,4 +148,4 @@ def layered_div_free_noise(batch_size, height, width, device=None, n_layers=10):
     noise = torch.zeros(batch_size, 2, height, width, device=device)
     for _ in range(n_layers):
         noise += generate_div_free_noise(batch_size, height, width, device)
-    return noise / (n_layers ** 0.5)
+    return noise / ( (n_layers ** 0.5) * (2 ** (0.5)) )

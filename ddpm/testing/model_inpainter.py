@@ -215,11 +215,6 @@ class ModelInpainter:
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
     mi = ModelInpainter()
-
-    coverage_levels = np.linspace(0.0, 1, 11)
-    for percent in coverage_levels:
-        mask = CoverageMaskGenerator(coverage_ratio=percent)
-        mi.add_mask(mask)
-
-    mi.find_coverage()
+    mi.add_mask(GaussianNoiseBinaryMaskGenerator())
+    mi.visualize_images()
     mi.begin_inpainting()

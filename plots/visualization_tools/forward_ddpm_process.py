@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import imageio
 import io
 
+from mpmath.calculus.extrapolation import standardize
+
 from data_prep.data_initializer import DDInitializer
 
 dd = DDInitializer()
@@ -39,7 +41,7 @@ def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path=
 
         epsilon = noise_strategy(x0_orginal, t_tensor)
         epsilon = epsilon.cpu().numpy() if hasattr(epsilon, "cpu") else epsilon
-        epsilon = epsilon[0].transpose(1, 2, 0)
+        epsilon = epsilon[0].transpose(1, 2, 0) / (2**(0.5))
 
         noisy = a_sqrt * x0 + one_minus_a_sqrt * epsilon
 
@@ -101,5 +103,6 @@ def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path=
 
 # Example usage
 alpha_bars = dd.get_alpha_bars()
-x0 = dd.training_tensor[::, ::, ::].permute(3, 2, 1, 0)[:1]
+standardizer = dd.get_standardizer()
+x0 = standardizer(dd.training_tensor[::, ::, ::].permute(3, 2, 1, 0)[:1].nan_to_num(0))
 make_ddpm_vector_field_gif(alpha_bars, x0, dd.get_noise_strategy(), every=5)
