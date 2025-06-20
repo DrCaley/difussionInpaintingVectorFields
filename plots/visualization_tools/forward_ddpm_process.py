@@ -3,9 +3,11 @@ import torch
 import matplotlib.pyplot as plt
 import imageio
 import io
+import os
+import sys
 
-from mpmath.calculus.extrapolation import standardize
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from data_prep.data_initializer import DDInitializer
 
 dd = DDInitializer()
@@ -104,5 +106,6 @@ def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path=
 # Example usage
 alpha_bars = dd.get_alpha_bars()
 standardizer = dd.get_standardizer()
-x0 = standardizer(dd.training_tensor[::, ::, ::].permute(3, 2, 1, 0)[:1].nan_to_num(0))
+# I broke this line, will fix next week :)
+x0 = standardizer(dd.training_tensor[::, ::, ::].permute(2, 3, 1, 0)[:1].nan_to_num(0))
 make_ddpm_vector_field_gif(alpha_bars, x0, dd.get_noise_strategy(), every=5)
