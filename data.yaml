@@ -10,7 +10,7 @@ n_epochs: 1000
 batch_size: 35
 lr: 0.001
 
-standardizer_type: zscore
+standardizer_type: maxmag
 noise_function: div_gaussian
 loss_function: mse
 w1: 0.5

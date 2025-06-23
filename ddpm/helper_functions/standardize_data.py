@@ -37,9 +37,9 @@ class MaxMagnitudeStandardizer(Standardizer):
         return tensor / self.last_max_mag if self.last_max_mag > 0 else tensor
 
     def get_max_magnitude(self, tensor):
-        u = tensor[0]
-        v = tensor[1]
-        return torch.sqrt(u**2 + v**2).max()
+        u = tensor[:, 0]  # shape [1, H, W]
+        v = tensor[:, 1]  # shape [1, H, W]
+        return torch.sqrt(u**2 + v**2).max().item()
 
     def unstandardize(self, tensor):
         if self.last_max_mag is None:
