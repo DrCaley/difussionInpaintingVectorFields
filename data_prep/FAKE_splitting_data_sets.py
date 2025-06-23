@@ -17,8 +17,12 @@ def generate_circular_field(H, W, T, scale=1.0):
     """
     Y, X = np.meshgrid(np.linspace(-1, 1, H), np.linspace(-1, 1, W), indexing='ij')
     radius = np.sqrt(X**2 + Y**2) + 1e-6  # avoid div-by-zero
-    u = -Y / radius * scale
-    v = X / radius * scale
+
+    X = X / radius * scale
+    Y = Y / radius * scale
+
+    u = X
+    v = Y
 
     # Repeat the 2D field across time
     u_field = np.stack([u] * T, axis=-1)  # (H, W, T)
@@ -26,7 +30,7 @@ def generate_circular_field(H, W, T, scale=1.0):
     return u_field, v_field
 
 # Choose type of vector field
-field_type = 'constant'  # or 'constant'
+field_type = 'circular'  # 'constant' or 'circular'
 
 # Generate chosen field
 if field_type == 'constant':
