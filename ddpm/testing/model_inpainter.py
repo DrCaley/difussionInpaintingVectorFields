@@ -9,18 +9,14 @@ import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 
+from ddpm.helper_functions.masks.gaussian_mask import GaussianNoiseBinaryMaskGenerator
+
 # Project-specific imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from ddpm.helper_functions.masks.n_coverage_mask import CoverageMaskGenerator
+from ddpm.helper_functions.masks import MaskGenerator
+from ddpm.helper_functions.masks import *
 from plots.visualization_tools.pt_visualizer_plus import PTVisualizer
-from ddpm.helper_functions.masks.robot_path import RobotPathMaskGenerator
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
-from ddpm.helper_functions.masks.better_robot_path import BetterRobotPathGenerator
-from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
-from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator
-from ddpm.helper_functions.masks.gaussian_mask import GaussianNoiseBinaryMaskGenerator
-from ddpm.helper_functions.masks.squiggly_line import SquigglyLineMaskGenerator
-from ddpm.helper_functions.masks.mask_drawer import ManualMaskDrawer
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
