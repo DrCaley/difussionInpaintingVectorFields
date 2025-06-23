@@ -32,7 +32,7 @@ training_data = np.zeros([len(all_tensors),len(all_tensors[0]),len(all_tensors[0
 validation_data = np.zeros([len(all_tensors),len(all_tensors[0]),len(all_tensors[0][0]),1])
 test_data = np.zeros([len(all_tensors),len(all_tensors[0]),len(all_tensors[0][0]),1])
 
-for i in range(0,len(all_tensors[0][0][0]),130):
+for i in range(0, len(all_tensors[0][0][0]), 130):
     training_data = np.append(training_data, all_tensors[::, ::, ::, i:i+70], 3)
     validation_data = np.append(validation_data, all_tensors[::, ::, ::, i+80:i + 95], 3)
     test_data = np.append(test_data, all_tensors[::, ::, ::, i+105:i + 120], 3)
