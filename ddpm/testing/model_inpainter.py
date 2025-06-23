@@ -126,6 +126,7 @@ class ModelInpainter:
 
         with tqdm(total=min(len(loader.dataset), num_images_to_process),
                   desc=f"Mask: {mask_generator}", colour="#00ffff") as main_pbar:
+
             for step, batch in enumerate(loader):
                 if image_counter >= num_images_to_process:
                     break
@@ -133,10 +134,11 @@ class ModelInpainter:
                 device = self.dd.get_device()
                 input_image = batch[0].to(device)
                 input_image_original = self.dd.get_standardizer().unstandardize(input_image).to(device)
-                land_mask = (input_image_original <= 0.05).float().to(device)
+                land_mask = (input_image_original != 0.00).float().to(device)
 
                 raw_mask = mask_generator.generate_mask(input_image.shape, land_mask)
                 mask = raw_mask * land_mask
+                print(f"mask: {raw_mask.shape} land: {land_mask.shape}")
                 num_lines = mask_generator.get_num_lines()
 
                 for resample in self.resamples:
@@ -215,6 +217,7 @@ class ModelInpainter:
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
     mi = ModelInpainter()
-    mi.add_mask(GaussianNoiseBinaryMaskGenerator())
+    mi.use_this_model("../trained_models/weekend_ddpm_coean_model.pt")
+    mi.add_mask(ManualMaskDrawer())
     mi.visualize_images()
     mi.begin_inpainting()
