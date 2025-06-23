@@ -1,6 +1,7 @@
 import numpy as np
 import pickle
 import datetime
+import torch
 
 
 
@@ -18,11 +19,11 @@ def generate_circular_field(H, W, T, scale=1.0):
     Y, X = np.meshgrid(np.linspace(-1, 1, H), np.linspace(-1, 1, W), indexing='ij')
     radius = np.sqrt(X**2 + Y**2) + 1e-6  # avoid div-by-zero
 
-    X = X / radius * scale
-    Y = Y / radius * scale
+    X = X / radius
+    Y = Y / radius
 
-    u = X
-    v = Y
+    u = torch.tensor(X)
+    v = torch.tensor(Y)
 
     # Repeat the 2D field across time
     u_field = np.stack([u] * T, axis=-1)  # (H, W, T)
