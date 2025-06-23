@@ -19,7 +19,6 @@ from plots.visualization_tools.pt_visualizer_plus import PTVisualizer
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
 
-
 class ModelInpainter:
     def __init__(self):
         self.dd = DDInitializer()
@@ -209,7 +208,7 @@ class ModelInpainter:
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
     mi = ModelInpainter()
-    mi.use_this_model("../trained_models/weekend_ddpm_coean_model.pt")
-    mi.add_mask(SquigglyLineMaskGenerator())
+    mi.use_this_model("../trained_models/weekend_ddpm_ocean_model.pt")
+    mi.add_mask(ManualMaskDrawer())
     mi.visualize_images()
     mi.begin_inpainting()

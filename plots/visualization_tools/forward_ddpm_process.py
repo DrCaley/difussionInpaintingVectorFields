@@ -12,8 +12,8 @@ from data_prep.data_initializer import DDInitializer
 
 dd = DDInitializer()
 
-def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path="ddpm_vectorfield.gif",
-                                mag_path="avg_value_plot.png", var_path="variance_plot.png", every=1):
+def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path="ddpm_vectorfield_1.gif",
+                                mag_path="avg_value_plot_1.png", var_path="variance_plot_1.png", every=1):
     """
     Create a gif visualizing the DDPM forward process on vector fields.
     Also plots average magnitude and variance of the vectors over time.
@@ -106,6 +106,5 @@ def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path=
 # Example usage
 alpha_bars = dd.get_alpha_bars()
 standardizer = dd.get_standardizer()
-# I broke this line, will fix next week :)
 x0 = standardizer(dd.training_tensor[::, ::, ::].permute(2, 3, 1, 0)[:1].nan_to_num(0))
 make_ddpm_vector_field_gif(alpha_bars, x0, dd.get_noise_strategy(), every=5)
