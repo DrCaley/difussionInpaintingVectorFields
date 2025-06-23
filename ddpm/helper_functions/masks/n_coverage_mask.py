@@ -13,21 +13,18 @@ class CoverageMaskGenerator(MaskGenerator):
     def __init__(self, coverage_ratio=0.2):
         self.coverage_ratio = coverage_ratio
 
-    def generate_mask(self, image_shape=None, land_mask=None):
+    def generate_mask(self, image_shape=None):
         if image_shape is None:
             raise ValueError("image_shape is None")
-        if land_mask is None:
-            raise ValueError("land_mask is None")
 
         _, _, h, w = image_shape
         device = dd.get_device()
 
         # Use first channel of land mask only
-        land_channel = land_mask[:, 0:1, :, :].to(device)  # [1,1,H,W]
-        border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape, land_mask=land_mask).to(device)
+        border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape).to(device)
 
         # Compute valid area
-        valid_area_tensor = land_channel * border_mask  # [1,1,H,W]
+        valid_area_tensor = border_mask  # [1,1,H,W]
         valid_area = valid_area_tensor.squeeze().cpu().numpy()  # (H, W)
 
         visited = np.zeros((h, w), dtype=bool)

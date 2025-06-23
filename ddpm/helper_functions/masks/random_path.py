@@ -10,17 +10,15 @@ dd = DDInitializer()
 
 class RandomPathMaskGenerator(MaskGenerator):
 
-    def __init__(self, num_lines, line_thickness, line_length):
+    def __init__(self, num_lines = 10, line_thickness = 2, line_length = 5 ):
         self.num_lines = num_lines
         self.line_thickness = line_thickness
         self.line_length = line_length
 
 
-    def generate_mask(self, image_shape = None, land_mask = None):
+    def generate_mask(self, image_shape = None):
         if image_shape is None:
             print("image_shape is None")
-        if land_mask is None:
-            print("land_mask is None")
 
         _, _, h, w = image_shape
         line_thickness = self.line_thickness
@@ -63,15 +61,14 @@ class RandomPathMaskGenerator(MaskGenerator):
                 current_y = new_y
                 current_x = new_x
 
-        border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape, land_mask=land_mask)
+        border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape)
 
         device = dd.get_device()
 
         mask = mask.to(device)
-        land_mask = land_mask.to(device)
         border_mask = border_mask.to(device)
 
-        mask = mask * land_mask * border_mask
+        mask = mask * border_mask
 
         return mask
 

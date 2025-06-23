@@ -8,14 +8,12 @@ class NoMask(MaskGenerator):
     def __init__(self):
         pass
 
-    def generate_mask(self, image_shape = None, land_mask = None):
+    def generate_mask(self, image_shape = None):
 
         dd = DDInitializer()
 
         if image_shape is None:
             print("image_shape is None")
-        if land_mask is None:
-            print("land_mask is None")
 
         _, _, h, w = image_shape
 

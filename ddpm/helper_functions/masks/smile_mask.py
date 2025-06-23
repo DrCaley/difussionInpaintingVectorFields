@@ -45,7 +45,7 @@ class SmileyMaskGenerator(MaskGenerator):
 
         return mask
 
-    def generate_mask(self, image_shape=None, land_mask=None):
+    def generate_mask(self, image_shape=None):
         if image_shape is None:
             raise ValueError("image_shape must be provided")
         if isinstance(image_shape, torch.Size):
