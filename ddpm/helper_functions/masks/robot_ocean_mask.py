@@ -9,6 +9,7 @@ class OceanRobotPathMask(MaskGenerator):
         self.start_pos = start_pos  # Tuple (y, x) or None
         self.device = device
 
+
     def __str__(self):
         return f"OceanRobotPathMask"
 
@@ -45,13 +46,17 @@ class OceanRobotPathMask(MaskGenerator):
             # Try to step in the current direction
             for _ in range(10):
                 new_pos = pos + direction * self.radius * 1.5
-                new_pos = torch.clamp(new_pos, min=0, max=torch.tensor([height - 1, width - 1], device=self.device))
+                lower_bound = torch.tensor([0, 0], device=self.device, dtype=new_pos.dtype)
+                upper_bound = torch.tensor([height - 1, width - 1], device=self.device, dtype=new_pos.dtype)
+                new_pos = torch.max(torch.min(new_pos, upper_bound), lower_bound)
 
-                if land_mask is None or land_mask[int(new_pos[0]), int(new_pos[1])] == 0:
+                y = int(new_pos[0].item())
+                x = int(new_pos[1].item())
+
+                if land_mask is None or land_mask[y, x] == 0:
                     pos = new_pos
                     break
                 else:
-                    # Reroll direction
                     direction = torch.randn(2, device=self.device)
                     direction = direction / torch.norm(direction)
 
