@@ -9,8 +9,6 @@ import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 
-from ddpm.helper_functions.masks.gaussian_mask import GaussianNoiseBinaryMaskGenerator
-
 # Project-specific imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.masks import MaskGenerator
@@ -213,7 +211,7 @@ class ModelInpainter:
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
     mi = ModelInpainter()
-    mi.use_this_model("../trained_models/weekend_ddpm_coean_model.pt")
+    mi.use_this_model("../trained_models/weekend_ddpm_ocean_model.pt")
     mi.add_mask(ManualMaskDrawer())
     mi.visualize_images()
     mi.begin_inpainting()
