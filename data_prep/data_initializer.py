@@ -20,7 +20,7 @@ class DDInitializer:
 
     def __new__(cls,
                 config_path='data.yaml',
-                pickle_path='data.pickle',
+                pickle_path='fake_data.pickle',
                 boundaries_path='data/rams_head/boundaries.yaml'):
         if cls._instance is None:
             cls._instance = super(DDInitializer, cls).__new__(cls)

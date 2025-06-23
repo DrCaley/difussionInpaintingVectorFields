@@ -21,6 +21,7 @@ from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_m
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 
 
+
 class ModelInpainter:
     def __init__(self):
         self.dd = DDInitializer()
