@@ -12,5 +12,5 @@ example_nn/
 *.csv
 *.txt
 *.pt
+*.pickle
 util.py
-data.pickle
