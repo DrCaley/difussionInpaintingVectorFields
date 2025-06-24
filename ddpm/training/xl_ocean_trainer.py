@@ -40,7 +40,7 @@ class TrainOceanXL():
         dd = DDInitializer()
         self._setup_paths_and_files(dd)
         self.device = dd.get_device()
-        self.n_steps = dd.get_attribute('n_steps')
+        self.n_steps = dd.get_attribute('noise_steps')
         self.min_beta = dd.get_attribute('min_beta')
         self.max_beta = dd.get_attribute('max_beta')
         self.num_workers = dd.get_attribute('num_workers')
