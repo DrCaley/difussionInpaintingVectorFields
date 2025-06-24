@@ -231,7 +231,7 @@ class TrainOceanXL():
 
         # Training arc
         for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
-            pygame.mixer.music.play()
+            # pygame.mixer.music.play()
             epoch_loss = 0.0
             ddpm.train() # Turns on training mode lol
 
@@ -273,6 +273,7 @@ class TrainOceanXL():
                 avg_test_loss = test_future.result()
                 spinner.succeed()
 
+
             epoch_losses.append(epoch_loss)
             train_losses.append(avg_train_loss)
             test_losses.append(avg_test_loss)
@@ -305,7 +306,7 @@ class TrainOceanXL():
                 best_test_loss = avg_test_loss
                 torch.save(ddpm.state_dict(), best_model_weights)
                 torch.save(checkpoint, best_model_checkpoint)
-                log_string += " --> Best model ever (stored based on test loss)"
+                log_string += '\033[32m' + " --> Best model ever (stored based on test loss)" + '\033[0m'
 
             log_string += (f"\nAverage test loss: {avg_test_loss:.7f} -> best: {best_test_loss:.7f}\n"
                            + f"Average train loss: {avg_train_loss:.7f}")
@@ -313,7 +314,7 @@ class TrainOceanXL():
             tqdm.write(log_string)
 
             torch.save(checkpoint, model_file)
-            pygame.mixer.music.stop()
+            # pygame.mixer.music.stop()
 
             """
             if display:
@@ -342,7 +343,7 @@ class TrainOceanXL():
         if self.training_mode :
             pygame.mixer.init()
             pygame.mixer.music.load(self.music_path)
-            pygame.mixer.music.play()
+            # pygame.mixer.music.play()
             self.training_loop(optimizer, self.loss_strategy)
 
 
