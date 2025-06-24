@@ -57,7 +57,7 @@ class DDInitializer:
     def _setup_alphas(self, min_beta=None, max_beta=None, n_steps=None):
         min_beta = min_beta if min_beta is not None else self._config["min_beta"]
         max_beta = max_beta if max_beta is not None else self._config["max_beta"]
-        n_steps = n_steps if n_steps is not None else self._config["n_steps"]
+        n_steps = n_steps if n_steps is not None else self._config["noise_steps"]
 
         self.betas = torch.linspace(min_beta, max_beta, n_steps)
         self.alphas = 1 - self.betas
