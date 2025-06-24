@@ -42,8 +42,8 @@ class DDInitializer:
         self._set_random_seed()
         self._setup_noise_strategy()
         self._setup_loss_strategy()
-        self._setup_datasets(self.full_boundaries_path)
         self._setup_alphas()
+        self._setup_datasets(self.full_boundaries_path)
 
     def reinitialize(self, min_beta, max_beta, n_steps, standardizer : Standardizer):
         self._setup_alphas(min_beta, max_beta, n_steps)
