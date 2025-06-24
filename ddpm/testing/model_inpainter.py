@@ -25,31 +25,32 @@ class ModelInpainter:
     def __init__(self):
         self.dd = DDInitializer()
         self.set_results_path()
-        self.use_this_model()
+        self.model_paths = []
         self.masks_to_use = []
         self.resamples = self.dd.get_attribute("resample_nums")
         self.mse_ddpm_list = []
         self.visualizer = False
         self.compute_coverage_plot = False
+        self.model_name = "default"
 
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s - %(levelname)s - %(message)s',
                             filename=f"{self.results_path}inpainting_model_test_log.txt")
 
-        self._configure_model()
-        self._load_checkpoint()
-        self._load_dataset()
-
     def set_results_path(self, results_path="./results/"):
         self.results_path = results_path
         os.makedirs(results_path, exist_ok=True)
 
-    def use_this_model(self, store_path=None):
-        self.store_path = self.dd.get_attribute("model_path")
-        if store_path is not None and os.path.exists(store_path):
-            self.store_path = store_path
-        elif store_path is not None:
-            print(f"{store_path} does not exist, using {self.store_path}")
+    def use_this_model(self, model_paths=None):
+        if not model_paths:
+            self.model_paths = [self.dd.get_attribute("model_path")]
+        else:
+            if isinstance(model_paths, str):
+                model_paths = [model_paths]
+            self.model_paths = [path for path in model_paths if os.path.exists(path)]
+            for path in model_paths:
+                if not os.path.exists(path):
+                    print(f"Warning: {path} does not exist and will be skipped.")
 
     def _configure_model(self):
         checkpoint = torch.load(self.store_path, map_location=self.dd.get_device(), weights_only=False)
@@ -100,26 +101,26 @@ class ModelInpainter:
         percentages, mses = zip(*self.mse_ddpm_list)
         plt.figure(figsize=(8, 5))
         plt.scatter(percentages, mses, alpha=0.7, color='blue')
-        plt.title("MSE vs. Mask Coverage Percentage (44x94 Crop)")
+        plt.title(f"MSE vs. Mask Coverage Percentage (Model: {self.model_name})")
         plt.xlabel("Percentage of Masked Pixels")
         plt.ylabel("MSE")
         plt.grid(True)
         plt.tight_layout()
-        plot_path = os.path.join(self.results_path, "mse_vs_mask_percentage.png")
+        plot_path = os.path.join(self.results_path, f"mse_vs_mask_percentage_{self.model_name}.png")
         plt.savefig(plot_path)
         plt.close()
         logging.info(f"Saved MSE vs. mask percentage plot to {plot_path}")
 
-    def _inpaint_testing(self, mask_generator: MaskGenerator, image_counter: int, file: str):
+    def _inpaint_testing(self, mask_generator: MaskGenerator, image_counter: int, file: csv.writer):
         writer = csv.writer(file)
-        writer.writerow(["image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
+        writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
 
         num_images_to_process = self.dd.get_attribute('num_images_to_process')
         n_samples = self.dd.get_attribute('n_samples')
         loader = self.val_loader
 
         with tqdm(total=min(len(loader.dataset), num_images_to_process),
-                  desc=f"Mask: {mask_generator}", colour="#00ffff") as main_pbar:
+                  desc=f"[{self.model_name}] Mask: {mask_generator}", colour="#00ffff") as main_pbar:
 
             for step, batch in enumerate(loader):
                 if image_counter >= num_images_to_process:
@@ -132,12 +133,9 @@ class ModelInpainter:
 
                 raw_mask = mask_generator.generate_mask(input_image.shape, land_mask)
                 mask = raw_mask * land_mask
-                print(f"mask: {raw_mask.shape} land: {land_mask.shape}")
                 num_lines = mask_generator.get_num_lines()
 
                 for resample in self.resamples:
-                    torch.save(mask, f"{self.results_path}{mask_generator}_{num_lines}.pt")
-
                     for i in tqdm(range(n_samples), leave=False, desc="Samples", colour="#006666"):
                         final_image_ddpm = inpaint_generate_new_images(
                             self.best_model, input_image, mask, n_samples=1,
@@ -148,24 +146,23 @@ class ModelInpainter:
                         final_image_ddpm = standardizer.unstandardize(final_image_ddpm).to(device)
                         gp_field = gp_fill(input_image_original, mask)
 
+                        # Cropping
                         input_image_original_cropped = top_left_crop(input_image_original, 44, 94).to(device)
                         final_image_ddpm_cropped = top_left_crop(final_image_ddpm, 44, 94).to(device)
                         mask_cropped = top_left_crop(mask, 44, 94).to(device)
                         gp_field_cropped = top_left_crop(gp_field, 44, 94).to(device)
 
+                        # MSE + Coverage
                         mse_ddpm = calculate_mse(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped)
                         mask_percentage = self.compute_mask_percentage(mask)
 
-                        torch.save(final_image_ddpm_cropped,
-                                   f"{self.results_path}ddpm{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
-                        torch.save(mask_cropped,
-                                   f"{self.results_path}mask{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
-                        torch.save(input_image_original_cropped,
-                                   f"{self.results_path}initial{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
-                        torch.save(gp_field_cropped,
-                                   f"{self.results_path}gp_field{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}.pt")
+                        base_id = f"{self.model_name}_img{batch[1].item()}_{mask_generator}_resample{resample}_lines{num_lines}"
+                        torch.save(final_image_ddpm_cropped, f"{self.results_path}ddpm_{base_id}.pt")
+                        torch.save(mask_cropped, f"{self.results_path}mask_{base_id}.pt")
+                        torch.save(input_image_original_cropped, f"{self.results_path}initial_{base_id}.pt")
+                        torch.save(gp_field_cropped, f"{self.results_path}gpfield_{base_id}.pt")
 
-                        writer.writerow([image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mask_percentage])
+                        writer.writerow([self.model_name, image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mask_percentage])
 
                         if self.compute_coverage_plot:
                             self.mse_ddpm_list.append((mask_percentage, mse_ddpm.item()))
@@ -185,20 +182,30 @@ class ModelInpainter:
 
     def begin_inpainting(self):
         if len(self.masks_to_use) == 0:
-            raise Exception('No masks available! Make sure to add some with:\n mi = ModelInpainter()\n mi.add_mask(MaskGenerator())')
+            raise Exception('No masks available! Use `add_mask(...)` before running.')
 
-        with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
+        for model_path in self.model_paths:
             try:
-                for mask in self.masks_to_use:
-                    image_counter = 0
-                    logging.info(f"Running next mask: {mask}")
-                    self._inpaint_testing(mask, image_counter, file)
-            except Exception as e:
-                logging.error(f"Error during processing: {e}")
-                exit(1)
+                self.store_path = model_path
+                self.model_name = os.path.splitext(os.path.basename(model_path))[0]
+                self.set_results_path(f"./results/{self.model_name}/")
 
-        if self.compute_coverage_plot:
-            self.plot_mse_vs_mask_percentage()
+                self._configure_model()
+                self._load_checkpoint()
+                self._load_dataset()
+
+                with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
+                    image_counter = 0
+                    for mask in self.masks_to_use:
+                        logging.info(f"Running mask {mask} with model {self.model_name}")
+                        image_counter = self._inpaint_testing(mask, image_counter, file)
+
+                if self.compute_coverage_plot:
+                    self.plot_mse_vs_mask_percentage()
+
+            except Exception as e:
+                logging.error(f"Error processing model {model_path}: {e}")
+                continue
 
     def visualize_images(self, vector_scale=0.15):
         self.visualizer = True
@@ -211,7 +218,12 @@ class ModelInpainter:
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
     mi = ModelInpainter()
-    mi.use_this_model("../trained_models/weekend_ddpm_ocean_model.pt")
+    mi.use_this_model([
+        "../trained_models/weekend_ddpm_ocean_model.pt",
+        "../trained_models/ddpm_ocean_model_best_model_weights.pt"
+    ])
     mi.add_mask(ManualMaskDrawer())
+    mi.add_mask(RandomPathMaskGenerator(10,5,2))
     mi.visualize_images()
+    mi.find_coverage()
     mi.begin_inpainting()

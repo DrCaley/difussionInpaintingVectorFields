@@ -14,9 +14,9 @@ class Standardizer(ABC):
 class ZScoreStandardizer(Standardizer):
     def __init__(self, u_mean, u_std, v_mean, v_std):
         self.u_mean = u_mean
-        self.u_std = u_std.clamp(min=1e-8)
+        self.u_std = u_std
         self.v_mean = v_mean
-        self.v_std = v_std.clamp(min=1e-8)
+        self.v_std = v_std\
 
     def __call__(self, tensor):
         u = (tensor[0:1] - self.u_mean) / self.u_std
