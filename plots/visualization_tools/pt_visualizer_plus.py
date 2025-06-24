@@ -19,14 +19,15 @@ class PTVisualizer():
                  sample_num = 83,
                  vector_scale = 0.15,
                  num_lines = 0.25,
-                 resamples = 5):
+                 resamples = 5,
+                 results_dir="../../ddpm/testing/results"):
 
         self.noise_type = mask_type
         self.sample_num = sample_num
         self.vector_scale = vector_scale
         self.num_lines = num_lines
         self.resamples = resamples
-        self.base_path = f"../../ddpm/testing/results"
+        self.base_path = results_dir
         save_dir = "pt_visualizer_images/"
         self.prediction_path = f"{save_dir}pt_predictions/"
         self.error_path = f"{save_dir}pt_errors/"

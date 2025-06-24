@@ -49,8 +49,9 @@ class TrainOceanXL():
                                    min_beta=self.min_beta,
                                    max_beta=self.max_beta,
                                    device=self.device)
-        self.noise_strategy = dd.noise_strategy
-        self.loss_strategy = dd.loss_strategy
+        self.noise_strategy = dd.get_noise_strategy()
+        self.loss_strategy = dd.get_loss_strategy()
+        self.standardize_strategy = dd.get_standardizer()
         self.training_mode = dd.get_attribute('training_mode')
         self.batch_size = dd.get_attribute('batch_size')
         self.n_epochs = dd.get_attribute('n_epochs')
@@ -298,6 +299,7 @@ class TrainOceanXL():
                 'best_test_loss': best_test_loss,
                 'n_steps': self.n_steps,
                 'noise_strategy' : self.noise_strategy,
+                'standardizer_type' : self.standardize_strategy,
                 }
 
             if best_test_loss > avg_test_loss:

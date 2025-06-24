@@ -59,9 +59,10 @@ class ModelInpainter:
         self.min_beta = checkpoint.get('min_beta', self.dd.get_attribute("min_beta"))
         self.max_beta = checkpoint.get('max_beta', self.dd.get_attribute("max_beta"))
 
-        self.dd.setup_alphas(min_beta=self.min_beta, max_beta=self.max_beta, n_steps=self.n_steps)
-
         self.noise_strategy = checkpoint.get('noise_strategy', self.dd.get_noise_strategy())
+        self.standardizer_strategy = checkpoint.get('standardizer_strategy', self.dd.get_standardizer())
+
+        self.dd.reinitialize(self.min_beta, self.max_beta, self.n_steps, self.standardizer_strategy)
 
     def _load_checkpoint(self):
         self.best_model = MyDDPMGaussian(MyUNet(self.n_steps), n_steps=self.n_steps, device=self.dd.get_device())
@@ -158,11 +159,11 @@ class ModelInpainter:
                         mse_ddpm = calculate_mse(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped)
                         mask_percentage = self.compute_mask_percentage(mask)
 
-                        base_id = f"{self.model_name}_img{batch[1].item()}_{mask_generator}_resample{resample}_lines{num_lines}"
-                        torch.save(final_image_ddpm_cropped, f"{self.results_path}ddpm_{base_id}.pt")
-                        torch.save(mask_cropped, f"{self.results_path}mask_{base_id}.pt")
-                        torch.save(input_image_original_cropped, f"{self.results_path}initial_{base_id}.pt")
-                        torch.save(gp_field_cropped, f"{self.results_path}gpfield_{base_id}.pt")
+                        base_id = f"{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}"
+                        torch.save(final_image_ddpm_cropped, f"{self.results_path}ddpm{base_id}.pt")
+                        torch.save(mask_cropped, f"{self.results_path}mask{base_id}.pt")
+                        torch.save(input_image_original_cropped, f"{self.results_path}initial{base_id}.pt")
+                        torch.save(gp_field_cropped, f"{self.results_path}gp_field{base_id}.pt")
 
                         writer.writerow([self.model_name, image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mask_percentage])
 
@@ -171,7 +172,7 @@ class ModelInpainter:
 
                         if self.visualizer:
                             ptv = PTVisualizer(mask_type=mask_generator, sample_num=batch[1].item(),
-                                               vector_scale=self.vector_scale, num_lines=num_lines, resamples=resample)
+                                               vector_scale=self.vector_scale, num_lines=num_lines, resamples=resample, results_dir = self.results_path)
                             ptv.visualize()
                             ptv.calc()
 
@@ -221,7 +222,6 @@ class ModelInpainter:
 if __name__ == '__main__':
     mi = ModelInpainter()
     mi.use_this_model([
-        "../trained_models/ddpm_ocean_model_best_checkpoint.pt",
         "../trained_models/weekend_ddpm_ocean_model.pt"
     ])
     mi.add_mask(RandomPathMaskGenerator(10,5,2))
