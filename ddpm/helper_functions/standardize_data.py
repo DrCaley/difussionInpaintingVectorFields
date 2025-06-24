@@ -12,11 +12,11 @@ class Standardizer(ABC):
         pass
 
 class ZScoreStandardizer(Standardizer):
-    def __init__(self, u_mean, u_std, v_mean, v_std):
-        self.u_mean = u_mean
-        self.u_std = u_std
-        self.v_mean = v_mean
-        self.v_std = v_std
+    def __init__(self, u_training_mean, u_training_std, v_training_mean, v_training_std):
+        self.u_mean = u_training_mean
+        self.u_std = u_training_std
+        self.v_mean = v_training_mean
+        self.v_std = v_training_std
 
     def __call__(self, tensor):
         u = (tensor[0:1] - self.u_mean) / self.u_std

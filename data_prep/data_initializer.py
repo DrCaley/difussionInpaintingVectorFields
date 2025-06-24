@@ -1,3 +1,4 @@
+import inspect
 import os
 import sys
 import pickle
@@ -12,7 +13,7 @@ from data_prep.ocean_image_dataset import OceanImageDataset
 from ddpm.utils.noise_utils import NoiseStrategy, get_noise_strategy
 from ddpm.helper_functions.loss_functions import LossStrategy, get_loss_strategy
 from ddpm.helper_functions.resize_tensor import resize_transform
-from ddpm.helper_functions.standardize_data import STANDARDIZER_REGISTRY  # Updated import
+from ddpm.helper_functions.standardize_data import STANDARDIZER_REGISTRY, Standardizer
 
 
 class DDInitializer:
@@ -30,6 +31,7 @@ class DDInitializer:
     def _init(self, config_path, pickle_path, boundaries_path):
         self.using_pycharm = os.path.exists('../../data.yaml')
         prefix = "../../" if self.using_pycharm else "./"
+        self.full_boundaries_path = os.path.join(prefix, boundaries_path)
 
         self._instance._setup_yaml_file(os.path.join(prefix, config_path))
         self._instance._setup_tensors(os.path.join(prefix, pickle_path))
@@ -40,17 +42,22 @@ class DDInitializer:
         self._set_random_seed()
         self._setup_noise_strategy()
         self._setup_loss_strategy()
-        self._setup_datasets(os.path.join(prefix, boundaries_path))
-        self.setup_alphas()
+        self._setup_datasets(self.full_boundaries_path)
+        self._setup_alphas()
+
+    def reinitialize(self, min_beta, max_beta, n_steps, standardizer : Standardizer):
+        self._setup_alphas(min_beta, max_beta, n_steps)
+        self._setup_transforms(standardizer)
+        self._setup_datasets(self.full_boundaries_path)
 
     def _setup_yaml_file(self, config_path) -> None:
         with open(config_path, 'r') as f:
             self._config = yaml.safe_load(f)
 
-    def setup_alphas(self, min_beta=None, max_beta=None, n_steps=None):
-        min_beta = min_beta if min_beta is not None else self._config["min_beta"]
-        max_beta = max_beta if max_beta is not None else self._config["max_beta"]
-        n_steps = n_steps if n_steps is not None else self._config["n_steps"]
+    def _setup_alphas(self, min_beta=None, max_beta=None, n_steps=None):
+        self.min_beta = min_beta if min_beta is not None else self._config["min_beta"]
+        self.max_beta = max_beta if max_beta is not None else self._config["max_beta"]
+        self.n_steps = n_steps if n_steps is not None else self._config["noise_steps"]
 
         self.betas = torch.linspace(min_beta, max_beta, n_steps)
         self.alphas = 1 - self.betas
@@ -66,7 +73,7 @@ class DDInitializer:
 
     def _setup_datasets(self, boundaries_file):
         self.training_data = OceanImageDataset(
-            n_steps=self._config["n_steps"],
+            n_steps=self.n_steps,
             noise_strategy=self.noise_strategy,
             data_tensor=self.training_tensor,
             boundaries=boundaries_file,
@@ -74,14 +81,14 @@ class DDInitializer:
         )
         self.test_data = OceanImageDataset(
             data_tensor=self.test_tensor,
-            n_steps=self._config["n_steps"],
+            n_steps=self.n_steps,
             noise_strategy=self.noise_strategy,
             boundaries=boundaries_file,
             transform=self.transform,
         )
         self.validation_data = OceanImageDataset(
             data_tensor=self.validation_tensor,
-            n_steps=self._config["n_steps"],
+            n_steps=self.n_steps,
             noise_strategy=self.noise_strategy,
             boundaries=boundaries_file,
             transform=self.transform,
@@ -121,18 +128,25 @@ class DDInitializer:
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
 
-    def _setup_transforms(self):
-        std_type = self._config.get('standardizer_type')
-
-        if std_type == 'zscore':
-            self.standardizer = STANDARDIZER_REGISTRY[std_type](
-                self._config['u_training_mean'], self._config['u_training_std'],
-                self._config['v_training_mean'], self._config['v_training_std']
-            )
-        elif std_type in STANDARDIZER_REGISTRY:
-            self.standardizer = STANDARDIZER_REGISTRY[std_type]()
+    def _setup_transforms(self, standardizer: Standardizer = None):
+        if standardizer is not None:
+            self.standardizer = standardizer
         else:
-            raise ValueError(f"Unknown standardizer_type: {std_type}")
+            std_type = self._config.get('standardizer_type')
+            std_class = STANDARDIZER_REGISTRY.get(std_type)
+
+            if std_class is None:
+                raise ValueError(f"Unknown standardizer_type: {std_type}")
+
+            # Get required constructor parameters (excluding 'self')
+            sig = inspect.signature(std_class.__init__)
+            init_params = list(sig.parameters.keys())[1:]
+
+            # Collect arguments from config
+            args = [self._config[param] for param in init_params]
+
+            # Instantiate standardizer from registry
+            self.standardizer = std_class(*args)
 
         self.transform = Compose([
             resize_transform((2, 64, 128)),

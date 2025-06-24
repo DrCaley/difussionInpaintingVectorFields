@@ -1,7 +1,7 @@
-u_training_mean: 3.709986267835613e-16
-u_training_std: 0.7045390679430601
-v_training_mean: 1.4372364157421022e-19
-v_training_std: 0.7096627835167776
+u_training_mean: -0.06929559429949586
+u_training_std: 0.1358005549716049
+v_training_mean: -0.0323937796117541
+v_training_std: 0.08899177232117582
 gpu_to_use: 0
 
 retrain_mode: False
@@ -20,7 +20,7 @@ w1: 0.5
 w2: 0.5
 num_workers: 0
 
-n_steps: 100
+noise_steps: 100
 min_beta: 0.0001
 max_beta: 0.02
 inpainting_batch_size: 1
