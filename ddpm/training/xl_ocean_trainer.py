@@ -54,7 +54,7 @@ class TrainOceanXL():
         self.standardize_strategy = dd.get_standardizer()
         self.training_mode = dd.get_attribute('training_mode')
         self.batch_size = dd.get_attribute('batch_size')
-        self.n_epochs = dd.get_attribute('n_epochs')
+        self.n_epochs = dd.get_attribute('epochs')
         self.lr = dd.get_attribute('lr')
 
         self.train_loader = DataLoader(dd.get_training_data(),

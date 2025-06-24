@@ -55,9 +55,9 @@ class DDInitializer:
             self._config = yaml.safe_load(f)
 
     def _setup_alphas(self, min_beta=None, max_beta=None, n_steps=None):
-        min_beta = min_beta if min_beta is not None else self._config["min_beta"]
-        max_beta = max_beta if max_beta is not None else self._config["max_beta"]
-        n_steps = n_steps if n_steps is not None else self._config["n_steps"]
+        self.min_beta = min_beta if min_beta is not None else self._config["min_beta"]
+        self.max_beta = max_beta if max_beta is not None else self._config["max_beta"]
+        self.n_steps = n_steps if n_steps is not None else self._config["noise_steps"]
 
         self.betas = torch.linspace(min_beta, max_beta, n_steps)
         self.alphas = 1 - self.betas
@@ -73,7 +73,7 @@ class DDInitializer:
 
     def _setup_datasets(self, boundaries_file):
         self.training_data = OceanImageDataset(
-            n_steps=self._config["n_steps"],
+            n_steps=self.n_steps,
             noise_strategy=self.noise_strategy,
             data_tensor=self.training_tensor,
             boundaries=boundaries_file,
@@ -81,14 +81,14 @@ class DDInitializer:
         )
         self.test_data = OceanImageDataset(
             data_tensor=self.test_tensor,
-            n_steps=self._config["n_steps"],
+            n_steps=self.n_steps,
             noise_strategy=self.noise_strategy,
             boundaries=boundaries_file,
             transform=self.transform,
         )
         self.validation_data = OceanImageDataset(
             data_tensor=self.validation_tensor,
-            n_steps=self._config["n_steps"],
+            n_steps=self.n_steps,
             noise_strategy=self.noise_strategy,
             boundaries=boundaries_file,
             transform=self.transform,
