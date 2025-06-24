@@ -6,7 +6,7 @@ class MaskGenerator(ABC):
         pass
 
     @abstractmethod
-    def generate_mask(self, image_shape = None, land_mask = None):
+    def generate_mask(self, image_shape = None):
         pass
 
     @abstractmethod

@@ -34,19 +34,18 @@ class BetterRobotPathGenerator(MaskGenerator):
                 q.append((y+dy, x+dx, d+1))
         return count
 
-    def generate_mask(self, image_shape=None, land_mask=None):
-        if image_shape is None or land_mask is None:
-            raise ValueError("Missing required masks or shape.")
+    def generate_mask(self, image_shape=None):
+        if image_shape is None:
+            raise ValueError("Missing required shape.")
 
         _, _, h, w = image_shape
         device = dd.get_device()
         mask = np.ones((h, w), dtype=np.float32)
 
-        border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape, land_mask=land_mask)
+        border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape)
 
-        land_mask = land_mask.to(device)
         border_mask = border_mask.to(device)
-        valid_mask = (land_mask * border_mask).squeeze().cpu().numpy()
+        valid_mask = border_mask.squeeze().cpu().numpy()
         if valid_mask.ndim == 3:
             valid_mask = valid_mask[0]
 
@@ -87,7 +86,7 @@ class BetterRobotPathGenerator(MaskGenerator):
                 explored += 1
 
         mask = torch.tensor(mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
-        mask = mask * land_mask * border_mask
+        mask = mask * border_mask
 
         return mask
 

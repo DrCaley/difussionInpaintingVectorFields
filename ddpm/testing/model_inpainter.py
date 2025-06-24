@@ -1,25 +1,23 @@
-import os.path
-import numpy as np
-import torch
-from torch.utils.data import DataLoader
-import logging
 import csv
 import sys
-import matplotlib.pyplot as plt
-
+import torch
+import logging
+import os.path
+import numpy as np
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+from torch.utils.data import DataLoader
 
-# Project-specific imports
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from ddpm.helper_functions.masks import MaskGenerator
+
 from ddpm.helper_functions.masks import *
-from plots.visualization_tools.pt_visualizer_plus import PTVisualizer
-from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
-from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
 from ddpm.neural_networks.unets.unet_xl import MyUNet
-
+from plots.visualization_tools.pt_visualizer_plus import PTVisualizer
+from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
+from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
 
 class ModelInpainter:
     def __init__(self):
@@ -131,7 +129,7 @@ class ModelInpainter:
                 input_image_original = self.dd.get_standardizer().unstandardize(input_image).to(device)
                 land_mask = (input_image_original != 0.00).float().to(device)
 
-                raw_mask = mask_generator.generate_mask(input_image.shape, land_mask)
+                raw_mask = mask_generator.generate_mask(input_image.shape)
                 mask = raw_mask * land_mask
                 num_lines = mask_generator.get_num_lines()
 

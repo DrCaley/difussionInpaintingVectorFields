@@ -96,7 +96,7 @@ class ManualMaskDrawer(MaskGenerator):
         print("✅ Mask saved and window closed.")
         self.root.destroy()
 
-    def generate_mask(self, image_shape=None, land_mask=None):
+    def generate_mask(self, image_shape=None):
         if image_shape is None:
             return self.tensor_mask
 

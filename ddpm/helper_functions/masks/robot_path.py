@@ -15,11 +15,9 @@ class RobotPathMaskGenerator(MaskGenerator):
         self.square_size = square_size
         self.num_squares = num_squares
 
-    def generate_mask(self, image_shape = None, land_mask = None):
+    def generate_mask(self, image_shape = None):
         if image_shape is None:
             print("image_shape is None")
-        if land_mask is None:
-            print("land_mask is None")
 
         num_squares = self.num_squares
         square_size = self.square_size
@@ -97,15 +95,14 @@ class RobotPathMaskGenerator(MaskGenerator):
 
         mask = torch.tensor(mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
 
-        border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape, land_mask=land_mask)
+        border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape)
 
         device = dd.get_device()
 
         mask = mask.to(device)
-        land_mask = land_mask.to(device)
         border_mask = border_mask.to(device)
 
-        mask = mask * land_mask * border_mask
+        mask = mask * border_mask
 
         return mask
 

@@ -9,23 +9,18 @@ class OceanRobotPathMask(MaskGenerator):
         self.start_pos = start_pos  # Tuple (y, x) or None
         self.device = device
 
-
     def __str__(self):
         return f"OceanRobotPathMask"
 
     def get_num_lines(self):
         return self.steps
 
-    def generate_mask(self, image_shape=None, land_mask=None):
+    def generate_mask(self, image_shape=None):
         if image_shape is None:
             raise ValueError("Image shape must be provided")
 
         height, width = image_shape[-2:]
         mask = torch.ones((height, width), dtype=torch.uint8, device=self.device)
-
-        # Optional land mask
-        if land_mask is not None:
-            land_mask = land_mask.to(self.device)
 
         # Initial position
         if self.start_pos is None:

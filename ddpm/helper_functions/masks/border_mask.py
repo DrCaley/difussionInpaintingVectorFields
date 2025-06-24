@@ -14,7 +14,7 @@ class BorderMaskGenerator(MaskGenerator):
         self.offset_top = offset_top
         self.offset_left = offset_left
 
-    def generate_mask(self, image_shape=None, land_mask=None):
+    def generate_mask(self, image_shape=None):
         if image_shape is None:
             print("image_shape is None")
 

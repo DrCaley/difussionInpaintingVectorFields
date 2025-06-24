@@ -5,7 +5,7 @@ class MaskLoader(MaskGenerator):
     def __init__(self, file_path):
         self.mask = torch.load(file_path)
 
-    def generate_mask(self, image_shape = None, land_mask = None):
+    def generate_mask(self, image_shape = None):
         return self.mask
 
     def __str__(self):

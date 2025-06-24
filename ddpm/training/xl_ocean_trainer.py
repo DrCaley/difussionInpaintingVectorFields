@@ -66,7 +66,10 @@ class TrainOceanXL():
         self.val_loader = DataLoader(dd.get_validation_data(),
                                      batch_size=self.batch_size,
                                      )
+
         self.continue_training = False
+        self.model_to_retrain = dd.get_attribute('model_to_retrain')
+        self.retrain_mode = dd.get_attribute('retrain_mode')
 
     def retrain_this(self, path: str):
         """
@@ -76,7 +79,7 @@ class TrainOceanXL():
             path (str): Path to a saved checkpoint file.
         """
         if not os.path.exists(path):
-            print("path doesn't exist")
+            raise FileNotFoundError("path doesn't exist")
         else :
             self.model_to_retrain = path
             self.continue_training = True
@@ -106,7 +109,7 @@ class TrainOceanXL():
         Returns:
             dict: Loaded checkpoint containing all training state.
         """
-        checkpoint = torch.load(self.model_to_retrain)
+        checkpoint = torch.load(self.model_to_retrain, weights_only=False)
         self.ddpm.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         return checkpoint
@@ -331,6 +334,9 @@ class TrainOceanXL():
         Sets up optimizer and kicks off training based on config mode.
         """
         optimizer = Adam(self.ddpm.parameters(), lr=self.lr)
+
+        if self.retrain_mode :
+            self.retrain_this(self.model_to_retrain)
 
         if self.training_mode :
             pygame.mixer.init()

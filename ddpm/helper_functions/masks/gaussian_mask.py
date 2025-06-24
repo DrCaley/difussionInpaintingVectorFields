@@ -8,7 +8,7 @@ class GaussianNoiseBinaryMaskGenerator(MaskGenerator):
         self.mean = mean
         self.std = std
 
-    def generate_mask(self, image_shape=None, land_mask=None):
+    def generate_mask(self, image_shape=None):
 
         if image_shape is None:
             raise ValueError("image_shape must be provided")
@@ -16,9 +16,6 @@ class GaussianNoiseBinaryMaskGenerator(MaskGenerator):
         noise = torch.normal(mean=self.mean, std=self.std, size=image_shape)
 
         binary_mask = (noise > self.threshold).float()
-
-        if land_mask is not None:
-            binary_mask *= land_mask
 
         return binary_mask
 

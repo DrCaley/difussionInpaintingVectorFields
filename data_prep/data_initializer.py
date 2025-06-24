@@ -143,8 +143,7 @@ class DDInitializer:
         try:
             return self._config.get(attr)
         except:
-            print("no attribute", attr)
-            return None
+            raise Exception(f"Unknown attribute in data.yaml: {attr}")
 
     def get_device(self):
         return self.device

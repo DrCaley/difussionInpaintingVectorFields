@@ -12,21 +12,14 @@ def generate_constant_field(shape, u_val=1.0, v_val=1.0):
     return u, v
 
 def generate_circular_field(H, W, T, scale=1.0):
-    """
-    Generate a circular (rotational) vector field at each time step.
-    Vector at (x, y) is perpendicular to radius vector from center.
-    """
     Y, X = np.meshgrid(np.linspace(-1, 1, H), np.linspace(-1, 1, W), indexing='ij')
     radius = np.sqrt(X**2 + Y**2) + 1e-6  # avoid div-by-zero
 
-    X = X / radius
-    Y = Y / radius
-
-    u = torch.tensor(X)
-    v = torch.tensor(Y)
+    u = -Y / radius  # -sin(theta)
+    v = X / radius   # cos(theta)
 
     # Repeat the 2D field across time
-    u_field = np.stack([u] * T, axis=-1)  # (H, W, T)
+    u_field = np.stack([u] * T, axis=-1)
     v_field = np.stack([v] * T, axis=-1)
     return u_field, v_field
 
@@ -96,7 +89,7 @@ print(f"v mean: {v_training_mean}, v std: {v_training_std}")
 try:
     with open("fake_data.pickle", 'wb') as file:
         pickle.dump([training_data, validation_data, test_data], file)
-    print("Fake constant data saved to: fake_data.pickle")
+    print("Fake data saved to: fake_data.pickle")
 except Exception as e:
     print("Failed to pickle:", e)
 

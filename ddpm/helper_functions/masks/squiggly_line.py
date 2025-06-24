@@ -8,17 +8,15 @@ from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
 dd = DDInitializer()
 
 class SquigglyLineMaskGenerator(MaskGenerator):
-    def __init__(self, input_image_original, num_lines=5, line_thickness=2):
-        self.input_image_original = input_image_original
+    def __init__(self, num_lines=2, line_thickness=2):
         self.num_lines = num_lines
         self.line_thickness = line_thickness
 
-    def generate_mask(self, image_shape=None, land_mask=None):
+    def generate_mask(self, image_shape=None):
         if image_shape is None:
             print("image_shape is None")
 
         _, _, h, w = image_shape
-        input_image_original = self.input_image_original
         num_lines = self.num_lines
         line_thickness = self.line_thickness
 
@@ -33,20 +31,16 @@ class SquigglyLineMaskGenerator(MaskGenerator):
             for x, y in zip(x_values, y_values):
                 for i in range(-thickness//2, thickness//2 + 1):
                     for j in range(-thickness//2, thickness//2 + 1):
-                        if 0 <= x+i < w and 0 <= y+j < h and input_image_original[0, 0, y+j, x+i] != 0:
+                        if 0 <= x+i < w and 0 <= y+j < h:
                             mask[y+j, x+i] = 1.0
 
         for _ in range(num_lines):
             start_point = (random.randint(0, w - 1), random.randint(0, h - 1))
-            while input_image_original[0, 0, start_point[1], start_point[0]] == 0:
-                start_point = (random.randint(0, w - 1), random.randint(0, h - 1))
             num_segments = random.randint(5, 10)
             points = [start_point]
 
             for _ in range(num_segments):
                 next_point = (random.randint(0, w - 1), random.randint(0, h - 1))
-                while input_image_original[0, 0, next_point[1], next_point[0]] == 0:
-                    next_point = (random.randint(0, w - 1), random.randint(0, h - 1))
                 points.append(next_point)
 
             for i in range(len(points) - 1):
@@ -64,4 +58,4 @@ class SquigglyLineMaskGenerator(MaskGenerator):
         return "SquigglyLine"
 
     def get_num_lines(self):
-        return self.get_num_lines()
+        return self.num_lines
