@@ -28,7 +28,7 @@ class PTVisualizer():
         self.num_lines = num_lines
         self.resamples = resamples
         self.base_path = results_dir
-        save_dir = "pt_visualizer_images/"
+        save_dir = f"{results_dir}/pt_visualizer_images/"
         self.prediction_path = f"{save_dir}pt_predictions/"
         self.error_path = f"{save_dir}pt_errors/"
         self.prefixes = ['ddpm', 'initial', 'mask', 'gp_field']
@@ -136,9 +136,9 @@ class PTVisualizer():
                 try:
                     tensor = data[key]
                     save_mse_heatmap(tensor, initial_tensor, mask_tensor, title=f"{key}_vs_initial",
-                                     save_path=f"{self.error_path}/mse_{key}_vs_initial.png")
+                                     save_path=f"{self.error_path}/{self.noise_type}{self.num_lines}_mse_{key}_vs_initial.png")
                     save_angular_error_heatmap(initial_tensor, tensor, mask_tensor, title=f"{key}_vs_initial",
-                                               save_path=f"{self.error_path}/angular_{key}_vs_initial.png")
+                                               save_path=f"{self.error_path}/{self.noise_type}{self.num_lines}_angular_{key}_vs_initial.png")
                 except Exception as e:
                     print(f"Failed to compute/save errors between {key} and initial: {e}")
         else:

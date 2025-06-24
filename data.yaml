@@ -25,7 +25,7 @@ min_beta: 0.0001
 max_beta: 0.02
 inpainting_batch_size: 1
 num_images_to_process: 1
-n_samples: 5
+n_samples: 1
 resample_nums: [5]
 
 model_path: "weekend_ddpm_ocean_model.pt"

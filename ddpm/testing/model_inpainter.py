@@ -8,6 +8,8 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
+from ddpm.helper_functions.masks.n_coverage_mask import CoverageMaskGenerator
+from ddpm.helper_functions.masks.random_mask import RandomMaskGenerator
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
@@ -198,8 +200,11 @@ class ModelInpainter:
                 self._load_dataset()
 
                 with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
-                    image_counter = 0
+                    writer = csv.writer(file)
+                    writer.writerow(
+                        ["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
                     for mask in self.masks_to_use:
+                        image_counter = 0
                         logging.info(f"Running mask {mask} with model {self.model_name}")
                         image_counter = self._inpaint_testing(mask, image_counter, file)
 
@@ -224,8 +229,8 @@ if __name__ == '__main__':
     mi.use_this_model([
         "../trained_models/weekend_ddpm_ocean_model.pt"
     ])
-    mi.add_mask(RandomPathMaskGenerator(10,5,2))
-    mi.add_mask(RandomPathMaskGenerator(20, 5, 2))
+    mi.add_mask(CoverageMaskGenerator(0.2))
+    mi.add_mask(CoverageMaskGenerator(0.5))
     mi.visualize_images()
     mi.find_coverage()
     mi.begin_inpainting()
