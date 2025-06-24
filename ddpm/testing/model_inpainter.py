@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
+from ddpm.helper_functions.masks import MaskGenerator
 from ddpm.helper_functions.masks import *
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
@@ -57,6 +58,9 @@ class ModelInpainter:
         self.n_steps = checkpoint.get('n_steps', self.dd.get_attribute("n_steps"))
         self.min_beta = checkpoint.get('min_beta', self.dd.get_attribute("min_beta"))
         self.max_beta = checkpoint.get('max_beta', self.dd.get_attribute("max_beta"))
+
+        self.dd.setup_alphas(min_beta=self.min_beta, max_beta=self.max_beta, n_steps=self.n_steps)
+
         self.noise_strategy = checkpoint.get('noise_strategy', self.dd.get_noise_strategy())
 
     def _load_checkpoint(self):
@@ -217,11 +221,11 @@ class ModelInpainter:
 if __name__ == '__main__':
     mi = ModelInpainter()
     mi.use_this_model([
-        "../trained_models/weekend_ddpm_ocean_model.pt",
-        "../trained_models/ddpm_ocean_model_best_model_weights.pt"
+        "../trained_models/ddpm_ocean_model_best_checkpoint.pt",
+        "../trained_models/weekend_ddpm_ocean_model.pt"
     ])
-    mi.add_mask(ManualMaskDrawer())
     mi.add_mask(RandomPathMaskGenerator(10,5,2))
+    mi.add_mask(RandomPathMaskGenerator(20, 5, 2))
     mi.visualize_images()
     mi.find_coverage()
     mi.begin_inpainting()

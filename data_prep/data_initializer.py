@@ -41,15 +41,19 @@ class DDInitializer:
         self._setup_noise_strategy()
         self._setup_loss_strategy()
         self._setup_datasets(os.path.join(prefix, boundaries_path))
-        self._setup_alphas()
+        self.setup_alphas()
 
     def _setup_yaml_file(self, config_path) -> None:
         with open(config_path, 'r') as f:
             self._config = yaml.safe_load(f)
 
-    def _setup_alphas(self):
-        self.betas = torch.linspace(self._config["min_beta"], self._config["max_beta"], self._config["n_steps"])
-        self.alphas = (1 - self.betas)
+    def setup_alphas(self, min_beta=None, max_beta=None, n_steps=None):
+        min_beta = min_beta if min_beta is not None else self._config["min_beta"]
+        max_beta = max_beta if max_beta is not None else self._config["max_beta"]
+        n_steps = n_steps if n_steps is not None else self._config["n_steps"]
+
+        self.betas = torch.linspace(min_beta, max_beta, n_steps)
+        self.alphas = 1 - self.betas
         self.alpha_bars = torch.tensor([torch.prod(self.alphas[:i + 1]) for i in range(len(self.alphas))])
 
     def _setup_tensors(self, pickle_path) -> None:
@@ -61,14 +65,12 @@ class DDInitializer:
         self.test_tensor = torch.from_numpy(test_data_np).float()
 
     def _setup_datasets(self, boundaries_file):
-        size = self._config.get('max_size')
         self.training_data = OceanImageDataset(
             n_steps=self._config["n_steps"],
             noise_strategy=self.noise_strategy,
             data_tensor=self.training_tensor,
             boundaries=boundaries_file,
             transform=self.transform,
-            max_size=size
         )
         self.test_data = OceanImageDataset(
             data_tensor=self.test_tensor,
@@ -76,7 +78,6 @@ class DDInitializer:
             noise_strategy=self.noise_strategy,
             boundaries=boundaries_file,
             transform=self.transform,
-            max_size=size
         )
         self.validation_data = OceanImageDataset(
             data_tensor=self.validation_tensor,
@@ -84,7 +85,6 @@ class DDInitializer:
             noise_strategy=self.noise_strategy,
             boundaries=boundaries_file,
             transform=self.transform,
-            max_size=size
         )
 
     def _setup_noise_strategy(self):
