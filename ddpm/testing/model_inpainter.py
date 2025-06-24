@@ -9,8 +9,8 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
 
+CURRENT_DIR = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-
 from ddpm.helper_functions.masks import MaskGenerator
 from ddpm.helper_functions.masks import *
 from data_prep.data_initializer import DDInitializer
@@ -19,6 +19,10 @@ from ddpm.neural_networks.unets.unet_xl import MyUNet
 from plots.visualization_tools.pt_visualizer_plus import PTVisualizer
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
+
+os.chdir(CURRENT_DIR)
+
+
 
 class ModelInpainter:
     def __init__(self):
@@ -222,7 +226,8 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.use_this_model([
         "../trained_models/ddpm_ocean_model_best_checkpoint.pt",
-        "../trained_models/weekend_ddpm_ocean_model.pt"
+        "../trained_models/weekend_ddpm_ocean_model.pt",
+        "../../ddpm_ocean_model_best_checkpoint.pt"
     ])
     mi.add_mask(RandomPathMaskGenerator(10,5,2))
     mi.add_mask(RandomPathMaskGenerator(20, 5, 2))

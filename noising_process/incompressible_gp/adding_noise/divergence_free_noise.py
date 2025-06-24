@@ -1,10 +1,10 @@
 import torch
 import os
+import sys
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+from ddpm.helper_functions.HH_decomp import decompose_vector_field
 
-
-# Get the directory where this script lives
-base_dir = os.path.dirname(os.path.abspath(__file__))
 
 def get_dd_initializer():
     from data_prep.data_initializer import DDInitializer
@@ -142,6 +142,9 @@ def generate_div_free_noise(batch_size, height, width, device=None):
     noise = torch.cat([u, v], dim=1)  # shape: (B, 2, H, W)
     return noise
 
+
+# More noise
+
 def layered_div_free_noise(batch_size, height, width, device=None, n_layers=1000):
     dd = get_dd_initializer()
     device = dd.get_device()
@@ -149,3 +152,30 @@ def layered_div_free_noise(batch_size, height, width, device=None, n_layers=1000
     for _ in range(n_layers):
         noise += generate_div_free_noise(batch_size, height, width, device)
     return noise / ( (n_layers ** 0.5) * (2 ** (0.5)) )
+
+
+# HH Decomp Div-Free noise
+def hh_decomped_div_free_noise(batch_size, height, width, device=None):
+    dd = get_dd_initializer()
+    device = dd.get_device()
+
+    output = torch.zeros(batch_size, 2, height, width, device=device)
+
+    for i in range(batch_size):
+        # Generate Gaussian noise vector field
+        vec_field = torch.randn(height, width, 2, device=device)
+
+        # Move to CPU for NumPy + FFT handling (scipy.fft only works with NumPy)
+        vec_field_cpu = vec_field.detach().cpu()
+
+        # Helmholtz-Hodge decomposition
+        (_, _), (_, _), (u_sol, v_sol) = decompose_vector_field(vec_field_cpu)
+
+        # Convert solenoidal part back to torch and send to device
+        u_sol = torch.from_numpy(u_sol).to(device)
+        v_sol = torch.from_numpy(v_sol).to(device)
+
+        output[i, 0] = u_sol
+        output[i, 1] = v_sol
+
+    return output  # Shape: (B, 2, H, W)
