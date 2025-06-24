@@ -55,7 +55,7 @@ class ModelInpainter:
         checkpoint = torch.load(self.store_path, map_location=self.dd.get_device(), weights_only=False)
         self.model_state_dict = checkpoint.get('model_state_dict', checkpoint)
 
-        self.n_steps = checkpoint.get('n_steps', self.dd.get_attribute("n_steps"))
+        self.n_steps = checkpoint.get('n_steps', self.dd.get_attribute("noise_steps"))
         self.min_beta = checkpoint.get('min_beta', self.dd.get_attribute("min_beta"))
         self.max_beta = checkpoint.get('max_beta', self.dd.get_attribute("max_beta"))
 
