@@ -20,7 +20,7 @@ class DDInitializer:
 
     def __new__(cls,
                 config_path='data.yaml',
-                pickle_path='fake_data.pickle',
+                pickle_path='data.pickle',
                 boundaries_path='data/rams_head/boundaries.yaml'):
         if cls._instance is None:
             cls._instance = super(DDInitializer, cls).__new__(cls)
@@ -143,8 +143,7 @@ class DDInitializer:
         try:
             return self._config.get(attr)
         except:
-            print("no attribute", attr)
-            return None
+            raise Exception(f"Unknown attribute in data.yaml: {attr}")
 
     def get_device(self):
         return self.device
