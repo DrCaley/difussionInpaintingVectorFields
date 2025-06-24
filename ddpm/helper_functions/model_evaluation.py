@@ -3,6 +3,8 @@ from torch import nn
 
 from data_prep.data_initializer import DDInitializer
 
+
+
 def evaluate(model, data_loader, device):
     model.eval()
     total_loss = 0.0

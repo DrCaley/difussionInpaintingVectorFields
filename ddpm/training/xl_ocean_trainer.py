@@ -221,7 +221,7 @@ class TrainOceanXL():
             train_losses = checkpoint['train_losses']
             test_losses = checkpoint['test_losses']
             best_test_loss = checkpoint['best_test_loss']
-            print(f"Resuming training from epoch {start_epoch}")
+            print(f"Resuming training from epoch {start_epoch}. Training for {n_epochs} epochs!")
 
         # CSV output setup
         with open(self.csv_file, mode='w', newline='') as file:
@@ -233,9 +233,9 @@ class TrainOceanXL():
         for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
             pygame.mixer.music.play()
             epoch_loss = 0.0
-            ddpm.train()
+            ddpm.train() # Turns on training mode lol
 
-            for _, (x0, t, noise), in enumerate( tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{n_epochs}", colour="#005500")):
+            for _, (x0, t, noise), in enumerate( tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{start_epoch + n_epochs}", colour="#005500")):
 
                 n = len(x0)
                 x0 = x0.to(device)
@@ -253,8 +253,6 @@ class TrainOceanXL():
 
                 epoch_loss += loss.item() * len(x0) / len(train_loader.dataset)
 
-            # What is all of this doing? Do we want evaluate(...) ONLY, instead of epoch_loss?
-            # I figure we may just want to toss epoch_loss.
             with ThreadPoolExecutor(max_workers=2) as executor:
                 spinner = Halo("Evaluating DDPM...", spinner="dots")
                 spinner.start()
@@ -283,6 +281,7 @@ class TrainOceanXL():
             log_string += f"EPOCH Loss: {epoch_loss:.7f}\n"
             log_string += f"TRAIN Loss: {avg_train_loss:.7f}\n"
             log_string += f"TEST Loss: {avg_test_loss:.7f}\n"
+
             # Append current epoch results to CSV
             with open(csv_file, mode='a', newline='') as file:
                 writer = csv.writer(file)

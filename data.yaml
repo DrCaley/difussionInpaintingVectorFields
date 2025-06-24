@@ -4,17 +4,17 @@ v_training_mean: -0.0323937796117541
 v_training_std: 0.08899177232117582
 gpu_to_use: 0
 
-retrain_mode: True
-model_to_retrain: "ddpm/trained_models/ddpm_ocean_model_best_checkpoint.pt"
+retrain_mode: False
+model_to_retrain: ""
 
 training_mode: True
 testSeed: 0
-epochs: 1000
+n_epochs: 20
 batch_size: 35
 lr: 0.001
 
-standardizer_type: zscore
-noise_function: gaussian
+standardizer_type: maxmag
+noise_function: hh_decomp_div_free
 loss_function: mse
 w1: 0.5
 w2: 0.5
@@ -28,4 +28,4 @@ num_images_to_process: 1
 n_samples: 1
 resample_nums: [5]
 
-model_path: "weekend_ddpm_ocean_model.pt"
+model_path: "../../ddpm_ocean_model_best_checkpoint.pt"

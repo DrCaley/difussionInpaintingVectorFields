@@ -13,12 +13,11 @@ class MyDDPMGaussian(nn.Module):
         self.image_chw = image_chw
         self.network = network.to(device)
 
-        # Linearly spaced tensor of betas (the variance of the Gaussian noise added)
-        # from min_beta to max_beta
+        # Linearly spaced tensor of betas (the variance of the 
+        # Gaussian noise added) from min_beta to max_beta
         self.betas = torch.linspace(min_beta, max_beta, n_steps).to(device)
 
-        # Represents the amount of noise to be removed at each step t during
-        # the denoising process
+        # Useful variable for making noise-adding more tractable (see og paper)
         self.alphas = 1 - self.betas
 
         # Cumulative products of alphas (alpha_bars) to determine to how much of
