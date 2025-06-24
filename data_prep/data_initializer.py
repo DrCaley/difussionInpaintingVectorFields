@@ -59,7 +59,7 @@ class DDInitializer:
         self.max_beta = max_beta if max_beta is not None else self._config["max_beta"]
         self.n_steps = n_steps if n_steps is not None else self._config["noise_steps"]
 
-        self.betas = torch.linspace(min_beta, max_beta, n_steps)
+        self.betas = torch.linspace(self.min_beta, self.max_beta, self.n_steps)
         self.alphas = 1 - self.betas
         self.alpha_bars = torch.tensor([torch.prod(self.alphas[:i + 1]) for i in range(len(self.alphas))])
 
