@@ -9,6 +9,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
+from ddpm.helper_functions.masks.mask_drawer import ManualMaskDrawer
 from ddpm.helper_functions.masks.n_coverage_mask import CoverageMaskGenerator
 from ddpm.helper_functions.masks.random_mask import RandomMaskGenerator
 
@@ -138,7 +139,7 @@ class ModelInpainter:
                 device = self.dd.get_device()
                 input_image = batch[0].to(device)
                 input_image_original = self.dd.get_standardizer().unstandardize(input_image).to(device)
-                land_mask = (input_image_original != 0).float().to(device)
+                land_mask = (input_image_original.abs() > 1e-5).float().to(device)
 
                 raw_mask = mask_generator.generate_mask(input_image.shape)
                 mask = raw_mask * land_mask
