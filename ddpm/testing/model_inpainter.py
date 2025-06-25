@@ -4,7 +4,6 @@ import torch
 import logging
 import os.path
 import numpy as np
-from tensorflow.python.ops.numpy_ops.np_math_ops import linspace
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
@@ -236,7 +235,7 @@ if __name__ == '__main__':
     # mi.add_model("../trained_models/ddpm_ocean_model_best_checkpoint.pt")
     mi.add_model("../trained_models/weekend_ddpm_ocean_model.pt")
 
-    for val in linspace(0,1,110):
+    for val in np.linspace(0,1,110):
         mi.add_mask(CoverageMaskGenerator(val))
 
     mi.visualize_images()
