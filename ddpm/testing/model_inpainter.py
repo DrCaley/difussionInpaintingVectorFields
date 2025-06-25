@@ -235,8 +235,6 @@ if __name__ == '__main__':
     mi.add_model("../trained_models/weekend_ddpm_ocean_model.pt")
 
     mi.add_mask(CoverageMaskGenerator(0.2))
-    mi.add_mask(CoverageMaskGenerator(0.5))
-    mi.add_mask(CoverageMaskGenerator(0.9))
 
     mi.visualize_images()
     mi.find_coverage()
