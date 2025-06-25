@@ -22,8 +22,6 @@ from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_m
 
 os.chdir(CURRENT_DIR)
 
-
-
 class ModelInpainter:
     def __init__(self):
         self.dd = DDInitializer()
@@ -189,6 +187,9 @@ class ModelInpainter:
     def begin_inpainting(self):
         if len(self.masks_to_use) == 0:
             raise Exception('No masks available! Use `add_mask(...)` before running.')
+        if len(self.model_paths) == 0:
+            print("no models added, using the one in the yaml")
+            self.add_model(self.dd.get_attribute('model_path'))
 
         for model_path in self.model_paths:
             try:
@@ -227,10 +228,6 @@ class ModelInpainter:
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
     mi = ModelInpainter()
-
-    # mi.add_model("../trained_models/ddpm_ocean_model_0624.pt")
-    # mi.add_model("../trained_models/ddpm_ocean_model_best_checkpoint.pt")
-    mi.add_model("../trained_models/weekend_ddpm_ocean_model.pt")
 
     for val in np.linspace(0,1,110):
         mi.add_mask(CoverageMaskGenerator(val))

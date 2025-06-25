@@ -45,4 +45,4 @@ num_images_to_process: 1
 n_samples: 100
 resample_nums: [5]
 
-model_path: "../../ddpm_ocean_model_best_checkpoint.pt"
+model_path: "../trained_models/weekend_ddpm_ocean_model.pt"
