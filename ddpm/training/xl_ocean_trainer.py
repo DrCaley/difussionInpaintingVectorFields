@@ -328,7 +328,7 @@ class TrainOceanXL():
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
         plt.legend()
-        plt.title('training and Test Loss')
+        plt.title('| || || |_')
         plt.savefig(plot_file)
 
     def train(self):
