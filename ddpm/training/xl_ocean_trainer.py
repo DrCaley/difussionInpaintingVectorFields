@@ -273,6 +273,7 @@ class TrainOceanXL():
                 avg_test_loss = test_future.result()
                 spinner.succeed()
 
+
             epoch_losses.append(epoch_loss)
             train_losses.append(avg_train_loss)
             test_losses.append(avg_test_loss)
@@ -305,7 +306,7 @@ class TrainOceanXL():
                 best_test_loss = avg_test_loss
                 torch.save(ddpm.state_dict(), best_model_weights)
                 torch.save(checkpoint, best_model_checkpoint)
-                log_string += " --> Best model ever (stored based on test loss)"
+                log_string += '\033[32m' + " --> Best model ever (stored based on test loss)" + '\033[0m'
 
             log_string += (f"\nAverage test loss: {avg_test_loss:.7f} -> best: {best_test_loss:.7f}\n"
                            + f"Average train loss: {avg_train_loss:.7f}")
