@@ -233,7 +233,7 @@ class TrainOceanXL():
         for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
             pygame.mixer.music.play()
             epoch_loss = 0.0
-            ddpm.train() # Turns on training mode lol
+            ddpm.train()
 
             for _, (x0, t, noise), in enumerate( tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{start_epoch + n_epochs}", colour="#005500")):
 
