@@ -42,20 +42,19 @@ class ModelInpainter:
                             format='%(asctime)s - %(levelname)s - %(message)s',
                             filename=f"{self.results_path}inpainting_model_test_log.txt")
 
-    def set_results_path(self, results_path="./results/"):
-        self.results_path = results_path
-        os.makedirs(results_path, exist_ok=True)
+    def set_results_path(self, results_path="."):
+        self.results_path = results_path + "/results/"
+        os.makedirs(self.results_path, exist_ok=True)
 
-    def use_this_model(self, model_paths=None):
-        if not model_paths:
-            self.model_paths = [self.dd.get_attribute("model_path")]
-        else:
-            if isinstance(model_paths, str):
-                model_paths = [model_paths]
-            self.model_paths = [path for path in model_paths if os.path.exists(path)]
-            for path in model_paths:
-                if not os.path.exists(path):
-                    print(f"Warning: {path} does not exist and will be skipped.")
+    def add_model(self, model_path : str):
+        if not os.path.exists(model_path):
+            print(f"Warning: {model_path} does not exist and will be skipped.")
+            return
+        self.model_paths.append(model_path)
+
+    def add_models(self, model_path_list : list):
+        for path in model_path_list:
+            self.add_model(path)
 
     def _configure_model(self):
         checkpoint = torch.load(self.store_path, map_location=self.dd.get_device(), weights_only=False)
@@ -138,7 +137,7 @@ class ModelInpainter:
                 device = self.dd.get_device()
                 input_image = batch[0].to(device)
                 input_image_original = self.dd.get_standardizer().unstandardize(input_image).to(device)
-                land_mask = (input_image_original != 0.00).float().to(device)
+                land_mask = (input_image_original != 0).float().to(device)
 
                 raw_mask = mask_generator.generate_mask(input_image.shape)
                 mask = raw_mask * land_mask
@@ -230,13 +229,15 @@ class ModelInpainter:
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
     mi = ModelInpainter()
-    mi.use_this_model([
-        "../trained_models/ddpm_ocean_model_best_checkpoint.pt",
-        "../trained_models/weekend_ddpm_ocean_model.pt",
-        "../../ddpm_ocean_model_best_checkpoint.pt"
-    ])
+
+    # mi.add_model("../trained_models/ddpm_ocean_model_0624.pt")
+    # mi.add_model("../trained_models/ddpm_ocean_model_best_checkpoint.pt")
+    mi.add_model("../trained_models/weekend_ddpm_ocean_model.pt")
+
     mi.add_mask(CoverageMaskGenerator(0.2))
     mi.add_mask(CoverageMaskGenerator(0.5))
+    mi.add_mask(CoverageMaskGenerator(0.9))
+
     mi.visualize_images()
     mi.find_coverage()
     mi.begin_inpainting()
