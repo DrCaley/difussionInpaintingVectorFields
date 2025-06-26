@@ -187,9 +187,6 @@ class ModelInpainter:
     def begin_inpainting(self):
         if len(self.masks_to_use) == 0:
             raise Exception('No masks available! Use `add_mask(...)` before running.')
-        if len(self.model_paths) == 0:
-            print("no models added, using the one in the yaml")
-            self.add_model(self.dd.get_attribute('model_path'))
 
         for model_path in self.model_paths:
             try:
@@ -224,10 +221,19 @@ class ModelInpainter:
     def find_coverage(self):
         self.compute_coverage_plot = True
 
+    def load_models_from_yaml(self):
+        models = self.dd.get_attribute('model_paths')
+        print("adding models from data.yaml")
+        self.add_models(models)
+        if len(self.model_paths) == 0:
+            print("no models in model_paths attribute in data.yaml")
+
+
 
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
     mi = ModelInpainter()
+    mi.load_models_from_yaml()
 
     for val in np.linspace(0,1,110):
         mi.add_mask(CoverageMaskGenerator(val))
