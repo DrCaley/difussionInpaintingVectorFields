@@ -4,13 +4,10 @@ import torch
 import logging
 import os.path
 import numpy as np
-from tensorflow.python.ops.numpy_ops.np_math_ops import linspace
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
-from ddpm.helper_functions.masks.n_coverage_mask import CoverageMaskGenerator
-from ddpm.helper_functions.masks.random_mask import RandomMaskGenerator
 
 CURRENT_DIR = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
@@ -24,8 +21,6 @@ from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
 
 os.chdir(CURRENT_DIR)
-
-
 
 class ModelInpainter:
     def __init__(self):
@@ -138,7 +133,7 @@ class ModelInpainter:
                 device = self.dd.get_device()
                 input_image = batch[0].to(device)
                 input_image_original = self.dd.get_standardizer().unstandardize(input_image).to(device)
-                land_mask = (input_image_original != 0).float().to(device)
+                land_mask = (input_image_original.abs() > 1e-5).float().to(device)
 
                 raw_mask = mask_generator.generate_mask(input_image.shape)
                 mask = raw_mask * land_mask
@@ -189,6 +184,38 @@ class ModelInpainter:
 
         return image_counter
 
+    def run_model_inpainting(model_path, masks, visualizer, vector_scale, compute_coverage_plot):
+        try:
+            mi = ModelInpainter()
+            mi.set_results_path(f"./results/{os.path.splitext(os.path.basename(model_path))[0]}/")
+            mi.add_model(model_path)
+            for m in masks:
+                mi.add_mask(m)
+            if visualizer:
+                mi.visualize_images(vector_scale)
+            if compute_coverage_plot:
+                mi.find_coverage()
+
+            mi._configure_model()
+            mi._load_checkpoint()
+            mi._load_dataset()
+
+            csv_path = os.path.join(mi.results_path, f"inpainting_xl_data.csv")
+            with open(csv_path, 'w', newline="") as file:
+                writer = csv.writer(file)
+                writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
+
+                for mask in mi.masks_to_use:
+                    image_counter = 0
+                    image_counter = mi._inpaint_testing(mask, image_counter, file)
+
+            if mi.compute_coverage_plot:
+                mi.plot_mse_vs_mask_percentage()
+
+        except Exception as e:
+            logging.error(f"[Subprocess] Error inpainting model {model_path}: {e}", stack_info=True)
+
+
     def begin_inpainting(self):
         if len(self.masks_to_use) == 0:
             raise Exception('No masks available! Use `add_mask(...)` before running.')
@@ -216,7 +243,7 @@ class ModelInpainter:
                     self.plot_mse_vs_mask_percentage()
 
             except Exception as e:
-                logging.error(f"Error processing model {model_path}: {e}")
+                logging.error(f"Error inpainting model {model_path}: {e}", stack_info=True)
                 continue
 
     def visualize_images(self, vector_scale=0.15):
@@ -226,18 +253,22 @@ class ModelInpainter:
     def find_coverage(self):
         self.compute_coverage_plot = True
 
+    def load_models_from_yaml(self):
+        models = self.dd.get_attribute('model_paths')
+        print("adding models from data.yaml")
+        self.add_models(models)
+        if len(self.model_paths) == 0:
+            print("no models in model_paths attribute in data.yaml")
+
+
 
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
     mi = ModelInpainter()
+    mi.load_models_from_yaml()
 
-    # mi.add_model("../trained_models/ddpm_ocean_model_0624.pt")
-    # mi.add_model("../trained_models/ddpm_ocean_model_best_checkpoint.pt")
-    mi.add_model("../trained_models/weekend_ddpm_ocean_model.pt")
-
-    for val in linspace(0,1,110):
+    for val in np.linspace(0,1,110):
         mi.add_mask(CoverageMaskGenerator(val))
-
     mi.visualize_images()
     mi.find_coverage()
     mi.begin_inpainting()

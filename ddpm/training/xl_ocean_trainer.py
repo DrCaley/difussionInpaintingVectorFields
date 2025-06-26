@@ -80,7 +80,7 @@ class TrainOceanXL():
             path (str): Path to a saved checkpoint file.
         """
         if not os.path.exists(path):
-            raise FileNotFoundError("path doesn't exist")
+            raise FileNotFoundError(f"path {path} doesn't exist")
         else :
             self.model_to_retrain = path
             self.continue_training = True
@@ -307,13 +307,13 @@ class TrainOceanXL():
                 torch.save(ddpm.state_dict(), best_model_weights)
                 torch.save(checkpoint, best_model_checkpoint)
                 log_string += '\033[32m' + " --> Best model ever (stored based on test loss)" + '\033[0m'
+            else:
+                torch.save(checkpoint, model_file)
 
             log_string += (f"\nAverage test loss: {avg_test_loss:.7f} -> best: {best_test_loss:.7f}\n"
                            + f"Average train loss: {avg_train_loss:.7f}")
 
             tqdm.write(log_string)
-
-            torch.save(checkpoint, model_file)
             pygame.mixer.music.stop()
 
             """
