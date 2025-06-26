@@ -25,9 +25,7 @@ os.chdir(CURRENT_DIR)
 class ModelInpainter:
     def __init__(self):
         self.dd = DDInitializer()
-        print("initialized dd")
         self.set_results_path()
-        print("initialized results path")
         self.model_paths = []
         self.masks_to_use = []
         self.resamples = self.dd.get_attribute("resample_nums")
@@ -186,6 +184,38 @@ class ModelInpainter:
 
         return image_counter
 
+    def run_model_inpainting(model_path, masks, visualizer, vector_scale, compute_coverage_plot):
+        try:
+            mi = ModelInpainter()
+            mi.set_results_path(f"./results/{os.path.splitext(os.path.basename(model_path))[0]}/")
+            mi.add_model(model_path)
+            for m in masks:
+                mi.add_mask(m)
+            if visualizer:
+                mi.visualize_images(vector_scale)
+            if compute_coverage_plot:
+                mi.find_coverage()
+
+            mi._configure_model()
+            mi._load_checkpoint()
+            mi._load_dataset()
+
+            csv_path = os.path.join(mi.results_path, f"inpainting_xl_data.csv")
+            with open(csv_path, 'w', newline="") as file:
+                writer = csv.writer(file)
+                writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
+
+                for mask in mi.masks_to_use:
+                    image_counter = 0
+                    image_counter = mi._inpaint_testing(mask, image_counter, file)
+
+            if mi.compute_coverage_plot:
+                mi.plot_mse_vs_mask_percentage()
+
+        except Exception as e:
+            logging.error(f"[Subprocess] Error inpainting model {model_path}: {e}", stack_info=True)
+
+
     def begin_inpainting(self):
         if len(self.masks_to_use) == 0:
             raise Exception('No masks available! Use `add_mask(...)` before running.')
@@ -234,17 +264,11 @@ class ModelInpainter:
 
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
-    print("CWD:", os.getcwd())
     mi = ModelInpainter()
-    print("created inpainter")
     mi.load_models_from_yaml()
-    print("loaded models from yaml")
 
     for val in np.linspace(0,1,110):
         mi.add_mask(CoverageMaskGenerator(val))
-    print("added masks")
     mi.visualize_images()
     mi.find_coverage()
-    print("found coverage and set up visualization")
     mi.begin_inpainting()
-    print("finished inpainting")
