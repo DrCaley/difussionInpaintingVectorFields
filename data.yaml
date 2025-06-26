@@ -45,6 +45,5 @@ num_images_to_process: 1
 n_samples: 100
 resample_nums: [5]
 
-model_path:
 model_paths:
   - "../trained_models/weekend_ddpm_ocean_model.pt"

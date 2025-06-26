@@ -211,7 +211,7 @@ class ModelInpainter:
                     self.plot_mse_vs_mask_percentage()
 
             except Exception as e:
-                logging.error(f"Error processing model {model_path}: {e}")
+                logging.error(f"Error processing model {model_path}: {e}", stack_info=True)
                 continue
 
     def visualize_images(self, vector_scale=0.15):
@@ -232,6 +232,7 @@ class ModelInpainter:
 
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
+    print("CWD:", os.getcwd())
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
