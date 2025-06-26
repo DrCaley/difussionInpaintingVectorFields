@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import pytest
-from your_module import compute_divergence  # Replace with actual module name
+from ddpm.helper_functions.compute_divergence import compute_divergence  # Replace with actual module name
 
 def test_zero_divergence_rotation_field():
     """
