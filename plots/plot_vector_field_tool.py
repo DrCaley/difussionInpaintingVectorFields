@@ -41,7 +41,7 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
     )
     #my_path = os.path.dirname(os.path.abspath(__file__))
 
-    plt.gca().invert_yaxis()
+    #plt.gca().invert_yaxis() THIS LINE WILL CONVERT ROTATIONAL FIELDS INTO RADIAL ONES AND VICE VERSA
     plt.axis("equal")
     plt.title(title)
     plt.grid(True)
