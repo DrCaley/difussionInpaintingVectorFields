@@ -25,7 +25,9 @@ os.chdir(CURRENT_DIR)
 class ModelInpainter:
     def __init__(self):
         self.dd = DDInitializer()
+        print("initialized dd")
         self.set_results_path()
+        print("initialized results path")
         self.model_paths = []
         self.masks_to_use = []
         self.resamples = self.dd.get_attribute("resample_nums")
@@ -211,7 +213,7 @@ class ModelInpainter:
                     self.plot_mse_vs_mask_percentage()
 
             except Exception as e:
-                logging.error(f"Error processing model {model_path}: {e}", stack_info=True)
+                logging.error(f"Error inpainting model {model_path}: {e}", stack_info=True)
                 continue
 
     def visualize_images(self, vector_scale=0.15):
@@ -234,11 +236,15 @@ class ModelInpainter:
 if __name__ == '__main__':
     print("CWD:", os.getcwd())
     mi = ModelInpainter()
+    print("created inpainter")
     mi.load_models_from_yaml()
+    print("loaded models from yaml")
 
     for val in np.linspace(0,1,110):
         mi.add_mask(CoverageMaskGenerator(val))
-
+    print("added masks")
     mi.visualize_images()
     mi.find_coverage()
+    print("found coverage and set up visualization")
     mi.begin_inpainting()
+    print("finished inpainting")
