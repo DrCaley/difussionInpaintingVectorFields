@@ -48,12 +48,8 @@ class OceanRobotPathMask(MaskGenerator):
                 y = int(new_pos[0].item())
                 x = int(new_pos[1].item())
 
-                if land_mask is None or land_mask[y, x] == 0:
-                    pos = new_pos
-                    break
-                else:
-                    direction = torch.randn(2, device=self.device)
-                    direction = direction / torch.norm(direction)
+                direction = torch.randn(2, device=self.device)
+                direction = direction / torch.norm(direction)
 
             # Slight randomness
             direction += 0.3 * torch.randn(2, device=self.device)

@@ -8,7 +8,6 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
-
 CURRENT_DIR = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.masks import MaskGenerator
@@ -268,7 +267,7 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    mi.add_mask(CoverageMaskGenerator(0.8))
+    mi.add_mask(OceanRobotPathMask())
     mi.visualize_images()
     mi.find_coverage()
     mi.begin_inpainting()

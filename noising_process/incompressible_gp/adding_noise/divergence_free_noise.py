@@ -145,7 +145,7 @@ def generate_div_free_noise(batch_size, height, width, device=None):
 
 # More noise
 
-def layered_div_free_noise(batch_size, height, width, device=None, n_layers=1000):
+def layered_div_free_noise(batch_size, height, width, device=None, n_layers=10):
     dd = get_dd_initializer()
     device = dd.get_device()
     noise = torch.zeros(batch_size, 2, height, width, device=device)

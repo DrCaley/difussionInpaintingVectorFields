@@ -47,3 +47,4 @@ resample_nums: [5]
 
 model_paths:
   - "../trained_models/weekend_ddpm_ocean_model.pt"
+  - "../trained_models/noise_steps1000_1.pt"
