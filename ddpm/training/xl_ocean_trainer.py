@@ -223,6 +223,8 @@ class TrainOceanXL():
             best_test_loss = checkpoint['best_test_loss']
             print(f"Resuming training from epoch {start_epoch}. Training for {n_epochs} epochs!")
 
+        best_epoch = start_epoch
+
         # CSV output setup
         with open(self.csv_file, mode='w', newline='') as file:
             writer = csv.writer(file)
@@ -307,11 +309,13 @@ class TrainOceanXL():
                 torch.save(ddpm.state_dict(), best_model_weights)
                 torch.save(checkpoint, best_model_checkpoint)
                 log_string += '\033[32m' + " --> Best model ever (stored based on test loss)" + '\033[0m'
+                best_epoch = epoch
             else:
                 torch.save(checkpoint, model_file)
 
             log_string += (f"\nAverage test loss: {avg_test_loss:.7f} -> best: {best_test_loss:.7f}\n"
-                           + f"Average train loss: {avg_train_loss:.7f}")
+                           + f"Average train loss: {avg_train_loss:.7f}\n"
+                           + f"Best Epoch: {best_epoch}")
 
             tqdm.write(log_string)
             pygame.mixer.music.stop()
