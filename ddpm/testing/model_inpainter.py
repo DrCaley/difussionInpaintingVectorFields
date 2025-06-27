@@ -267,7 +267,7 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    mi.add_mask(OceanRobotPathMask())
+    mi.add_mask(CoverageMaskGenerator(0.8))
     mi.visualize_images()
     mi.find_coverage()
     mi.begin_inpainting()
