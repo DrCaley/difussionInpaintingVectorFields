@@ -17,7 +17,8 @@ from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 from plots.visualization_tools.pt_visualizer_plus import PTVisualizer
-from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
+from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field
+from noising_process.simple_gp.simple_gp_model import gp_fill
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
 
 os.chdir(CURRENT_DIR)
@@ -148,7 +149,7 @@ class ModelInpainter:
 
                         standardizer = self.dd.get_standardizer()
                         final_image_ddpm = standardizer.unstandardize(final_image_ddpm).to(device)
-                        gp_field = gp_fill(input_image_original, mask)
+                        gp_field = gp_fill(input_image_original, 1 - mask, device)
 
                         # Cropping
                         input_image_original_cropped = top_left_crop(input_image_original, 44, 94).to(device)
@@ -267,8 +268,7 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    for val in np.linspace(0,1,110):
-        mi.add_mask(CoverageMaskGenerator(val))
+    mi.add_mask(CoverageMaskGenerator(0.8))
     mi.visualize_images()
     mi.find_coverage()
     mi.begin_inpainting()
