@@ -2,6 +2,9 @@ import logging
 import os
 import time
 
+from tqdm import tqdm
+
+
 class CalculatorFactorySingletonAdapter:
     def initialize_cache(config_path: str, force_reload: bool = False) -> None:
         """Initializes the cache from a given config path."""
@@ -71,14 +74,10 @@ class CalculatorFactorySingletonAdapter:
         print("4. /")
         print("5. ^")
         input("which one? ")
-        for i in range(3):
-            print("calculating.")
-            time.sleep(2)
-            print("calculating..")
-            time.sleep(2)
-            print("calculating..")
+        for i in tqdm(range(100), desc="Calculation Progress", colour="#ff0000"):
+            time.sleep(0.5)
 
-        print("\n")
+        time.sleep(0.5)
         print("Hello, World!")
 
 calc = CalculatorFactorySingletonAdapter()
