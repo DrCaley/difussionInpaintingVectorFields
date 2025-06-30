@@ -4,6 +4,7 @@ import torch
 import logging
 import os.path
 import numpy as np
+from tensorflow.python.ops.numpy_ops.np_math_ops import linspace
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
@@ -132,7 +133,8 @@ class ModelInpainter:
 
                 device = self.dd.get_device()
                 input_image = batch[0].to(device)
-                input_image_original = self.dd.get_standardizer().unstandardize(input_image).to(device)
+                input_image_original = self.dd.get_standardizer().unstandardize(torch.squeeze(input_image, 0)).to(device)
+                input_image_original = torch.unsqueeze(input_image_original, 0)
                 land_mask = (input_image_original.abs() > 1e-5).float().to(device)
 
                 raw_mask = mask_generator.generate_mask(input_image.shape)
@@ -147,7 +149,7 @@ class ModelInpainter:
                         )
 
                         standardizer = self.dd.get_standardizer()
-                        final_image_ddpm = standardizer.unstandardize(final_image_ddpm).to(device)
+                        final_image_ddpm = torch.unsqueeze(standardizer.unstandardize(torch.squeeze(final_image_ddpm, 0)).to(device), 0)
                         gp_field = gp_fill(input_image_original, 1 - mask, device)
 
                         # Cropping
@@ -267,7 +269,8 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    mi.add_mask(CoverageMaskGenerator(0.8))
+    for percent in linspace(1, 0.01, 110):
+        mi.add_mask(CoverageMaskGenerator(percent))
     mi.visualize_images()
     mi.find_coverage()
     mi.begin_inpainting()
