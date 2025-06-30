@@ -56,6 +56,7 @@ class TrainOceanXL():
         self.batch_size = dd.get_attribute('batch_size')
         self.n_epochs = dd.get_attribute('epochs')
         self.lr = dd.get_attribute('lr')
+        self._DEFAULT_BEST = "./training_output/ddpm_ocean_model_best_checkpoint.pt"
 
         self.train_loader = DataLoader(dd.get_training_data(),
                                        batch_size=self.batch_size,
@@ -72,13 +73,19 @@ class TrainOceanXL():
         self.model_to_retrain = dd.get_attribute('model_to_retrain')
         self.retrain_mode = dd.get_attribute('retrain_mode')
 
-    def retrain_this(self, path: str):
+    def retrain_this(self, path: str = ""):
         """
         Sets the path of a model to resume training from.
 
         Args:
             path (str): Path to a saved checkpoint file.
         """
+        if self.retrain_mode:
+            self.continue_training = True
+
+        if path == "":
+            path = self._DEFAULT_BEST
+
         if not os.path.exists(path):
             raise FileNotFoundError(f"path {path} doesn't exist")
         else :
@@ -233,7 +240,7 @@ class TrainOceanXL():
 
         # Training arc
         for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
-            pygame.mixer.music.play()
+            # pygame.mixer.music.play()
             epoch_loss = 0.0
             ddpm.train()
 
@@ -318,7 +325,7 @@ class TrainOceanXL():
                            + f"Best Epoch: {best_epoch}")
 
             tqdm.write(log_string)
-            pygame.mixer.music.stop()
+            # pygame.mixer.music.stop()
 
             """
             if display:
@@ -341,13 +348,13 @@ class TrainOceanXL():
         """
         optimizer = Adam(self.ddpm.parameters(), lr=self.lr)
 
-        if self.retrain_mode :
-            self.retrain_this(self.model_to_retrain)
+        if self.retrain_mode:
+            self.retrain_this()
 
         if self.training_mode :
             pygame.mixer.init()
             pygame.mixer.music.load(self.music_path)
-            pygame.mixer.music.play()
+            # pygame.mixer.music.play()
             self.training_loop(optimizer, self.loss_strategy)
 
 
