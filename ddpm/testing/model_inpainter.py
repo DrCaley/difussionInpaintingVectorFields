@@ -140,45 +140,52 @@ class ModelInpainter:
                 mask = raw_mask * land_mask
                 num_lines = mask_generator.get_num_lines()
 
-                for resample in self.resamples:
-                    for i in tqdm(range(n_samples), leave=False, desc="Samples", colour="#006666"):
-                        final_image_ddpm = inpaint_generate_new_images(
-                            self.best_model, input_image, mask, n_samples=1,
-                            device=device, resample_steps=resample, noise_strategy=self.noise_strategy
-                        )
+                with torch.no_grad():
+                    for resample in self.resamples:
+                        for i in tqdm(range(n_samples), leave=False, desc="Samples", colour="#006666"):
+                            final_image_ddpm = inpaint_generate_new_images(
+                                self.best_model, input_image, mask, n_samples=1,
+                                device=device, resample_steps=resample, noise_strategy=self.noise_strategy
+                            )
 
-                        standardizer = self.dd.get_standardizer()
-                        final_image_ddpm = torch.unsqueeze(standardizer.unstandardize(torch.squeeze(final_image_ddpm, 0)).to(device), 0)
-                        gp_field = gp_fill(input_image_original, 1 - mask, device)
+                            standardizer = self.dd.get_standardizer()
+                            final_image_ddpm = torch.unsqueeze(standardizer.unstandardize(torch.squeeze(final_image_ddpm, 0)).to(device), 0)
+                            gp_field = gp_fill(input_image_original, 1 - mask, device)
 
-                        # Cropping
-                        input_image_original_cropped = top_left_crop(input_image_original, 44, 94).to(device)
-                        final_image_ddpm_cropped = top_left_crop(final_image_ddpm, 44, 94).to(device)
-                        mask_cropped = top_left_crop(mask, 44, 94).to(device)
-                        gp_field_cropped = top_left_crop(gp_field, 44, 94).to(device)
+                            # Cropping
+                            input_image_original_cropped = top_left_crop(input_image_original, 44, 94).to(device)
+                            final_image_ddpm_cropped = top_left_crop(final_image_ddpm, 44, 94).to(device)
+                            mask_cropped = top_left_crop(mask, 44, 94).to(device)
+                            gp_field_cropped = top_left_crop(gp_field, 44, 94).to(device)
 
-                        # MSE + Coverage
-                        mse_ddpm = calculate_mse(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped)
-                        mask_percentage = self.compute_mask_percentage(mask)
+                            # MSE + Coverage
+                            mse_ddpm = calculate_mse(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped)
+                            mask_percentage = self.compute_mask_percentage(mask)
 
-                        base_id = f"{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}"
-                        torch.save(final_image_ddpm_cropped, f"{self.results_path}ddpm{base_id}.pt")
-                        torch.save(mask_cropped, f"{self.results_path}mask{base_id}.pt")
-                        torch.save(input_image_original_cropped, f"{self.results_path}initial{base_id}.pt")
-                        torch.save(gp_field_cropped, f"{self.results_path}gp_field{base_id}.pt")
+                            base_id = f"{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}"
+                            torch.save(final_image_ddpm_cropped, f"{self.results_path}ddpm{base_id}.pt")
+                            torch.save(mask_cropped, f"{self.results_path}mask{base_id}.pt")
+                            torch.save(input_image_original_cropped, f"{self.results_path}initial{base_id}.pt")
+                            torch.save(gp_field_cropped, f"{self.results_path}gp_field{base_id}.pt")
 
-                        writer.writerow([self.model_name, image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mask_percentage])
+                            writer.writerow([self.model_name, image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mask_percentage])
 
-                        if self.compute_coverage_plot:
-                            self.mse_ddpm_list.append((mask_percentage, mse_ddpm.item()))
+                            if self.compute_coverage_plot:
+                                self.mse_ddpm_list.append((mask_percentage, mse_ddpm.item()))
 
-                        if self.visualizer:
-                            ptv = PTVisualizer(mask_type=mask_generator, sample_num=batch[1].item(),
-                                               vector_scale=self.vector_scale, num_lines=num_lines, resamples=resample, results_dir = self.results_path)
-                            ptv.visualize()
-                            ptv.calc()
+                            if self.visualizer:
+                                ptv = PTVisualizer(mask_type=mask_generator, sample_num=batch[1].item(),
+                                                   vector_scale=self.vector_scale, num_lines=num_lines, resamples=resample, results_dir = self.results_path)
+                                ptv.visualize()
+                                ptv.calc()
 
-                        torch.cuda.empty_cache()
+                            del final_image_ddpm
+                            del input_image_original_cropped
+                            del mask_cropped
+                            del gp_field
+
+                    del input_image, input_image_original, land_mask, mask
+                    torch.cuda.empty_cache()
 
                 image_counter += 1
                 main_pbar.update(1)
