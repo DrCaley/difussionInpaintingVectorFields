@@ -4,7 +4,6 @@ import torch
 import logging
 import os.path
 import numpy as np
-from tensorflow.python.ops.numpy_ops.np_math_ops import linspace
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
@@ -269,7 +268,7 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    for percent in linspace(1, 0.01, 110):
+    for percent in torch.linspace(1, 0.01, 110):
         mi.add_mask(CoverageMaskGenerator(percent))
     mi.visualize_images()
     mi.find_coverage()

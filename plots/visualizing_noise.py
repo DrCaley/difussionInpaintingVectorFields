@@ -1,12 +1,11 @@
 import os
 import sys
 import csv
-import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import imageio
-from plot_vector_field_tool import plot_vector_field
+from plots.visualization_tools.plot_vector_field_tool import plot_vector_field
 
 # Setup paths
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), './../')))
@@ -14,9 +13,8 @@ from data_prep.data_initializer import DDInitializer
 from ddpm.helper_functions.compute_divergence import compute_divergence
 
 # Types of noise to test
-from noising_process.incompressible_gp.adding_noise.divergence_free_noise import exact_div_free_field_from_stream, gaussian_each_step_divergence_free_noise, generate_div_free_noise, layered_div_free_noise
-
-
+from noising_process.incompressible_gp.adding_noise.divergence_free_noise import \
+    gaussian_each_step_divergence_free_noise
 
 # Initialize data
 data_init = DDInitializer()

@@ -46,4 +46,4 @@ n_samples: 100
 resample_nums: [5]
 
 model_paths:
-  - "../trained_models/weekend_ddpm_ocean_model.pt"
+  - "../trained_models/new_model.pt"

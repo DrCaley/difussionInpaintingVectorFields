@@ -51,3 +51,36 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
     plt.savefig(file)
     plt.close()
 
+
+def make_heatmap(tensor_2d, title=None, save_path=None, show=True, cmap='viridis'):
+    """
+    Create a heatmap from a 2D torch tensor.
+
+    Args:
+        tensor_2d (torch.Tensor): A 2D tensor of shape (H, W)
+        title (str, optional): Title for the plot.
+        save_path (str, optional): Path to save the image.
+        show (bool, optional): Whether to display the heatmap.
+        cmap (str, optional): Matplotlib colormap to use.
+
+    Returns:
+        matplotlib.figure.Figure: The figure object for further use if needed.
+    """
+    if not isinstance(tensor_2d, torch.Tensor):
+        raise TypeError("Input must be a torch.Tensor")
+    if tensor_2d.ndim != 2:
+        raise ValueError("Input tensor must be 2D")
+
+    tensor_np = tensor_2d.detach().cpu().numpy()
+
+    fig, ax = plt.subplots()
+    heatmap = ax.imshow(tensor_np, cmap=cmap)
+    plt.colorbar(heatmap)
+
+    if title:
+        ax.set_title(title)
+
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight')
+
+    return fig
