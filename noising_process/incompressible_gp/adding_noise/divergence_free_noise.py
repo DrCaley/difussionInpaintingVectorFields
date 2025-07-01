@@ -53,13 +53,11 @@ def gaussian_each_step_divergence_free_noise(shape: torch.Size, t: torch.Tensor,
         beta_val = betas[t_i].to(device)  # Move to device if needed
 
         for _ in range(t_i):
-            mean = torch.tensor((u_mean + v_mean) / 2, device=device)
-            std = torch.sqrt(beta_val)
-
-            
+            mean = torch.tensor([0.0])
+            std = torch.tensor([1.0])
 
             freq = torch.normal(mean, std)
-            vx, vy = exact_div_free_field_from_stream(width, height, freq, device=device)
+            vx, vy = exact_div_free_field_from_stream(width, height, freq * 100, device=device)
 
             magnitude = torch.sqrt(vx ** 2 + vy ** 2)
             max_val = torch.max(magnitude)
@@ -74,6 +72,9 @@ def gaussian_each_step_divergence_free_noise(shape: torch.Size, t: torch.Tensor,
 
             output[i, 0] += vx
             output[i, 1] += vy
+
+    mean, std, var = torch.mean(output), torch.std(output), torch.var(output)
+    output = (output - mean) / std
 
     return output
 

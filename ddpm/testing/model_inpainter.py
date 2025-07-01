@@ -2,9 +2,9 @@ import csv
 import sys
 import torch
 import logging
+import pygame
 import os.path
 import numpy as np
-from tensorflow.python.ops.numpy_ops.np_math_ops import linspace
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
@@ -34,6 +34,7 @@ class ModelInpainter:
         self.visualizer = False
         self.compute_coverage_plot = False
         self.model_name = "default"
+        self.set_music()
 
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s - %(levelname)s - %(message)s',
@@ -65,6 +66,11 @@ class ModelInpainter:
         self.standardizer_strategy = checkpoint.get('standardizer_strategy', self.dd.get_standardizer())
 
         self.dd.reinitialize(self.min_beta, self.max_beta, self.n_steps, self.standardizer_strategy)
+
+    def set_music(self, music_path='was-that-the-bite-of-87-markiplier-original-video-clip-sound-clip.mp3'):
+        self.music_path = os.path.join(os.path.dirname(__file__), music_path)
+        pygame.mixer.init()
+        pygame.mixer.music.load(self.music_path)
 
     def _load_checkpoint(self):
         self.best_model = MyDDPMGaussian(MyUNet(self.n_steps), n_steps=self.n_steps, device=self.dd.get_device())
@@ -128,6 +134,9 @@ class ModelInpainter:
                   desc=f"[{self.model_name}] Mask: {mask_generator}", colour="#00ffff") as main_pbar:
 
             for step, batch in enumerate(loader):
+                if step % 100 == 87:
+                    pygame.mixer.music.play()
+                    
                 if image_counter >= num_images_to_process:
                     break
 
@@ -245,7 +254,7 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    for percent in linspace(1, 0.01, 110):
+    for percent in torch.linspace(1, 0.01, 110):
         mi.add_mask(CoverageMaskGenerator(percent))
 
     mi.visualize_images()

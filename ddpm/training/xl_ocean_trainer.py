@@ -92,7 +92,7 @@ class TrainOceanXL():
             self.model_to_retrain = path
             self.continue_training = True
 
-    def set_music(self, music_path = 'music.mp3'):
+    def set_music(self, music_path = 'was-that-the-bite-of-87-markiplier-original-video-clip-sound-clip.mp3'): #'music.mp3'):
         self.music_path = os.path.join(os.path.dirname(__file__), music_path)
 
     def _setup_paths_and_files(self, dd):
@@ -240,7 +240,9 @@ class TrainOceanXL():
 
         # Training arc
         for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
-            # pygame.mixer.music.play()
+            if(epoch % 100 == 87):
+                pygame.mixer.music.play()
+            
             epoch_loss = 0.0
             ddpm.train()
 

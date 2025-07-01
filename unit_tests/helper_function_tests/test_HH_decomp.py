@@ -6,7 +6,8 @@ import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.HH_decomp import decompose_vector_field
 from ddpm.helper_functions.compute_divergence import compute_divergence
-from plots.plot_vector_field_tool import plot_vector_field
+from plots.visualization_tools.plot_vector_field_tool import plot_vector_field
+from plots.visualization_tools.plot_vector_field_tool import make_heatmap
 
 
 
@@ -50,12 +51,12 @@ def mixed_field_test():
     field = torch.tensor(np.stack([u, v], axis=-1), dtype=torch.float32)
     return field
 
-# Mixed field (both compressive and divergenceless bits)
+# Random field!
 def drew_test():
     return torch.randn((H, W, 2))
 
 
-(u_np, v_np), (u_irr, v_irr), (u_sol, v_sol) = decompose_vector_field(drew_test())
+(u_np, v_np), (u_irr, v_irr), (u_sol, v_sol) = decompose_vector_field(mixed_field_test())
 
 
 # Viewing
@@ -67,3 +68,7 @@ plot_vector_field(u_sol, v_sol, scale=20, file="Divless_Vector_Field.png", title
 print(f"The divergences of the initial field falls between \n {compute_divergence(u_np, v_np).min()} and {compute_divergence(u_np, v_np).max()}.")
 print(f"The divergences of the irrotational field falls between \n {compute_divergence(u_irr, v_irr).min()} and {compute_divergence(u_irr, v_irr).max()}.")
 print(f"The divergences of the divergenceless field, WHICH SHOULD BE ZERO, falls between \n {compute_divergence(u_sol, v_sol).min()} AND {compute_divergence(u_sol, v_sol).max()}.")
+
+make_heatmap(compute_divergence(v_np, u_np), save_path="div_initial_field")
+make_heatmap(compute_divergence(v_irr, u_irr), save_path="div_irr_field")
+make_heatmap(compute_divergence(v_sol, u_sol), save_path="div_sol_field")
