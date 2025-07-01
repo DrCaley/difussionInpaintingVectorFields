@@ -202,41 +202,14 @@ class ModelInpainter:
 
         return image_counter
 
-    def run_model_inpainting(model_path, masks, visualizer, vector_scale, compute_coverage_plot):
-        try:
-            mi = ModelInpainter()
-            mi.set_results_path(f"./results/{os.path.splitext(os.path.basename(model_path))[0]}/")
-            mi.add_model(model_path)
-            for m in masks:
-                mi.add_mask(m)
-            if visualizer:
-                mi.visualize_images(vector_scale)
-            if compute_coverage_plot:
-                mi.find_coverage()
-
-            mi._configure_model()
-            mi._load_checkpoint()
-            mi._load_dataset()
-
-            csv_path = os.path.join(mi.results_path, f"inpainting_xl_data.csv")
-            with open(csv_path, 'w', newline="") as file:
-                writer = csv.writer(file)
-                writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
-
-                for mask in mi.masks_to_use:
-                    image_counter = 0
-                    image_counter = mi._inpaint_testing(mask, image_counter, file)
-
-            if mi.compute_coverage_plot:
-                mi.plot_mse_vs_mask_percentage()
-
-        except Exception as e:
-            logging.error(f"[Subprocess] Error inpainting model {model_path}: {e}", stack_info=True)
-
-
     def begin_inpainting(self):
         if len(self.masks_to_use) == 0:
             raise Exception('No masks available! Use `add_mask(...)` before running.')
+
+        with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                ["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
 
         for model_path in self.model_paths:
             try:
@@ -249,13 +222,9 @@ class ModelInpainter:
                 self._load_dataset()
 
                 with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
-                    writer = csv.writer(file)
-                    writer.writerow(
-                        ["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
                     for mask in self.masks_to_use:
-                        image_counter = 0
                         logging.info(f"Running mask {mask} with model {self.model_name}")
-                        image_counter = self._inpaint_testing(mask, image_counter, file)
+                        image_counter = self._inpaint_testing(mask, 0, file)
 
                 if self.compute_coverage_plot:
                     self.plot_mse_vs_mask_percentage()
@@ -287,6 +256,7 @@ if __name__ == '__main__':
 
     for percent in torch.linspace(1, 0.01, 110):
         mi.add_mask(CoverageMaskGenerator(percent))
+
     mi.visualize_images()
     mi.find_coverage()
     mi.begin_inpainting()
