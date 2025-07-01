@@ -43,10 +43,10 @@ class DivergenceFreeNoise(NoiseStrategy):
     ) -> torch.Tensor:
         assert shape[1] == 2, "Divergence-free noise expects 2 channels"
         batch, _, H, W = shape
-        return gaussian_divergence_free_noise(shape=shape, t=t, device=device)
+        return gaussian_each_step_divergence_free_noise(shape=shape, t=torch.tensor([50]), device=device)
 
     def get_gaussian_scaling(self):
-        return False
+        return True
 
 class DivergenceFreeGaussianNoise(NoiseStrategy):
     def generate(

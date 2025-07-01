@@ -20,7 +20,7 @@ standardizer_type: zscore
                   # maxmag
                   # units
 
-noise_function: gaussian
+noise_function: div_free
               # gaussian
               # div_free
               # div_gaussian
