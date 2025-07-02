@@ -254,8 +254,9 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    for percent in torch.linspace(1, 0.01, 110):
-        mi.add_mask(CoverageMaskGenerator(percent))
+    for percent in torch.linspace(1, 0.01, 10):
+        for _ in range(10):
+            mi.add_mask(CoverageMaskGenerator(percent))
 
     mi.visualize_images()
     mi.find_coverage()
