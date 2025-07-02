@@ -24,7 +24,7 @@ def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path=
 
     # Convert to numpy if tensor
     x0 = x0_orginal.cpu().numpy() if hasattr(x0_orginal, "cpu") else x0_orginal
-    x0 = x0[0].transpose(1, 2, 0)  # (H, W, 2)
+    x0 = x0.transpose(1, 2, 0)  # (H, W, 2)
 
     frames = []
     avg_mags = []
@@ -41,9 +41,9 @@ def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path=
         a_sqrt = np.sqrt(alpha_bars[t])
         one_minus_a_sqrt = np.sqrt(1 - alpha_bars[t])
 
-        epsilon = noise_strategy(x0_orginal, t_tensor)
+        epsilon = noise_strategy(torch.unsqueeze(x0_orginal, 0), t_tensor)
         epsilon = epsilon.cpu().numpy() if hasattr(epsilon, "cpu") else epsilon
-        epsilon = epsilon[0].transpose(1, 2, 0) / (2**(0.5))
+        epsilon = epsilon[0].transpose(1, 2, 0)
 
         noisy = a_sqrt * x0 + one_minus_a_sqrt * epsilon
 
@@ -57,12 +57,12 @@ def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path=
         fig, axs = plt.subplots(1, 2, figsize=(2 * W / 10, H / 10))
         fig.suptitle(f"DDPM Forward Noising - Step {t}")
 
-        axs[0].quiver(X, Y, x0[..., 0], x0[..., 1], color='blue', scale=7)
+        axs[0].quiver(X, Y, x0[..., 0], x0[..., 1], color='blue', scale=20)
         axs[0].set_title("Original x₀")
         axs[0].invert_yaxis()
         axs[0].axis('off')
 
-        axs[1].quiver(X, Y, noisy[..., 0], noisy[..., 1], color='blue', scale=7)
+        axs[1].quiver(X, Y, noisy[..., 0], noisy[..., 1], color='blue', scale=20)
         axs[1].set_title(f"Noisy t={t}")
         axs[1].invert_yaxis()
         axs[1].axis('off')
@@ -106,5 +106,5 @@ def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path=
 # Example usage
 alpha_bars = dd.get_alpha_bars()
 standardizer = dd.get_standardizer()
-x0 = standardizer(dd.training_tensor[::, ::, ::].permute(2, 3, 1, 0)[:1].nan_to_num(0))
+x0 = standardizer(dd.training_tensor[::, ::, ::].permute(3, 2, 1, 0)[0])
 make_ddpm_vector_field_gif(alpha_bars, x0, dd.get_noise_strategy(), every=5)

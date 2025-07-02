@@ -31,9 +31,6 @@ v = torch.tensor(Y)
 for layers in torch.linspace(1,50, 50):
     tensor = gaussian_each_step_divergence_free_noise((1,2,100,100), torch.tensor([layers]), device=torch.device('cpu'))
     divergence = compute_divergence(tensor[0][0], tensor[0][1])
-    mean, std, var = torch.mean(tensor), torch.std(tensor), torch.var(tensor)
-
-    tensor = (tensor - mean) / std
 
     plot_vector_field(tensor[0][0], tensor[0][1], scale=60, file=f"{layers}.png", title=f"{layers}.png")
     make_heatmap(divergence, save_path=f"{layers}_div.png", title=f"{layers}_div.png")
