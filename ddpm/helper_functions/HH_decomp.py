@@ -11,13 +11,12 @@ from ddpm.helper_functions.compute_divergence import compute_divergence
 
 
 
-def decompose_vector_field(field_tensor, dx=1.0, dy=1.0):
+def decompose_vector_field(field_tensor):
     """
     Performs Helmholtz-Hodge decomposition on a 2D vector field.
 
     Args:
         field_tensor (torch.Tensor): shape (H, W, 2), where [:, :, 0] is u and [:, :, 1] is v
-        dx, dy (float): grid spacing in x and y (defaults to 1.0)
 
     Returns:
         (u, v), (u_irr, v_irr), (u_sol, v_sol): original, irrotational, divergence-free components (all np.ndarrays)
@@ -30,7 +29,7 @@ def decompose_vector_field(field_tensor, dx=1.0, dy=1.0):
     u_f = np.fft.fftn(u) #fft2(u)
     v_f = np.fft.fftn(v) #fft2(v)
 
-    # Frequency components (account for dx, dy)
+    # Frequency components
     kx = np.fft.fftfreq(H).reshape(H, 1) #fftfreq(H, d=dx).reshape(H, 1)
     ky = np.fft.fftfreq(W).reshape(1, W) #fftfreq(W, d=dy).reshape(1, W)
     k2 = kx**2 + ky**2

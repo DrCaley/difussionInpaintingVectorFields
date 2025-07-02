@@ -2,6 +2,7 @@ import csv
 import sys
 import torch
 import logging
+import pygame
 import os.path
 import numpy as np
 from tqdm import tqdm
@@ -33,6 +34,7 @@ class ModelInpainter:
         self.visualizer = False
         self.compute_coverage_plot = False
         self.model_name = "default"
+        self.set_music()
 
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s - %(levelname)s - %(message)s',
@@ -64,6 +66,11 @@ class ModelInpainter:
         self.standardizer_strategy = checkpoint.get('standardizer_strategy', self.dd.get_standardizer())
 
         self.dd.reinitialize(self.min_beta, self.max_beta, self.n_steps, self.standardizer_strategy)
+
+    def set_music(self, music_path='was-that-the-bite-of-87-markiplier-original-video-clip-sound-clip.mp3'):
+        self.music_path = os.path.join(os.path.dirname(__file__), music_path)
+        pygame.mixer.init()
+        pygame.mixer.music.load(self.music_path)
 
     def _load_checkpoint(self):
         self.best_model = MyDDPMGaussian(MyUNet(self.n_steps), n_steps=self.n_steps, device=self.dd.get_device())
@@ -127,6 +134,9 @@ class ModelInpainter:
                   desc=f"[{self.model_name}] Mask: {mask_generator}", colour="#00ffff") as main_pbar:
 
             for step, batch in enumerate(loader):
+                if step % 100 == 87:
+                    pygame.mixer.music.play()
+                    
                 if image_counter >= num_images_to_process:
                     break
 
@@ -192,41 +202,14 @@ class ModelInpainter:
 
         return image_counter
 
-    def run_model_inpainting(model_path, masks, visualizer, vector_scale, compute_coverage_plot):
-        try:
-            mi = ModelInpainter()
-            mi.set_results_path(f"./results/{os.path.splitext(os.path.basename(model_path))[0]}/")
-            mi.add_model(model_path)
-            for m in masks:
-                mi.add_mask(m)
-            if visualizer:
-                mi.visualize_images(vector_scale)
-            if compute_coverage_plot:
-                mi.find_coverage()
-
-            mi._configure_model()
-            mi._load_checkpoint()
-            mi._load_dataset()
-
-            csv_path = os.path.join(mi.results_path, f"inpainting_xl_data.csv")
-            with open(csv_path, 'w', newline="") as file:
-                writer = csv.writer(file)
-                writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
-
-                for mask in mi.masks_to_use:
-                    image_counter = 0
-                    image_counter = mi._inpaint_testing(mask, image_counter, file)
-
-            if mi.compute_coverage_plot:
-                mi.plot_mse_vs_mask_percentage()
-
-        except Exception as e:
-            logging.error(f"[Subprocess] Error inpainting model {model_path}: {e}", stack_info=True)
-
-
     def begin_inpainting(self):
         if len(self.masks_to_use) == 0:
             raise Exception('No masks available! Use `add_mask(...)` before running.')
+
+        with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                ["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
 
         for model_path in self.model_paths:
             try:
@@ -239,13 +222,9 @@ class ModelInpainter:
                 self._load_dataset()
 
                 with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
-                    writer = csv.writer(file)
-                    writer.writerow(
-                        ["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
                     for mask in self.masks_to_use:
-                        image_counter = 0
                         logging.info(f"Running mask {mask} with model {self.model_name}")
-                        image_counter = self._inpaint_testing(mask, image_counter, file)
+                        image_counter = self._inpaint_testing(mask, 0, file)
 
                 if self.compute_coverage_plot:
                     self.plot_mse_vs_mask_percentage()
@@ -277,6 +256,7 @@ if __name__ == '__main__':
 
     for percent in torch.linspace(1, 0.01, 110):
         mi.add_mask(CoverageMaskGenerator(percent))
+
     mi.visualize_images()
     mi.find_coverage()
     mi.begin_inpainting()
