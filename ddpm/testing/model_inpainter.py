@@ -332,7 +332,9 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    mi.add_mask(CoverageMaskGenerator(0.80))
+    for percentage in np.linspace(1, 0.01, 100):
+        for _ in range(10):
+            mi.add_mask(CoverageMaskGenerator(percentage))
 
     mi.visualize_images()
     mi.find_coverage()
