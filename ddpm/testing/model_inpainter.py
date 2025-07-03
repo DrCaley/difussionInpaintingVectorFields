@@ -2,9 +2,7 @@ import csv
 import sys
 import torch
 import logging
-import pygame
 import os.path
-import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
@@ -17,7 +15,6 @@ from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 from plots.visualization_tools.pt_visualizer_plus import PTVisualizer
-from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field
 from noising_process.simple_gp.simple_gp_model import gp_fill
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
 
@@ -27,6 +24,8 @@ class ModelInpainter:
     def __init__(self):
         self.dd = DDInitializer()
         self.set_results_path()
+        self.csv_file = f"{self.results_path}inpainting_xl_data.csv"
+        self.write_header()
         self.model_paths = []
         self.masks_to_use = []
         self.resamples = self.dd.get_attribute("resample_nums")
@@ -34,7 +33,6 @@ class ModelInpainter:
         self.visualizer = False
         self.compute_coverage_plot = False
         self.model_name = "default"
-        self.set_music()
 
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s - %(levelname)s - %(message)s',
@@ -66,11 +64,6 @@ class ModelInpainter:
         self.standardizer_strategy = checkpoint.get('standardizer_strategy', self.dd.get_standardizer())
 
         self.dd.reinitialize(self.min_beta, self.max_beta, self.n_steps, self.standardizer_strategy)
-
-    def set_music(self, music_path='was-that-the-bite-of-87-markiplier-original-video-clip-sound-clip.mp3'):
-        self.music_path = os.path.join(os.path.dirname(__file__), music_path)
-        pygame.mixer.init()
-        pygame.mixer.music.load(self.music_path)
 
     def _load_checkpoint(self):
         self.best_model = MyDDPMGaussian(MyUNet(self.n_steps), n_steps=self.n_steps, device=self.dd.get_device())
@@ -124,7 +117,6 @@ class ModelInpainter:
 
     def _inpaint_testing(self, mask_generator: MaskGenerator, image_counter: int, file: csv.writer):
         writer = csv.writer(file)
-        writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
 
         num_images_to_process = self.dd.get_attribute('num_images_to_process')
         n_samples = self.dd.get_attribute('n_samples')
@@ -134,9 +126,6 @@ class ModelInpainter:
                   desc=f"[{self.model_name}] Mask: {mask_generator}", colour="#00ffff") as main_pbar:
 
             for step, batch in enumerate(loader):
-                if step % 100 == 87:
-                    pygame.mixer.music.play()
-                    
                 if image_counter >= num_images_to_process:
                     break
 
@@ -202,26 +191,30 @@ class ModelInpainter:
 
         return image_counter
 
-    def begin_inpainting(self):
-        if len(self.masks_to_use) == 0:
-            raise Exception('No masks available! Use `add_mask(...)` before running.')
-
-        with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
+    def write_header(self):
+        with open(self.csv_file, 'w', newline="") as file:
             writer = csv.writer(file)
             writer.writerow(
                 ["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
 
+    def _set_up_model(self, model_path):
+        self.store_path = model_path
+        self.model_name = os.path.splitext(os.path.basename(model_path))[0]
+        self.set_results_path(f"./results/{self.model_name}/")
+
+        self._configure_model()
+        self._load_checkpoint()
+        self._load_dataset()
+
+    def begin_inpainting(self):
+        if len(self.masks_to_use) == 0:
+            raise Exception('No masks available! Use `add_mask(...)` before running.')
+
         for model_path in self.model_paths:
             try:
-                self.store_path = model_path
-                self.model_name = os.path.splitext(os.path.basename(model_path))[0]
-                self.set_results_path(f"./results/{self.model_name}/")
+                self._set_up_model(model_path)
 
-                self._configure_model()
-                self._load_checkpoint()
-                self._load_dataset()
-
-                with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
+                with open(self.csv_file, 'w', newline="") as file:
                     for mask in self.masks_to_use:
                         logging.info(f"Running mask {mask} with model {self.model_name}")
                         image_counter = self._inpaint_testing(mask, 0, file)
@@ -246,8 +239,6 @@ class ModelInpainter:
         self.add_models(models)
         if len(self.model_paths) == 0:
             print("no models in model_paths attribute in data.yaml")
-
-
 
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
