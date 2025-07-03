@@ -2,7 +2,6 @@ import csv
 import sys
 import torch
 import logging
-import pygame
 import os.path
 import numpy as np
 from tqdm import tqdm
