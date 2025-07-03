@@ -27,6 +27,8 @@ class ModelInpainter:
     def __init__(self):
         self.dd = DDInitializer()
         self.set_results_path()
+        self.csv_file = f"{self.results_path}inpainting_xl_data.csv"
+        self.write_header()
         self.model_paths = []
         self.masks_to_use = []
         self.resamples = self.dd.get_attribute("resample_nums")
@@ -58,18 +60,21 @@ class ModelInpainter:
             return
         self.model_paths.append(model_path)
 
-    def add_models(self, model_path_list: list):
+    def add_models(self, model_path_list : list):
         for path in model_path_list:
             self.add_model(path)
 
     def _configure_model(self):
         checkpoint = torch.load(self.store_path, map_location=self.dd.get_device(), weights_only=False)
         self.model_state_dict = checkpoint.get('model_state_dict', checkpoint)
+
         self.n_steps = checkpoint.get('n_steps', self.dd.get_attribute("noise_steps"))
         self.min_beta = checkpoint.get('min_beta', self.dd.get_attribute("min_beta"))
         self.max_beta = checkpoint.get('max_beta', self.dd.get_attribute("max_beta"))
+
         self.noise_strategy = checkpoint.get('noise_strategy', self.dd.get_noise_strategy())
         self.standardizer_strategy = checkpoint.get('standardizer_strategy', self.dd.get_standardizer())
+
         self.dd.reinitialize(self.min_beta, self.max_beta, self.n_steps, self.standardizer_strategy)
 
     def _load_checkpoint(self):
@@ -107,7 +112,6 @@ class ModelInpainter:
     def compute_avg_distance_to_seen(self, mask_tensor):
         cropped_mask = top_left_crop(mask_tensor, 44, 94).cpu()
 
-        # Select a single channel — assume first channel is representative
         if cropped_mask.ndim == 4:
             cropped_mask = cropped_mask[0, 0]  # From shape [1, 2, H, W] to [H, W]
 
@@ -191,7 +195,6 @@ class ModelInpainter:
 
     def _inpaint_testing(self, mask_generator: MaskGenerator, image_counter: int, file: csv.writer):
         writer = csv.writer(file)
-        writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
         num_images_to_process = self.dd.get_attribute('num_images_to_process')
         n_samples = self.dd.get_attribute('n_samples')
         loader = self.val_loader
@@ -200,9 +203,6 @@ class ModelInpainter:
                   desc=f"[{self.model_name}] Mask: {mask_generator}", colour="#00ffff") as main_pbar:
 
             for step, batch in enumerate(loader):
-                if step % 100 == 87:
-                    pygame.mixer.music.play()
-
                 if image_counter >= num_images_to_process:
                     break
 
@@ -267,26 +267,29 @@ class ModelInpainter:
 
         return image_counter
 
+    def write_header(self):
+        with open(self.csv_file, 'w', newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
+
+    def _set_up_model(self, model_path):
+        self.store_path = model_path
+        self.model_name = os.path.splitext(os.path.basename(model_path))[0]
+        self.set_results_path(f"./results/{self.model_name}/")
+
+        self._configure_model()
+        self._load_checkpoint()
+        self._load_dataset()
 
     def begin_inpainting(self):
         if len(self.masks_to_use) == 0:
-            raise Exception('No masks available! Use add_mask(...) before running.')
-
-        with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
-            writer = csv.writer(file)
-            writer.writerow(
-                ["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
+            raise Exception('No masks available! Use `add_mask(...)` before running.')
 
         for model_path in self.model_paths:
             try:
-                self.store_path = model_path
-                self.model_name = os.path.splitext(os.path.basename(model_path))[0]
-                self.set_results_path(f"./results/{self.model_name}/")
-                self._configure_model()
-                self._load_checkpoint()
-                self._load_dataset()
+                self._set_up_model(model_path)
 
-                with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
+                with open(self.csv_file, 'w', newline="") as file:
                     for mask in self.masks_to_use:
                         logging.info(f"Running mask {mask} with model {self.model_name}")
                         image_counter = self._inpaint_testing(mask, 0, file)
@@ -314,6 +317,8 @@ class ModelInpainter:
         self.add_models(models)
         if len(self.model_paths) == 0:
             print("no models in model_paths attribute in data.yaml")
+
+
 
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
