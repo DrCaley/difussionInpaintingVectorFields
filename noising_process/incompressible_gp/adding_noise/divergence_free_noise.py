@@ -43,8 +43,6 @@ def gaussian_each_step_divergence_free_noise(shape: torch.Size, t: torch.Tensor,
 
     betas = dd.get_betas()
 
-    os.makedirs("noise_images", exist_ok=True)
-
     batch, _, height, width = shape
     output = torch.zeros((batch, 2, height, width), device=device)
 
@@ -87,8 +85,6 @@ def gaussian_divergence_free_noise(shape: torch.Size, t: torch.Tensor, device='c
     v_mean = dd.get_attribute('v_training_mean')
 
     alpha_bars = dd.get_alpha_bars()
-
-    os.makedirs("noise_images", exist_ok=True)
 
     batch, _, height, width = shape
     output = torch.zeros((batch, 2, height, width), device=device)

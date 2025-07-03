@@ -1,4 +1,3 @@
-# === FULLY INTEGRATED CODE ===
 import csv
 import sys
 import torch
@@ -8,8 +7,8 @@ import os.path
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-import scipy.ndimage
 from torch.utils.data import DataLoader
+from scipy.ndimage import distance_transform_edt
 
 CURRENT_DIR = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
@@ -33,8 +32,10 @@ class ModelInpainter:
         self.resamples = self.dd.get_attribute("resample_nums")
         self.mse_ddpm_list = []
         self.mse_gp_list = []
-        self.mse_ddpm_distance_list = []
-        self.mse_gp_distance_list = []
+        self.mse_distance_ddpm = []
+        self.mse_distance_gp = []
+        self.pixel_height = 1.0
+        self.pixel_width = 1.0
         self.visualizer = False
         self.compute_coverage_plot = False
         self.model_name = "default"
@@ -47,9 +48,55 @@ class ModelInpainter:
         self.results_path = results_path + "/results/"
         os.makedirs(self.results_path, exist_ok=True)
 
-    def set_pixel_dimensions(self, pixel_height_m: float, pixel_width_m: float):
-        self.pixel_height_m = pixel_height_m
-        self.pixel_width_m = pixel_width_m
+    def set_pixel_dimensions(self, pixel_height, pixel_width):
+        self.pixel_height = pixel_height
+        self.pixel_width = pixel_width
+
+    def add_model(self, model_path: str):
+        if not os.path.exists(model_path):
+            print(f"Warning: {model_path} does not exist and will be skipped.")
+            return
+        self.model_paths.append(model_path)
+
+    def add_models(self, model_path_list: list):
+        for path in model_path_list:
+            self.add_model(path)
+
+    def _configure_model(self):
+        checkpoint = torch.load(self.store_path, map_location=self.dd.get_device(), weights_only=False)
+        self.model_state_dict = checkpoint.get('model_state_dict', checkpoint)
+        self.n_steps = checkpoint.get('n_steps', self.dd.get_attribute("noise_steps"))
+        self.min_beta = checkpoint.get('min_beta', self.dd.get_attribute("min_beta"))
+        self.max_beta = checkpoint.get('max_beta', self.dd.get_attribute("max_beta"))
+        self.noise_strategy = checkpoint.get('noise_strategy', self.dd.get_noise_strategy())
+        self.standardizer_strategy = checkpoint.get('standardizer_strategy', self.dd.get_standardizer())
+        self.dd.reinitialize(self.min_beta, self.max_beta, self.n_steps, self.standardizer_strategy)
+
+    def _load_checkpoint(self):
+        self.best_model = MyDDPMGaussian(MyUNet(self.n_steps), n_steps=self.n_steps, device=self.dd.get_device())
+        try:
+            logging.info("Loading model")
+            self.best_model.load_state_dict(self.model_state_dict)
+            self.best_model.eval()
+            logging.info("Model loaded successfully")
+        except Exception as e:
+            logging.error(f"Error loading model: {e}")
+            exit(1)
+
+    def _load_dataset(self):
+        try:
+            logging.info("Preparing data")
+            batch_size = self.dd.get_attribute("inpainting_batch_size")
+            self.train_loader = DataLoader(self.dd.get_training_data(), batch_size=batch_size, shuffle=True)
+            self.test_loader = DataLoader(self.dd.get_test_data(), batch_size=batch_size)
+            self.val_loader = DataLoader(self.dd.get_validation_data(), batch_size=batch_size)
+            logging.info("Data prepared successfully")
+        except Exception as e:
+            logging.error(f"Error loading data: {e}")
+            exit(1)
+
+    def add_mask(self, mask: MaskGenerator):
+        self.masks_to_use.append(mask)
 
     def compute_mask_percentage(self, mask_tensor):
         cropped_mask = top_left_crop(mask_tensor, 44, 94)
@@ -57,152 +104,202 @@ class ModelInpainter:
         masked_pixels = cropped_mask.sum().item()
         return 100 * masked_pixels / total_pixels
 
-    def compute_average_mask_distance(self, mask: torch.Tensor, pixel_height: float, pixel_width: float) -> float:
-        mask_np = mask.squeeze().cpu().numpy().astype(bool)
-        distance_map = scipy.ndimage.distance_transform_edt(mask_np, sampling=(pixel_height, pixel_width))
-        return float(distance_map[mask_np].mean()) if mask_np.any() else 0.0
+    def compute_avg_distance_to_seen(self, mask_tensor):
+        cropped_mask = top_left_crop(mask_tensor, 44, 94).cpu()
+
+        # Select a single channel — assume first channel is representative
+        if cropped_mask.ndim == 4:
+            cropped_mask = cropped_mask[0, 0]  # From shape [1, 2, H, W] to [H, W]
+
+        cropped_mask = cropped_mask.numpy()
+        distances = distance_transform_edt(cropped_mask, sampling=[self.pixel_height, self.pixel_width])
+        return float(np.sum(distances * cropped_mask) / np.sum(cropped_mask))
 
     def plot_mse_vs_mask_percentage(self):
         if not self.mse_ddpm_list:
+            logging.warning("No DDPM MSE data to plot.")
             return
         percentages, mses = zip(*self.mse_ddpm_list)
-        plt.figure()
+        plt.figure(figsize=(8, 5))
         plt.scatter(percentages, mses, alpha=0.7, color='blue')
-        plt.title(f"MSE vs. Mask Coverage (DDPM): {self.model_name}")
-        plt.xlabel("Mask Coverage %")
-        plt.ylabel("MSE")
+        plt.title(f"MSE vs. Mask Coverage Percentage (Model: {self.model_name})")
+        plt.xlabel("Percentage of Masked Pixels")
+        plt.ylabel("MSE (DDPM)")
         plt.grid(True)
-        plt.savefig(os.path.join(self.results_path, f"mse_vs_mask_ddpm_{self.model_name}.png"))
+        plt.tight_layout()
+        plot_path = os.path.join(self.results_path, f"mse_vs_mask_percentage_{self.model_name}.png")
+        plt.savefig(plot_path)
         plt.close()
+        logging.info(f"Saved DDPM MSE vs. mask percentage plot to {plot_path}")
 
     def plot_mse_vs_mask_percentage_gp(self):
         if not self.mse_gp_list:
+            logging.warning("No GP MSE data to plot.")
             return
         percentages, mses = zip(*self.mse_gp_list)
-        plt.figure()
+        plt.figure(figsize=(8, 5))
         plt.scatter(percentages, mses, alpha=0.7, color='green')
-        plt.title(f"MSE vs. Mask Coverage (GP): {self.model_name}")
-        plt.xlabel("Mask Coverage %")
-        plt.ylabel("MSE")
+        plt.title(f"GP Fill MSE vs. Mask Coverage Percentage (Model: {self.model_name})")
+        plt.xlabel("Percentage of Masked Pixels")
+        plt.ylabel("MSE (GP Fill)")
         plt.grid(True)
-        plt.savefig(os.path.join(self.results_path, f"mse_vs_mask_gp_{self.model_name}.png"))
+        plt.tight_layout()
+        plot_path = os.path.join(self.results_path, f"gp_mse_vs_mask_percentage_{self.model_name}.png")
+        plt.savefig(plot_path)
         plt.close()
+        logging.info(f"Saved GP Fill MSE vs. mask percentage plot to {plot_path}")
 
-    def plot_mse_vs_avg_distance_ddpm(self):
-        if not self.mse_ddpm_distance_list:
+    def plot_mse_vs_distance(self):
+        if not self.mse_distance_ddpm:
             return
-        distances, mses = zip(*self.mse_ddpm_distance_list)
-        plt.figure()
-        plt.scatter(distances, mses, alpha=0.7, color='blue')
-        plt.title(f"MSE vs. Avg Distance (DDPM): {self.model_name}")
-        plt.xlabel("Average Distance (m)")
+        x_ddpm, y_ddpm = zip(*self.mse_distance_ddpm)
+        x_gp, y_gp = zip(*self.mse_distance_gp)
+
+        plt.figure(figsize=(8, 5))
+        plt.scatter(x_ddpm, y_ddpm, color='blue', alpha=0.6, label="DDPM")
+        plt.scatter(x_gp, y_gp, color='green', alpha=0.6, label="GP Fill")
+        plt.xlabel("Average Distance to Seen Pixel")
         plt.ylabel("MSE")
+        plt.title(f"MSE vs. Avg Distance to Seen Pixel (Model: {self.model_name})")
         plt.grid(True)
-        plt.savefig(os.path.join(self.results_path, f"mse_vs_distance_ddpm_{self.model_name}.png"))
+        plt.legend()
+        plt.tight_layout()
+        path = os.path.join(self.results_path, f"mse_vs_distance_{self.model_name}.png")
+        plt.savefig(path)
         plt.close()
+        logging.info(f"Saved MSE vs. distance plot to {path}")
 
-    def plot_mse_vs_avg_distance_gp(self):
-        if not self.mse_gp_distance_list:
-            return
-        distances, mses = zip(*self.mse_gp_distance_list)
-        plt.figure()
-        plt.scatter(distances, mses, alpha=0.7, color='green')
-        plt.title(f"MSE vs. Avg Distance (GP): {self.model_name}")
-        plt.xlabel("Average Distance (m)")
-        plt.ylabel("MSE")
-        plt.grid(True)
-        plt.savefig(os.path.join(self.results_path, f"mse_vs_distance_gp_{self.model_name}.png"))
-        plt.close()
-
-    def export_mse_vs_mask_coverage_csv(self):
-        path = os.path.join(self.results_path, f"mse_vs_mask_coverage_{self.model_name}.csv")
-        with open(path, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(["Mask %", "MSE_DDPM", "MSE_GP"])
-            for (pct, mse_d), (_, mse_g) in zip(self.mse_ddpm_list, self.mse_gp_list):
-                writer.writerow([pct, mse_d, mse_g])
-
-    def export_mse_vs_avg_distance_csv(self):
-        path = os.path.join(self.results_path, f"mse_vs_distance_{self.model_name}.csv")
-        with open(path, 'w', newline='') as f:
+        csv_path = os.path.join(self.results_path, f"mse_vs_distance_{self.model_name}.csv")
+        with open(csv_path, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(["Avg_Distance", "MSE_DDPM", "MSE_GP"])
-            for (dist, mse_d), (_, mse_g) in zip(self.mse_ddpm_distance_list, self.mse_gp_distance_list):
-                writer.writerow([dist, mse_d, mse_g])
+            for i in range(len(self.mse_distance_ddpm)):
+                writer.writerow([x_ddpm[i], y_ddpm[i], y_gp[i]])
+
+    def export_mse_vs_mask_coverage_csv(self):
+        csv_path = os.path.join(self.results_path, f"mse_vs_mask_coverage_{self.model_name}.csv")
+        with open(csv_path, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(["Mask Percentage", "MSE_DDPM", "MSE_GP"])
+            for i in range(min(len(self.mse_ddpm_list), len(self.mse_gp_list))):
+                writer.writerow([
+                    self.mse_ddpm_list[i][0],
+                    self.mse_ddpm_list[i][1],
+                    self.mse_gp_list[i][1]
+                ])
+        logging.info(f"Exported MSE coverage data to {csv_path}")
 
     def _inpaint_testing(self, mask_generator: MaskGenerator, image_counter: int, file: csv.writer):
         writer = csv.writer(file)
         writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
-        num_images = self.dd.get_attribute('num_images_to_process')
+        num_images_to_process = self.dd.get_attribute('num_images_to_process')
+        n_samples = self.dd.get_attribute('n_samples')
         loader = self.val_loader
 
-        with tqdm(total=min(len(loader.dataset), num_images)) as main_pbar:
+        with tqdm(total=min(len(loader.dataset), num_images_to_process),
+                  desc=f"[{self.model_name}] Mask: {mask_generator}", colour="#00ffff") as main_pbar:
+
             for step, batch in enumerate(loader):
-                if image_counter >= num_images:
+                if step % 100 == 87:
+                    pygame.mixer.music.play()
+
+                if image_counter >= num_images_to_process:
                     break
 
-                input_image = batch[0].to(self.dd.get_device())
-                input_image_original = self.dd.get_standardizer().unstandardize(input_image.squeeze(0)).unsqueeze(0)
-                land_mask = (input_image_original.abs() > 1e-5).float()
-                mask = mask_generator.generate_mask(input_image.shape) * land_mask
+                device = self.dd.get_device()
+                input_image = batch[0].to(device)
+                input_image_original = self.dd.get_standardizer().unstandardize(torch.squeeze(input_image, 0)).to(device)
+                input_image_original = torch.unsqueeze(input_image_original, 0)
+                land_mask = (input_image_original.abs() > 1e-5).float().to(device)
+                raw_mask = mask_generator.generate_mask(input_image.shape)
+                mask = raw_mask * land_mask
+                num_lines = mask_generator.get_num_lines()
 
-                for resample in self.resamples:
-                    ddpm_out = inpaint_generate_new_images(self.best_model, input_image, mask, 1, device=self.dd.get_device(), resample_steps=resample, noise_strategy=self.noise_strategy)
-                    ddpm_out = self.dd.get_standardizer().unstandardize(ddpm_out.squeeze(0)).unsqueeze(0)
-                    gp_out = gp_fill(input_image_original, mask)
+                with torch.no_grad():
+                    for resample in self.resamples:
+                        for i in tqdm(range(n_samples), leave=False, desc="Samples", colour="#006666"):
+                            final_image_ddpm = inpaint_generate_new_images(
+                                self.best_model, input_image, mask, n_samples=1,
+                                device=device, resample_steps=resample, noise_strategy=self.noise_strategy
+                            )
 
-                    input_crop = top_left_crop(input_image_original, 44, 94)
-                    ddpm_crop = top_left_crop(ddpm_out, 44, 94)
-                    gp_crop = top_left_crop(gp_out, 44, 94)
-                    mask_crop = top_left_crop(mask, 44, 94)
+                            standardizer = self.dd.get_standardizer()
+                            final_image_ddpm = torch.unsqueeze(standardizer.unstandardize(torch.squeeze(final_image_ddpm, 0)).to(device), 0)
+                            gp_field = gp_fill(input_image_original, mask)
 
-                    mse_ddpm = calculate_mse(input_crop, ddpm_crop, mask_crop)
-                    mse_gp = calculate_mse(input_crop, gp_crop, mask_crop)
-                    pct = self.compute_mask_percentage(mask)
-                    dist = self.compute_average_mask_distance(mask_crop, self.pixel_height_m, self.pixel_width_m)
+                            input_image_original_cropped = top_left_crop(input_image_original, 44, 94).to(device)
+                            final_image_ddpm_cropped = top_left_crop(final_image_ddpm, 44, 94).to(device)
+                            mask_cropped = top_left_crop(mask, 44, 94).to(device)
+                            gp_field_cropped = top_left_crop(gp_field, 44, 94).to(device)
 
-                    self.mse_ddpm_list.append((pct, mse_ddpm.item()))
-                    self.mse_gp_list.append((pct, mse_gp.item()))
-                    self.mse_ddpm_distance_list.append((dist, mse_ddpm.item()))
-                    self.mse_gp_distance_list.append((dist, mse_gp.item()))
+                            mse_ddpm = calculate_mse(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped)
+                            mse_gp = calculate_mse(input_image_original_cropped, gp_field_cropped, mask_cropped)
+                            mask_percentage = self.compute_mask_percentage(mask)
 
-                    writer.writerow([self.model_name, image_counter, mask_generator, mask_generator.get_num_lines(), resample, mse_ddpm.item(), pct])
+                            base_id = f"{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}"
+                            torch.save(final_image_ddpm_cropped, f"{self.results_path}ddpm{base_id}.pt")
+                            torch.save(mask_cropped, f"{self.results_path}mask{base_id}.pt")
+                            torch.save(input_image_original_cropped, f"{self.results_path}initial{base_id}.pt")
+                            torch.save(gp_field_cropped, f"{self.results_path}gp_field{base_id}.pt")
+
+                            writer.writerow([self.model_name, image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mask_percentage])
+
+                            if self.compute_coverage_plot:
+                                self.mse_ddpm_list.append((mask_percentage, mse_ddpm.item()))
+                                self.mse_gp_list.append((mask_percentage, mse_gp.item()))
+                                avg_dist = self.compute_avg_distance_to_seen(mask_cropped)
+                                self.mse_distance_ddpm.append((avg_dist, mse_ddpm.item()))
+                                self.mse_distance_gp.append((avg_dist, mse_gp.item()))
+
+                            if self.visualizer:
+                                ptv = PTVisualizer(mask_type=mask_generator, sample_num=batch[1].item(),
+                                                   vector_scale=self.vector_scale, num_lines=num_lines, resamples=resample, results_dir=self.results_path)
+                                ptv.visualize()
+                                ptv.calc()
+
+                            del final_image_ddpm, input_image_original_cropped, mask_cropped, gp_field
+
+                    del input_image, input_image_original, land_mask, mask
+                    torch.cuda.empty_cache()
 
                 image_counter += 1
                 main_pbar.update(1)
+
         return image_counter
 
+
     def begin_inpainting(self):
-        if not self.masks_to_use:
-            raise Exception("No masks added.")
+        if len(self.masks_to_use) == 0:
+            raise Exception('No masks available! Use add_mask(...) before running.')
+
+        with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                ["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
 
         for model_path in self.model_paths:
-            self.store_path = model_path
-            self.model_name = os.path.splitext(os.path.basename(model_path))[0]
-            self.set_results_path(f"./results/{self.model_name}/")
-            self._configure_model()
-            self._load_checkpoint()
-            self._load_dataset()
+            try:
+                self.store_path = model_path
+                self.model_name = os.path.splitext(os.path.basename(model_path))[0]
+                self.set_results_path(f"./results/{self.model_name}/")
+                self._configure_model()
+                self._load_checkpoint()
+                self._load_dataset()
 
-            with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
-                for mask in self.masks_to_use:
-                    self._inpaint_testing(mask, 0, file)
+                with open(f"{self.results_path}inpainting_xl_data.csv", 'w', newline="") as file:
+                    for mask in self.masks_to_use:
+                        logging.info(f"Running mask {mask} with model {self.model_name}")
+                        image_counter = self._inpaint_testing(mask, 0, file)
 
-            if self.compute_coverage_plot:
-                self.plot_mse_vs_mask_percentage()
-                self.plot_mse_vs_mask_percentage_gp()
-                self.export_mse_vs_mask_coverage_csv()
-                self.plot_mse_vs_avg_distance_ddpm()
-                self.plot_mse_vs_avg_distance_gp()
-                self.export_mse_vs_avg_distance_csv()
+                if self.compute_coverage_plot:
+                    self.plot_mse_vs_mask_percentage()
+                    self.plot_mse_vs_mask_percentage_gp()
+                    self.export_mse_vs_mask_coverage_csv()
+                    self.plot_mse_vs_distance()
 
-    def add_model(self, path):
-        if os.path.exists(path):
-            self.model_paths.append(path)
-
-    def add_models(self, paths):
-        for p in paths:
-            self.add_model(p)
+            except Exception as e:
+                logging.error(f"Error inpainting model {model_path}: {e}", stack_info=True)
+                continue
 
     def visualize_images(self, vector_scale=0.15):
         self.visualizer = True
@@ -212,14 +309,19 @@ class ModelInpainter:
         self.compute_coverage_plot = True
 
     def load_models_from_yaml(self):
-        self.add_models(self.dd.get_attribute('model_paths'))
+        models = self.dd.get_attribute('model_paths')
+        print("adding models from data.yaml")
+        self.add_models(models)
+        if len(self.model_paths) == 0:
+            print("no models in model_paths attribute in data.yaml")
 
-# === USAGE ===
+# === USAGE EXAMPLE ===
 if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
-    mi.add_mask(CoverageMaskGenerator(0.8))
+
+    mi.add_mask(CoverageMaskGenerator(0.80))
+
     mi.visualize_images()
     mi.find_coverage()
-    mi.set_pixel_dimensions(1.0, 1.0)
     mi.begin_inpainting()
