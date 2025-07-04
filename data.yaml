@@ -20,7 +20,7 @@ standardizer_type: zscore
                   # maxmag
                   # units
 
-noise_function: div_free
+noise_function: gaussian
               # gaussian
               # div_free
               # div_gaussian
@@ -42,7 +42,7 @@ max_beta: 0.02
 # === inpainting ===
 inpainting_batch_size: 1
 num_images_to_process: 1
-n_samples: 100
+n_samples: 10
 resample_nums: [5]
 
 model_paths:
