@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-from plot_vector_field_tool import make_heatmap
 
 
 DEFAULT_SAVE_DIR = "pt_visualizer_images"
