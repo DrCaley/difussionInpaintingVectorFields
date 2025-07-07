@@ -1,8 +1,9 @@
 import csv
 import os
 import sys
-from datetime import datetime
+import logging
 import pygame
+from datetime import datetime
 
 import torch
 from halo import Halo
@@ -19,6 +20,9 @@ from ddpm.neural_networks.ddpm import MyDDPMGaussian
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 from data_prep.data_initializer import DDInitializer
 from concurrent.futures import ThreadPoolExecutor
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 class TrainOceanXL():
     """
@@ -37,7 +41,8 @@ class TrainOceanXL():
         """
         Initializes model, datasets, loaders, and all training configs using DDInitializer.
         """
-        dd = DDInitializer()
+        self.dd = DDInitializer()
+        dd = self.dd
         self._setup_paths_and_files(dd)
         self.device = dd.get_device()
         self.n_steps = dd.get_attribute('noise_steps')
@@ -92,7 +97,7 @@ class TrainOceanXL():
             self.model_to_retrain = path
             self.continue_training = True
 
-    def set_music(self, music_path = 'was-that-the-bite-of-87-markiplier-original-video-clip-sound-clip.mp3'): #'music.mp3'):
+    def set_music(self, music_path = 'music.mp3'): #'music.mp3'):
         self.music_path = os.path.join(os.path.dirname(__file__), music_path)
 
     def _setup_paths_and_files(self, dd):
@@ -102,6 +107,7 @@ class TrainOceanXL():
         self.set_timestamp()
         self.set_output_directory()
         self.set_csv_file()
+        self.save_config_used()
         self.set_model_file()
         self.set_plot_file()
         self.set_csv_description(dd)
@@ -141,6 +147,12 @@ class TrainOceanXL():
         self.output_directory = os.path.join(os.path.dirname(__file__), f"{training_output}/")
         os.makedirs(self.output_directory, exist_ok=True)
 
+    def save_config_used(self):
+        import yaml
+        with open(os.path.join(self.output_directory, "config_used.yaml"), 'w') as f:
+            yaml.dump(self.dd.get_full_config(), f)
+        logging.info("💾 Saved training config to config_used.yaml")
+
     def set_csv_file(self, csv_file="training_log"):
         """
         Creates the path to the CSV log file using the timestamp.
@@ -148,6 +160,7 @@ class TrainOceanXL():
         Args:
             csv_file (str, optional): Base name for CSV file.
         """
+
         csv_file = f"{self.output_directory}{csv_file}_{self.timestamp}.csv"
         self.csv_file = os.path.join(os.path.dirname(__file__), csv_file)
         
@@ -229,6 +242,7 @@ class TrainOceanXL():
             test_losses = checkpoint['test_losses']
             best_test_loss = checkpoint['best_test_loss']
             print(f"Resuming training from epoch {start_epoch}. Training for {n_epochs} epochs!")
+            logging.info(f"Resuming training from epoch {start_epoch}. Training for {n_epochs} epochs!")
 
         best_epoch = start_epoch
 
@@ -242,7 +256,7 @@ class TrainOceanXL():
         for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
             if(epoch % 100 == 87):
                 pygame.mixer.music.play()
-            
+
             epoch_loss = 0.0
             ddpm.train()
 
@@ -348,7 +362,16 @@ class TrainOceanXL():
         """
         Sets up optimizer and kicks off training based on config mode.
         """
+        logging.info("🔧 Starting DDPM training...")
+        logging.info(f"👾 Device: {self.device}")
+        logging.info(f"📦 Batch size: {self.batch_size}")
+        logging.info(f"🧠 Epochs: {self.n_epochs}")
+        logging.info(f"📁 Output Dir: {self.output_directory}")
+
         optimizer = Adam(self.ddpm.parameters(), lr=self.lr)
+
+        if os.path.exists(self.csv_file):
+            logging.warning("⚠️ CSV log already exists. This training run may overwrite it.")
 
         if self.retrain_mode:
             self.retrain_this()
@@ -359,11 +382,18 @@ class TrainOceanXL():
             # pygame.mixer.music.play()
             self.training_loop(optimizer, self.loss_strategy)
 
-
+        print("🎉 Training finished successfully!")
         print("last model saved in:", self.model_file)
-        print("best model weights saved in:", self.best_model_weights)
         print("best model checkpoint saved in:", self.best_model_checkpoint)
+        logging.info("🎉 Training finished successfully!")
+        logging.info(f"📦 Final model: {self.model_file}")
+        logging.info(f"🏆 Best model: {self.best_model_checkpoint}")
 
 if __name__ == '__main__':
-    trainer = TrainOceanXL()
-    trainer.train()
+    try:
+        trainer = TrainOceanXL()
+        trainer.train()
+    except Exception as e:
+        logging.error("🚨 Oops! Something went wrong during training.")
+        logging.error(f"💥 Error: {str(e)}")
+        print("Training crashed. Check the logs or ask your local neighborhood AI expert 🧠.")

@@ -2,7 +2,6 @@ import csv
 import sys
 import torch
 import logging
-import pygame
 import os.path
 import numpy as np
 from tqdm import tqdm
@@ -86,7 +85,7 @@ class ModelInpainter:
             logging.info("Model loaded successfully")
         except Exception as e:
             logging.error(f"Error loading model: {e}")
-            exit(1)
+            raise Exception(f"{e}")
 
     def _load_dataset(self):
         try:
@@ -98,7 +97,7 @@ class ModelInpainter:
             logging.info("Data prepared successfully")
         except Exception as e:
             logging.error(f"Error loading data: {e}")
-            exit(1)
+            raise Exception(f"{e}")
 
     def add_mask(self, mask: MaskGenerator):
         self.masks_to_use.append(mask)
@@ -277,6 +276,15 @@ class ModelInpainter:
         self.model_name = os.path.splitext(os.path.basename(model_path))[0]
         self.set_results_path(f"./results/{self.model_name}/")
 
+        try:
+            import yaml
+            config_path = os.path.join(self.results_path, "config.yaml")
+            with open(config_path, 'w') as f:
+                yaml.dump(self.dd.get_full_config(), f)
+            logging.info(f"Saved config to {config_path}")
+        except Exception as e:
+            logging.warning(f"Failed to save config: {e}")
+
         self._configure_model()
         self._load_checkpoint()
         self._load_dataset()
@@ -319,13 +327,14 @@ class ModelInpainter:
             print("no models in model_paths attribute in data.yaml")
 
 
-
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    mi.add_mask(CoverageMaskGenerator(0.80))
+    for percentage in np.linspace(1, 0.01, 100):
+        for _ in range(10):
+            mi.add_mask(CoverageMaskGenerator(percentage))
 
     mi.visualize_images()
     mi.find_coverage()

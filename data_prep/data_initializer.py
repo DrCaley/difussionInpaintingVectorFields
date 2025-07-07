@@ -16,6 +16,8 @@ from ddpm.helper_functions.loss_functions import LossStrategy, get_loss_strategy
 from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import STANDARDIZER_REGISTRY, Standardizer
 
+class PickleNotFoundException(Exception):
+    """Raise for my specific kind of exception"""
 
 class DDInitializer:
     _instance = None
@@ -52,6 +54,9 @@ class DDInitializer:
         self._setup_datasets(self.full_boundaries_path)
 
     def _setup_yaml_file(self, config_path) -> None:
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"{config_path} does not exist")
+
         with open(config_path, 'r') as f:
             self._config = yaml.safe_load(f)
 
@@ -65,6 +70,10 @@ class DDInitializer:
         self.alpha_bars = torch.tensor([torch.prod(self.alphas[:i + 1]) for i in range(len(self.alphas))])
 
     def _setup_tensors(self, pickle_path) -> None:
+        if not os.path.exists(pickle_path):
+            raise PickleNotFoundException("Pickle file that contains the data was not found, "
+                                          "make sure you created it with the slitting datasets python script")
+
         with open(pickle_path, 'rb') as f:
             training_data_np, validation_data_np, test_data_np = pickle.load(f)
 
@@ -189,3 +198,6 @@ class DDInitializer:
 
     def get_alpha_bars(self):
         return self.alpha_bars
+
+    def get_full_config(self):
+        return self._config

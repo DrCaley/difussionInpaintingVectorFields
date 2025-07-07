@@ -12,15 +12,32 @@ from ddpm.helper_functions.compute_divergence import compute_divergence
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from data_prep.data_initializer import DDInitializer
+from data_prep import spliting_data_sets
 from plot_vector_field_tool import plot_vector_field, make_heatmap
+from ddpm.helper_functions.vector_error_scalar_field import compute_error_field
 from noising_process.incompressible_gp.adding_noise.divergence_free_noise import layered_div_free_noise, gaussian_each_step_divergence_free_noise
 
 
 
+# Initialize data
+data_init = DDInitializer()
+
+tensor_to_draw_x = data_init.training_tensor[:, :, 0, 500]
+tensor_to_draw_y = data_init.training_tensor[:, :, 1, 500]
+
+pred_field_x = -1 * tensor_to_draw_x
+pred_field_y = -1 * tensor_to_draw_y
+
+plot_vector_field(tensor_to_draw_x, tensor_to_draw_y, file='initial_field.png', scale=5)
+plot_vector_field(pred_field_x, pred_field_y, file='ones_field.png', scale=5)
+
+make_heatmap(compute_error_field(tensor_to_draw_x, tensor_to_draw_y, pred_field_x, pred_field_y), save_path='error_scalar.png')
+
 """
 Generate a circular (rotational) vector field at each time step.
 Vector at (x, y) is perpendicular to radius vector from center.
-"""
+
 Y, X = np.meshgrid(np.linspace(-1, 1, 94), np.linspace(-1, 1, 44), indexing='ij')
 radius = np.sqrt(X**2 + Y**2) + 1e-6  # avoid div-by-zero
 
@@ -54,10 +71,10 @@ for layers in torch.linspace(1,50, 50):
 gaussian = torch.randn((2, 100, 100))
 div_gaussian = compute_divergence(gaussian[0], gaussian[1])
 
-"""
+
 plot_vector_field(gaussian[0], gaussian[1], scale=60, file=f"gaussian.png", title=f"gaussian.png")
 make_heatmap(div_gaussian, save_path=f"gaussian_div.png", title=f"gaussian_div.png")
-"""
+
 
 # Create GIFS
 images0 = [load_and_standardize_image(f) for f in sorted(div_files)]
@@ -72,3 +89,4 @@ for file_list in [field_files, div_files]:
             os.remove(f)
         except OSError as e:
             print(f"Error deleting file {f}: {e}")
+"""
