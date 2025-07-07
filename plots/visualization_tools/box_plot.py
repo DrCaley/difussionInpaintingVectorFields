@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 # Get the directory this script is in
 script_dir = os.path.dirname(os.path.abspath(__file__))
-csv_path = os.path.join(script_dir, 'inpainting_xl_data_7_3.csv')
+csv_path = os.path.join(script_dir, 'inpainting_xl_data.csv')
 
 # Load CSV
 data = pd.read_csv(csv_path)

@@ -234,6 +234,7 @@ class ModelInpainter:
                             mse_ddpm = calculate_mse(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped)
                             mse_gp = calculate_mse(input_image_original_cropped, gp_field_cropped, mask_cropped)
                             mask_percentage = self.compute_mask_percentage(mask)
+                            avg_dist = self.compute_avg_distance_to_seen(mask_cropped)
 
                             base_id = f"{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}"
                             torch.save(final_image_ddpm_cropped, f"{self.results_path}ddpm{base_id}.pt")
@@ -241,12 +242,12 @@ class ModelInpainter:
                             torch.save(input_image_original_cropped, f"{self.results_path}initial{base_id}.pt")
                             torch.save(gp_field_cropped, f"{self.results_path}gp_field{base_id}.pt")
 
-                            writer.writerow([self.model_name, image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mask_percentage])
+
+                            writer.writerow([self.model_name, image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mask_percentage, avg_dist])
 
                             if self.compute_coverage_plot:
                                 self.mse_ddpm_list.append((mask_percentage, mse_ddpm.item()))
                                 self.mse_gp_list.append((mask_percentage, mse_gp.item()))
-                                avg_dist = self.compute_avg_distance_to_seen(mask_cropped)
                                 self.mse_distance_ddpm.append((avg_dist, mse_ddpm.item()))
                                 self.mse_distance_gp.append((avg_dist, mse_gp.item()))
 
@@ -267,9 +268,10 @@ class ModelInpainter:
         return image_counter
 
     def write_header(self):
+        print("writing header")
         with open(self.csv_file, 'w', newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent"])
+            writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent", "average_pixel_distance"])
 
     def _set_up_model(self, model_path):
         self.store_path = model_path
@@ -297,7 +299,7 @@ class ModelInpainter:
             try:
                 self._set_up_model(model_path)
 
-                with open(self.csv_file, 'w', newline="") as file:
+                with open(self.csv_file, 'a', newline="") as file:
                     for mask in self.masks_to_use:
                         logging.info(f"Running mask {mask} with model {self.model_name}")
                         image_counter = self._inpaint_testing(mask, 0, file)
@@ -333,7 +335,7 @@ if __name__ == '__main__':
     mi.load_models_from_yaml()
 
     for percentage in np.linspace(1, 0.01, 100):
-        for _ in range(10):
+        for _ in range(1):
             mi.add_mask(CoverageMaskGenerator(percentage))
 
     mi.visualize_images()
