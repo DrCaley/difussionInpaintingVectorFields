@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 from data_prep.data_initializer import DDInitializer
 from data_prep import spliting_data_sets
 from plot_vector_field_tool import plot_vector_field, make_heatmap
-from ddpm.helper_functions.vector_error_scalar_field import compute_error_field
 from noising_process.incompressible_gp.adding_noise.divergence_free_noise import layered_div_free_noise, gaussian_each_step_divergence_free_noise
 
 
@@ -32,7 +31,7 @@ pred_field_y = -1 * tensor_to_draw_y
 plot_vector_field(tensor_to_draw_x, tensor_to_draw_y, file='initial_field.png', scale=5)
 plot_vector_field(pred_field_x, pred_field_y, file='ones_field.png', scale=5)
 
-make_heatmap(compute_error_field(tensor_to_draw_x, tensor_to_draw_y, pred_field_x, pred_field_y), save_path='error_scalar.png')
+
 
 """
 Generate a circular (rotational) vector field at each time step.
