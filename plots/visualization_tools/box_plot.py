@@ -1,44 +1,47 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-
-# Get the directory this script is in
-script_dir = os.path.dirname(os.path.abspath(__file__))
-csv_path = os.path.join(script_dir, 'inpainting_xl_data.csv')
+import numpy as np
 
 # Load CSV
+script_dir = os.path.dirname(os.path.abspath(__file__))
+csv_path = os.path.join(script_dir, 'mse_vs_mask_coverage_weekend_ddpm_ocean_model.csv')
 data = pd.read_csv(csv_path)
 
-# Clean MSE and mask_percent columns
-data['mse'] = pd.to_numeric(data['mse'], errors='coerce')
-data['mask_percent'] = pd.to_numeric(data['mask_percent'], errors='coerce')
+# Group by Mask Percentage and collect MSEs
+grouped_ddpm = data.groupby('Mask Percentage')['MSE_DDPM'].apply(list)
+grouped_gp = data.groupby('Mask Percentage')['MSE_GP'].apply(list)
 
-# Group by mask percentage
-grouped = data.groupby('mask_percent')['mse'].apply(list)
+# Sort by Mask Percentage
+sorted_distances = sorted(grouped_ddpm.index)
+ddpm_means = [np.mean(grouped_ddpm[dist]) for dist in sorted_distances]
+ddpm_stds = [np.std(grouped_ddpm[dist]) for dist in sorted_distances]
 
-# Prepare box plot data
-labels = [f"{pct:.1f}%" for pct in grouped.index]
-box_data = grouped.tolist()
+gp_means = [np.mean(grouped_gp[dist]) for dist in sorted_distances]
+gp_stds = [np.std(grouped_gp[dist]) for dist in sorted_distances]
 
-# Calculate positions with spacing (1 unit apart)
-n = len(box_data)
-positions = [i * 1 + 1 for i in range(n)]
+# X positions
+num_groups = len(sorted_distances)
+positions_ddpm = np.array([i * 2 for i in range(num_groups)])
+positions_gp = positions_ddpm + 0.8
 
-# Plot with vertical boxes at spaced positions
-plt.figure(figsize=(8, 6))
-plt.boxplot(box_data, vert=True, patch_artist=True,
-            boxprops=dict(facecolor='lightblue'),
-            positions=positions)
+# Plot
+plt.figure(figsize=(10, 6))
+bar_width = 0.6
 
-# Show every 10th label with adjusted tick positions
-tick_indices = list(range(0, len(labels), 5)) # Every 5th percentage label
-tick_positions = [positions[i] for i in tick_indices]
-tick_labels = [labels[i] for i in tick_indices]
+# Plot bars with error bars
+plt.bar(positions_ddpm, ddpm_means, yerr=ddpm_stds, width=bar_width, color='blue', label='MSE_DDPM', capsize=5)
+plt.bar(positions_gp, gp_means, yerr=gp_stds, width=bar_width, color='red', label='MSE_GP', capsize=5)
 
-plt.xticks(tick_positions, tick_labels, rotation=45)
-plt.title('MSE Distribution by Mask Percentage')
-plt.ylabel('MSE')
+# X-ticks centered between bar pairs
+xtick_positions = (positions_ddpm + positions_gp) / 2
+xtick_labels = [f"{d:.1f}" for d in sorted_distances]
+plt.xticks(xtick_positions, xtick_labels, rotation=45)
+
 plt.xlabel('Mask Percentage')
+plt.ylabel('MSE')
+plt.title('MSE Comparison: DDPM vs GP by Mask Percentage')
+plt.legend(loc='upper right')
 plt.tight_layout()
-plt.savefig('mse_by_mask_percentage.png', dpi=300, bbox_inches='tight')
+plt.savefig('mse_mask_comparison_errorbar.png', dpi=300)
 plt.show()
