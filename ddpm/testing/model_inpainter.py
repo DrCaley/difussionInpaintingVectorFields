@@ -39,6 +39,7 @@ class ModelInpainter:
         self.pixel_width = 1.0
         self.visualizer = False
         self.compute_coverage_plot = False
+        self.save_pt_fields = self.dd.get_attribute("save_pt_fields")
         self.model_name = "default"
 
         logging.basicConfig(level=logging.INFO,
@@ -52,6 +53,9 @@ class ModelInpainter:
     def set_pixel_dimensions(self, pixel_height, pixel_width):
         self.pixel_height = pixel_height
         self.pixel_width = pixel_width
+
+    def save_pt_files(self):
+        self.save_pt_fields = True
 
     def add_model(self, model_path: str):
         if not os.path.exists(model_path):
@@ -126,7 +130,7 @@ class ModelInpainter:
         plt.figure(figsize=(8, 5))
         plt.scatter(percentages, mses, alpha=0.7, color='blue')
         plt.title(f"MSE vs. Mask Coverage Percentage (Model: {self.model_name})")
-        plt.xlabel("Percentage of Masked Pixels")
+        plt.xlabel("Percentage of Model Predicts")
         plt.ylabel("MSE (DDPM)")
         plt.grid(True)
         plt.tight_layout()
@@ -143,7 +147,7 @@ class ModelInpainter:
         plt.figure(figsize=(8, 5))
         plt.scatter(percentages, mses, alpha=0.7, color='green')
         plt.title(f"GP Fill MSE vs. Mask Coverage Percentage (Model: {self.model_name})")
-        plt.xlabel("Percentage of Masked Pixels")
+        plt.xlabel("Percentage of Model Predicts")
         plt.ylabel("MSE (GP Fill)")
         plt.grid(True)
         plt.tight_layout()
@@ -217,10 +221,12 @@ class ModelInpainter:
                             avg_dist = self.compute_avg_distance_to_seen(mask_cropped)
 
                             base_id = f"{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}"
+
                             torch.save(final_image_ddpm_cropped, f"{self.results_path}ddpm{base_id}.pt")
                             torch.save(mask_cropped, f"{self.results_path}mask{base_id}.pt")
                             torch.save(input_image_original_cropped, f"{self.results_path}initial{base_id}.pt")
                             torch.save(gp_field_cropped, f"{self.results_path}gp_field{base_id}.pt")
+
 
                             writer.writerow([self.model_name, image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mse_gp.item(), mask_percentage, avg_dist])
 
@@ -235,6 +241,12 @@ class ModelInpainter:
                                                    vector_scale=self.vector_scale, num_lines=num_lines, resamples=resample, results_dir=self.results_path)
                                 ptv.visualize()
                                 ptv.calc()
+
+                            if not self.save_pt_fields:
+                                os.remove(f"{self.results_path}ddpm{base_id}.pt")
+                                os.remove(f"{self.results_path}mask{base_id}.pt")
+                                os.remove(f"{self.results_path}initial{base_id}.pt")
+                                os.remove(f"{self.results_path}gp_field{base_id}.pt")
 
                             del final_image_ddpm, input_image_original_cropped, mask_cropped, gp_field
 
@@ -312,6 +324,7 @@ if __name__ == '__main__':
     mi.load_models_from_yaml()
 
     for percentage in np.linspace(1, 0.01, 3):
+        print(f"adding mask with {percentage}%")
         for _ in range(1):
             mi.add_mask(CoverageMaskGenerator(percentage))
 

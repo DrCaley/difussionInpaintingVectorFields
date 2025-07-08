@@ -44,6 +44,7 @@ inpainting_batch_size: 1
 num_images_to_process: 1
 n_samples: 3
 resample_nums: [5]
+save_pt_fields: False
 
 model_paths:
   - "../trained_models/weekend_ddpm_ocean_model.pt"
