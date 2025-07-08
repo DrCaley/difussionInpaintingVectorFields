@@ -9,7 +9,6 @@ import torch
 from halo import Halo
 import matplotlib
 
-
 matplotlib.use('Agg')  # Use non-interactive backend
 from matplotlib import pyplot as plt
 from torch.optim import Adam
