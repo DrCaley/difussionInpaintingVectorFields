@@ -267,15 +267,15 @@ class TrainOceanXL():
                 n = len(x0)
                 x0 = x0.to(device)
 
-                x0_reshaped = torch.permute(x0, (1, 2, 3, 0))
+                x0_reshaped = torch.permute(x0, (1, 2, 3, 0)).to(device)
                 mask_raw = (self.standardize_strategy.unstandardize(x0_reshaped).abs() > 1e-5).float().to(device)
-                mask = torch.permute(mask_raw, (3, 0, 1, 2))
+                mask = torch.permute(mask_raw, (3, 0, 1, 2)).to(device)
 
                 t = t.to(device)
                 noise = noise.to(device)
 
                 noisy_imgs = ddpm(x0, t, noise)
-                predicted_noise, _ = ddpm.backward(noisy_imgs, t.reshape(n, -1), mask)
+                predicted_noise, _ = ddpm.backward(noisy_imgs, t.reshape(n, -1), mask).to(device)
 
                 loss = loss_function(predicted_noise, noise)
 
