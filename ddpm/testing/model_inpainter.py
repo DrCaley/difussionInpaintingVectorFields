@@ -26,7 +26,7 @@ class ModelInpainter:
     def __init__(self):
         self.dd = DDInitializer()
         self.set_results_path()
-        self.csv_file = f"{self.results_path}inpainting_xl_data.csv"
+        self.csv_file = os.path.join(self.results_path, f"inpainting_xl_data.csv")
         self.write_header()
         self.model_paths = []
         self.masks_to_use = []
@@ -172,26 +172,6 @@ class ModelInpainter:
         plt.close()
         logging.info(f"Saved MSE vs. distance plot to {path}")
 
-        csv_path = os.path.join(self.results_path, f"mse_vs_distance_{self.model_name}.csv")
-        with open(csv_path, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(["Avg_Distance", "MSE_DDPM", "MSE_GP"])
-            for i in range(len(self.mse_distance_ddpm)):
-                writer.writerow([x_ddpm[i], y_ddpm[i], y_gp[i]])
-
-    def export_mse_vs_mask_coverage_csv(self):
-        csv_path = os.path.join(self.results_path, f"mse_vs_mask_coverage_{self.model_name}.csv")
-        with open(csv_path, 'w', newline='') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(["Mask Percentage", "MSE_DDPM", "MSE_GP"])
-            for i in range(min(len(self.mse_ddpm_list), len(self.mse_gp_list))):
-                writer.writerow([
-                    self.mse_ddpm_list[i][0],
-                    self.mse_ddpm_list[i][1],
-                    self.mse_gp_list[i][1]
-                ])
-        logging.info(f"Exported MSE coverage data to {csv_path}")
-
     def _inpaint_testing(self, mask_generator: MaskGenerator, image_counter: int, file: csv.writer):
         writer = csv.writer(file)
         num_images_to_process = self.dd.get_attribute('num_images_to_process')
@@ -199,7 +179,7 @@ class ModelInpainter:
         loader = self.val_loader
 
         with tqdm(total=min(len(loader.dataset), num_images_to_process),
-                  desc=f"[{self.model_name}] Mask: {mask_generator}", colour="#00ffff") as main_pbar:
+                  desc=f"[{self.model_name}] Mask: {mask_generator}({mask_generator.get_num_lines()})", colour="#00ffff") as main_pbar:
 
             for step, batch in enumerate(loader):
                 if image_counter >= num_images_to_process:
@@ -242,8 +222,7 @@ class ModelInpainter:
                             torch.save(input_image_original_cropped, f"{self.results_path}initial{base_id}.pt")
                             torch.save(gp_field_cropped, f"{self.results_path}gp_field{base_id}.pt")
 
-
-                            writer.writerow([self.model_name, image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mask_percentage, avg_dist])
+                            writer.writerow([self.model_name, image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mse_gp.item(), mask_percentage, avg_dist])
 
                             if self.compute_coverage_plot:
                                 self.mse_ddpm_list.append((mask_percentage, mse_ddpm.item()))
@@ -268,10 +247,9 @@ class ModelInpainter:
         return image_counter
 
     def write_header(self):
-        print("writing header")
         with open(self.csv_file, 'w', newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "mse", "mask_percent", "average_pixel_distance"])
+            writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "ddp_mse", "gp_mse", "mask_percent", "average_pixel_distance"])
 
     def _set_up_model(self, model_path):
         self.store_path = model_path
@@ -307,7 +285,6 @@ class ModelInpainter:
                 if self.compute_coverage_plot:
                     self.plot_mse_vs_mask_percentage()
                     self.plot_mse_vs_mask_percentage_gp()
-                    self.export_mse_vs_mask_coverage_csv()
                     self.plot_mse_vs_distance()
 
             except Exception as e:
@@ -334,7 +311,7 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    for percentage in np.linspace(1, 0.01, 100):
+    for percentage in np.linspace(1, 0.01, 3):
         for _ in range(1):
             mi.add_mask(CoverageMaskGenerator(percentage))
 

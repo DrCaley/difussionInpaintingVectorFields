@@ -111,9 +111,21 @@ def gp_fill(tensor, mask, lengthscale=1.5, variance=1.0, noise=1e-5, use_double=
         else:
             raise RuntimeError("Cholesky decomposition failed after increasing jitter.")
 
-        # GP posterior mean
-        alpha = torch.cholesky_solve(known_values.unsqueeze(-1), L)
-        pred_mean = K_s @ alpha  # shape (N_unknown, 1)
+        K_ss = rbf_kernel(unknown_coords, unknown_coords, lengthscale, variance)
+        v = torch.cholesky_solve(known_values.unsqueeze(-1), L)
+        pred_mean = K_s @ v
+
+        # Posterior covariance
+        cov_post = K_ss - K_s @ torch.cholesky_solve(K_s.T, L)
+        cov_post += noise * torch.eye(cov_post.shape[0], device=device, dtype=dtype)  # ensure positive-definite
+
+        # Sample from multivariate normal
+        dist = torch.distributions.MultivariateNormal(pred_mean.squeeze(), covariance_matrix=cov_post)
+        sampled = dist.sample()
+
+        # Fill with samples instead of mean
+        for idx, val in zip(unknown_indices, sampled):
+            filled[0, c, idx[0], idx[1]] = val.item()
 
         # Assign predictions
         for idx, val in zip(unknown_indices, pred_mean):

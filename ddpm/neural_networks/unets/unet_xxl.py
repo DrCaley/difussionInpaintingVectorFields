@@ -37,6 +37,8 @@ class MyBlock(nn.Module):
         out = self.conv2(out)
         out = self.activation(out)
         return out
+
+
 class MyUNet(nn.Module):
     def __init__(self, n_steps=1000, time_emb_dim=100):
         super(MyUNet, self).__init__()
@@ -116,6 +118,7 @@ class MyUNet(nn.Module):
             MyBlock((64, 8, 16), 64, 64),
             MyBlock((64, 8, 16), 64, 64)  # Added layer
         )
+
         # (8x16) -> (16x32)
         self.up2 = nn.ConvTranspose2d(64, 64, 4, 2, 1)
         self.te6 = self._make_te(time_emb_dim, 128)
@@ -125,6 +128,7 @@ class MyUNet(nn.Module):
             MyBlock((32, 16, 32), 32, 32),
             MyBlock((32, 16, 32), 32, 32)  # Added layer
         )
+
         # (16x32) -> (32x64)
         self.up3 = nn.ConvTranspose2d(32, 32, 4, 2, 1)
         self.te7 = self._make_te(time_emb_dim, 64)
@@ -134,6 +138,7 @@ class MyUNet(nn.Module):
             MyBlock((16, 32, 64), 16, 16),
             MyBlock((16, 32, 64), 16, 16)  # Added layer
         )
+
         # (32x64) -> (64x128)
         self.up4 = nn.ConvTranspose2d(16, 16, 4, 2, 1)
         self.te_out = self._make_te(time_emb_dim, 32)
