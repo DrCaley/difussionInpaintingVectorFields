@@ -268,7 +268,7 @@ class TrainOceanXL():
                 x0 = x0.to(device)
 
                 x0_reshaped = torch.permute(x0, (1, 2, 3, 0))
-                mask_raw = (self.standardize_strategy.unstandardize(x0_reshaped).abs() > 1e-5).float().to(device)
+                mask_raw = (standardizer.unstandardize(x0_reshaped).abs() != 0.0).float()
                 mask = torch.permute(mask_raw, (3, 0, 1, 2))
 
                 t = t.to(device)

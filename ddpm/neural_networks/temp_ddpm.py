@@ -26,6 +26,8 @@ class MyDDPMGaussian(nn.Module):
 
     def forward(self, x0, t, epsilon=None, one_step=False):
         # Extract the shape of the input images
+        x0.to(self.device)
+        t.to(self.device)
         n, c, h, w = x0.shape
 
         if one_step:
@@ -53,4 +55,6 @@ class MyDDPMGaussian(nn.Module):
     def backward(self, x, t, mask=torch.ones((1,1,1,1))):
         # Run each image through the network for each timestep t in the vector t.
         # The network returns its estimation of the noise that was added.
+        x.to(self.device)
+        t.to(self.device)
         return self.network(x, t, mask)
