@@ -9,8 +9,6 @@ import torch
 from halo import Halo
 import matplotlib
 
-from plots.visualization_tools.forward_ddpm_process import standardizer
-
 matplotlib.use('Agg')  # Use non-interactive backend
 from matplotlib import pyplot as plt
 from torch.optim import Adam
@@ -270,7 +268,7 @@ class TrainOceanXL():
                 x0 = x0.to(device)
 
                 x0_reshaped = torch.permute(x0, (1, 2, 3, 0))
-                mask_raw = (standardizer.unstandardize(x0_reshaped).abs() != 0.0).float()
+                mask_raw = (self.standardize_strategy.unstandardize(x0_reshaped).abs() != 0.0).float()
                 mask = torch.permute(mask_raw, (3, 0, 1, 2))
 
                 t = t.to(device)
