@@ -61,7 +61,7 @@ class TrainOceanXL():
         self.batch_size = dd.get_attribute('batch_size')
         self.n_epochs = dd.get_attribute('epochs')
         self.lr = dd.get_attribute('lr')
-        self._DEFAULT_BEST = "./training_output/ddpm_ocean_model_best_checkpoint.pt"
+        self._DEFAULT_BEST = "ddpm/training/training_output/ddpm_ocean_model_best_checkpoint.pt"
 
         self.train_loader = DataLoader(dd.get_training_data(),
                                        batch_size=self.batch_size,
