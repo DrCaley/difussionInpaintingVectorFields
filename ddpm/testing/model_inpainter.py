@@ -126,7 +126,7 @@ class ModelInpainter:
         plt.figure(figsize=(8, 5))
         plt.scatter(percentages, mses, alpha=0.7, color='blue')
         plt.title(f"MSE vs. Mask Coverage Percentage (Model: {self.model_name})")
-        plt.xlabel("Percentage of Masked Pixels")
+        plt.xlabel("Percentage of Model Predicts")
         plt.ylabel("MSE (DDPM)")
         plt.grid(True)
         plt.tight_layout()
@@ -143,7 +143,7 @@ class ModelInpainter:
         plt.figure(figsize=(8, 5))
         plt.scatter(percentages, mses, alpha=0.7, color='green')
         plt.title(f"GP Fill MSE vs. Mask Coverage Percentage (Model: {self.model_name})")
-        plt.xlabel("Percentage of Masked Pixels")
+        plt.xlabel("Percentage of Model Predicts")
         plt.ylabel("MSE (GP Fill)")
         plt.grid(True)
         plt.tight_layout()
@@ -332,9 +332,7 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    for percentage in np.linspace(1, 0.01, 100):
-        for _ in range(10):
-            mi.add_mask(CoverageMaskGenerator(percentage))
+    mi.add_mask(CoverageMaskGenerator(0.8))
 
     mi.visualize_images()
     mi.find_coverage()

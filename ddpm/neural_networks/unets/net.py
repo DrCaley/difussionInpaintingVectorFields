@@ -98,6 +98,53 @@ class PConv2d(nn.Module):
 
         return output, output_mask
 
+class PTranspose2d(nn.Module):
+    def __init__(self, in_ch, out_ch, kernel_size, stride=1, padding=0):
+        super().__init__()
+        self.conv2d = nn.ConvTranspose2d(in_ch, out_ch, kernel_size, stride, padding)
+        self.mask2d = nn.ConvTranspose2d(in_ch, out_ch, kernel_size, stride, padding)
+        self.conv2d.apply(weights_init('kaiming'))
+        self.mask2d.weight.data.fill_(1.0)
+        self.mask2d.bias.data.fill_(0.0)
+
+        # mask is not updated
+        for param in self.mask2d.parameters():
+            param.requires_grad = True
+
+    def forward(self, input, input_mask):
+        # http://masc.cs.gmu.edu/wiki/partialconv
+        # C(X) = W^T * X + b, C(0) = b, D(M) = 1 * M + 0 = sum(M)
+        # W^T* (M .* X) / sum(M) + b = [C(M .* X) – C(0)] / D(M) + C(0)
+
+        input_0 = input.new_zeros(input.size())
+
+        output = F.conv_transpose2d(
+            input=input * input_mask, weight=self.conv2d.weight, bias=self.conv2d.bias,
+            stride=self.conv2d.stride, padding=self.conv2d.padding, dilation=self.conv2d.dilation,
+            groups=self.conv2d.groups)
+
+        output_0 = F.conv_transpose2d(input_0, weight=self.conv2d.weight, bias=self.conv2d.bias,
+            stride=self.conv2d.stride, padding=self.conv2d.padding, dilation=self.conv2d.dilation,
+            groups=self.conv2d.groups)
+
+        with torch.no_grad():
+            output_mask = F.conv_transpose2d(
+                input_mask, weight=self.mask2d.weight, bias=self.mask2d.bias,
+                stride=self.mask2d.stride, padding=self.mask2d.padding, dilation=self.mask2d.dilation,
+                groups=self.mask2d.groups)
+
+        n_z_ind = (output_mask != 0.0)
+        z_ind = (output_mask == 0.0)  # skip all the computation
+
+        output[n_z_ind] = \
+            (output[n_z_ind] - output_0[n_z_ind]) / output_mask[n_z_ind] + \
+            output_0[n_z_ind]
+        output[z_ind] = 0.0
+
+        output_mask[n_z_ind] = 1.0
+        output_mask[z_ind] = 0.0
+
+        return output, output_mask
 
 class PCBActiv(nn.Module):
     def __init__(self, in_ch, out_ch, bn=True, sample='none-3', activ='relu'):
