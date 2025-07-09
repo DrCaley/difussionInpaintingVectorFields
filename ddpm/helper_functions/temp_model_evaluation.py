@@ -26,7 +26,7 @@ def evaluate(model, data_loader, device):
             mask = torch.permute(mask_raw, (3, 0, 1, 2)).to(device)
 
             noisy_imgs = model(x0, t, epsilon)
-            epsilon_theta = model.backward(noisy_imgs, t.reshape(n, -1), mask)
+            epsilon_theta, _ = model.backward(noisy_imgs, t.reshape(n, -1), mask)
             loss = criterion(epsilon_theta, epsilon)
             total_loss += loss.item() * n
             count += n
