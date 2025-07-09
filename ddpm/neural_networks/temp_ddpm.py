@@ -52,7 +52,7 @@ class MyDDPMGaussian(nn.Module):
         # Return the noisy image
         return noisy
 
-    def backward(self, x, t, mask=torch.ones((1,1,1,1))):
+    def backward(self, x, t, mask):
         # Run each image through the network for each timestep t in the vector t.
         # The network returns its estimation of the noise that was added.
         x.to(self.device)
