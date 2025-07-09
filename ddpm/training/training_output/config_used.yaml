@@ -1,0 +1,29 @@
+batch_size: 35
+epochs: 2
+gpu_to_use: 1
+inpainting_batch_size: 1
+loss_function: mse
+lr: 0.001
+max_beta: 0.02
+min_beta: 0.0001
+model_paths:
+- ../trained_models/weekend_ddpm_ocean_model.pt
+model_to_retrain: ''
+n_samples: 3
+noise_function: gaussian
+noise_steps: 100
+num_images_to_process: 1
+num_workers: 0
+resample_nums:
+- 5
+retrain_mode: false
+save_pt_fields: false
+standardizer_type: zscore
+testSeed: 0
+training_mode: true
+u_training_mean: -0.06929559429949586
+u_training_std: 0.1358005549716049
+v_training_mean: -0.0323937796117541
+v_training_std: 0.08899177232117582
+w1: 0.5
+w2: 0.5

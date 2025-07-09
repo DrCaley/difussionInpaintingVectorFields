@@ -3,6 +3,7 @@ import os
 import sys
 import logging
 import pygame
+import pdb
 from datetime import datetime
 
 import torch
@@ -16,7 +17,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from ddpm.helper_functions.model_evaluation import evaluate
+from ddpm.helper_functions.temp_model_evaluation import evaluate
 from ddpm.neural_networks.temp_ddpm import MyDDPMGaussian
 from ddpm.neural_networks.unets.new_unet_xl import MyUNet
 from data_prep.data_initializer import DDInitializer
@@ -98,9 +99,6 @@ class TrainOceanXL():
             self.model_to_retrain = path
             self.continue_training = True
 
-    def set_music(self, music_path='music.mp3'):  # 'music.mp3'):
-        self.music_path = os.path.join(os.path.dirname(__file__), music_path)
-
     def _setup_paths_and_files(self, dd):
         """
         Prepares all output paths for saving models, plots, and logs.
@@ -112,7 +110,6 @@ class TrainOceanXL():
         self.set_model_file()
         self.set_plot_file()
         self.set_csv_description(dd)
-        self.set_music()
 
     def load_checkpoint(self, optimizer: torch.optim.Optimizer):
         """
@@ -216,159 +213,95 @@ class TrainOceanXL():
         and saves the best model based on test loss.
         """
         best_test_loss = float("inf")
-        print("Set best_test_loss")
         epoch_losses = []
-        print("Initialized epoch_losses")
         train_losses = []
-        print("Initialized train_losses")
         test_losses = []
-        print("Initialized test_losses")
         start_epoch = 0
-        print("Set start_epoch")
         ddpm = self.ddpm
-        print("Set ddpm")
         device = self.device
-        print("Set device")
         csv_file = self.csv_file
-        print("Set csv_file")
         n_epochs = self.n_epochs
-        print("Set n_epochs")
         plot_file = self.plot_file
-        print("Set plot_file")
         model_file = self.model_file
-        print("Set model_file")
         test_loader = self.test_loader
-        print("Set test_loader")
         train_loader = self.train_loader
-        print("Set train_loader")
         best_model_weights = self.best_model_weights
-        print("Set best_model_weights")
         best_model_checkpoint = self.best_model_checkpoint
-        print("Set best_model_checkpoint")
 
         if self.continue_training:
             checkpoint = self.load_checkpoint(optim)
-            print("Loaded checkpoint")
             start_epoch = checkpoint['epoch'] + 1
-            print("Updated start_epoch")
             epoch_losses = checkpoint['epoch_losses']
-            print("Restored epoch_losses")
             train_losses = checkpoint['train_losses']
-            print("Restored train_losses")
             test_losses = checkpoint['test_losses']
-            print("Restored test_losses")
             best_test_loss = checkpoint['best_test_loss']
-            print("Restored best_test_loss")
             print(f"Resuming training from epoch {start_epoch}. Training for {n_epochs} epochs!")
             logging.info(f"Resuming training from epoch {start_epoch}. Training for {n_epochs} epochs!")
 
         best_epoch = start_epoch
-        print("Set best_epoch")
 
         with open(self.csv_file, mode='w', newline='') as file:
-            print("Opened CSV file for writing")
             writer = csv.writer(file)
-            print("Created CSV writer")
             writer.writerow([self.description])
-            print("Wrote description row")
             writer.writerow(['Epoch', 'Epoch Loss', 'Train Loss', 'Test Loss'])
-            print("Wrote header row")
 
         for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
-            print(f"Starting epoch {epoch}")
-            if (epoch % 100 == 87):
-                pygame.mixer.music.play()
-                print("Played music")
-
             epoch_loss = 0.0
-            print("Set epoch_loss")
             ddpm.train()
-            print("Set model to train mode")
 
             for _, (x0, t, noise), in enumerate(
                     tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{start_epoch + n_epochs}",
                          colour="#005500")):
-                print("Loaded batch")
                 n = len(x0)
-                print("Got batch size")
                 x0 = x0.to(device)
-                print("Moved x0 to device")
 
                 x0_reshaped = torch.permute(x0, (1, 2, 3, 0)).to(self.device)
-                print("Permuted and moved x0_reshaped to device")
                 mask_raw = (self.standardize_strategy.unstandardize(x0_reshaped).abs() != 0.0).float().to(self.device)
-                print("Generated mask_raw")
                 mask = torch.permute(mask_raw, (3, 0, 1, 2)).to(self.device)
-                print("Permuted mask")
 
                 t = t.to(device)
-                print("Moved t to device")
                 noise = noise.to(device)
-                print("Moved noise to device")
 
                 noisy_imgs = ddpm(x0, t, noise)
-                print("Generated noisy images")
                 predicted_noise, _ = ddpm.backward(noisy_imgs, t.reshape(n, -1), mask)
-                print("Ran backward")
 
                 loss = loss_function(predicted_noise, noise)
-                print("Calculated loss")
 
                 optim.zero_grad()
-                print("Zeroed gradients")
                 loss.backward()
-                print("Backpropagated loss")
                 optim.step()
-                print("Stepped optimizer")
 
                 epoch_loss += loss.item() * len(x0) / len(train_loader.dataset)
-                print("Updated epoch_loss")
 
 
-            print("Started ThreadPoolExecutor")
             spinner = Halo("Evaluating DDPM...", spinner="dots")
             spinner.start()
-            print("Started DDPM eval spinner")
             ddpm.eval()
-            print("Set model to eval mode")
             spinner.succeed()
-            print("Completed DDPM eval spinner")
 
             spinner = Halo("Evaluating average train loss...", spinner="dots")
             spinner.start()
-            print("Started train loss spinner")
             avg_train_loss = evaluate(ddpm, train_loader, device)
-            print("Submitted train_future")
             spinner.succeed()
 
             spinner = Halo("Evaluating average test loss...", spinner="dots")
             spinner.start()
-            print("Started test loss spinner")
             avg_test_loss = evaluate(ddpm, test_loader, device)
-            print("Submitted test_future")
             spinner.succeed()
 
             epoch_losses.append(epoch_loss)
-            print("Appended to epoch_losses")
             train_losses.append(avg_train_loss)
-            print("Appended to train_losses")
             test_losses.append(avg_test_loss)
-            print("Appended to test_losses")
 
             log_string = f"\nepoch {epoch + 1}: \n"
             log_string += f"EPOCH Loss: {epoch_loss:.7f}\n"
             log_string += f"TRAIN Loss: {avg_train_loss:.7f}\n"
             log_string += f"TEST Loss: {avg_test_loss:.7f}\n"
-            print("Constructed log_string")
 
             with open(csv_file, mode='a', newline='') as file:
-                print("Opened CSV file to append")
                 writer = csv.writer(file)
-                print("Created CSV writer")
                 writer.writerow([epoch + 1, epoch_loss, avg_train_loss, avg_test_loss])
-                print("Appended row to CSV")
             ddpm.train()
-            print("Set model to train mode again")
 
             checkpoint = {
                 'epoch': epoch,
@@ -382,48 +315,31 @@ class TrainOceanXL():
                 'noise_strategy': self.noise_strategy,
                 'standardizer_type': self.standardize_strategy,
             }
-            print("Created checkpoint dict")
 
             if best_test_loss > avg_test_loss:
                 best_test_loss = avg_test_loss
-                print("New best_test_loss")
                 torch.save(ddpm.state_dict(), best_model_weights)
-                print("Saved best model weights")
                 torch.save(checkpoint, best_model_checkpoint)
-                print("Saved best model checkpoint")
                 log_string += '\033[32m' + " --> Best model ever (stored based on test loss)" + '\033[0m'
                 best_epoch = epoch
-                print("Updated best_epoch")
             else:
                 torch.save(checkpoint, model_file)
-                print("Saved regular checkpoint")
 
             log_string += (f"\nAverage test loss: {avg_test_loss:.7f} -> best: {best_test_loss:.7f}\n"
                            + f"Average train loss: {avg_train_loss:.7f}\n"
                            + f"Best Epoch: {best_epoch}")
-            print("Finalized log_string")
 
             tqdm.write(log_string)
-            print("Wrote log_string")
 
         plt.figure(figsize=(20, 10))
-        print("Created plot figure")
         plt.plot(epoch_losses, label='Epoch Loss')
-        print("Plotted epoch_losses")
         plt.plot(train_losses, label='Train Loss')
-        print("Plotted train_losses")
         plt.plot(test_losses, label='Test Loss')
-        print("Plotted test_losses")
         plt.xlabel('Epoch')
-        print("Set xlabel")
         plt.ylabel('Loss')
-        print("Set ylabel")
         plt.legend()
-        print("Added legend")
         plt.title('| || || |_')
-        print("Set title")
         plt.savefig(plot_file)
-        print("Saved plot")
 
     def train(self):
         """
@@ -444,9 +360,7 @@ class TrainOceanXL():
             self.retrain_this()
 
         if self.training_mode:
-            pygame.mixer.init()
-            pygame.mixer.music.load(self.music_path)
-            # pygame.mixer.music.play()
+            pdb.set_trace()
             self.training_loop(optimizer, self.loss_strategy)
 
         print("🎉 Training finished successfully!")
