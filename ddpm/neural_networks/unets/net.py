@@ -4,7 +4,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
+from data_prep.data_initializer import DDInitializer
 
+dd = DDInitializer()
 
 def weights_init(init_type='gaussian'):
     def init_fun(m):
@@ -68,22 +70,22 @@ class PConv2d(nn.Module):
         # C(X) = W^T * X + b, C(0) = b, D(M) = 1 * M + 0 = sum(M)
         # W^T* (M .* X) / sum(M) + b = [C(M .* X) – C(0)] / D(M) + C(0)
 
-        input_0 = input.new_zeros(input.size())
+        input_0 = input.new_zeros(input.size()).to(dd.get_device())
 
         output = F.conv2d(
             input * input_mask, self.conv2d.weight, self.conv2d.bias,
             self.conv2d.stride, self.conv2d.padding, self.conv2d.dilation,
-            self.conv2d.groups)
+            self.conv2d.groups).to(dd.get_device())
 
         output_0 = F.conv2d(input_0, self.conv2d.weight, self.conv2d.bias,
                             self.conv2d.stride, self.conv2d.padding,
-                            self.conv2d.dilation, self.conv2d.groups)
+                            self.conv2d.dilation, self.conv2d.groups).to(dd.get_device())
 
         with torch.no_grad():
             output_mask = F.conv2d(
                 input_mask, self.mask2d.weight, self.mask2d.bias,
                 self.mask2d.stride, self.mask2d.padding, self.mask2d.dilation,
-                self.mask2d.groups)
+                self.mask2d.groups).to(dd.get_device())
 
         n_z_ind = (output_mask != 0.0)
         z_ind = (output_mask == 0.0)  # skip all the computation
@@ -96,7 +98,7 @@ class PConv2d(nn.Module):
         output_mask[n_z_ind] = 1.0
         output_mask[z_ind] = 0.0
 
-        return output, output_mask
+        return output.to(dd.get_device()), output_mask.to(dd.get_device())
 
 class PTranspose2d(nn.Module):
     def __init__(self, in_ch, out_ch, kernel_size, stride=1, padding=0):
