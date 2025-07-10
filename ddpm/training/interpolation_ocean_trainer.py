@@ -5,10 +5,8 @@ import logging
 from datetime import datetime
 
 import torch
-from gast.unparser import nullcontext
 from halo import Halo
 import matplotlib
-
 
 matplotlib.use('Agg')  # Use non-interactive backend
 from matplotlib import pyplot as plt
@@ -67,7 +65,7 @@ class TrainOceanXL:
         self.batch_size = dd.get_attribute('batch_size')
         self.n_epochs = dd.get_attribute('epochs')
         self.lr = dd.get_attribute('lr')
-        self._DEFAULT_BEST = "./training_output/ddpm_ocean_model_best_checkpoint.pt"
+        self._DEFAULT_BEST = "ddpm/training/training_output/ddpm_ocean_model_best_checkpoint.pt"
 
         self.train_loader = DataLoader(dd.get_training_data(),
                                        batch_size=self.batch_size,
@@ -290,8 +288,6 @@ class TrainOceanXL:
 
                 epoch_losses.append(epoch_loss)
                 train_losses.append(avg_train_loss)
-                if(0 == 0):
-                    raise ZeroDivisionError
                 test_losses.append(avg_test_loss)
 
                 log_string = f"\nepoch {epoch + 1}: \n"
