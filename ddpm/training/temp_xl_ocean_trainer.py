@@ -2,8 +2,6 @@ import csv
 import os
 import sys
 import logging
-import pygame
-import pdb
 from datetime import datetime
 
 import torch
@@ -256,8 +254,9 @@ class TrainOceanXL():
                 x0 = x0.to(device)
 
                 x0_reshaped = torch.permute(x0, (1, 2, 3, 0)).to(self.device)
-                mask_raw = (self.standardize_strategy.unstandardize(x0_reshaped).abs() != 0.0).float().to(self.device)
-                mask = torch.permute(mask_raw, (3, 0, 1, 2)).to(self.device)
+                mask_raw = self.standardize_strategy.unstandardize(x0_reshaped)
+                mask_raw = torch.permute(mask_raw, (3, 0, 1, 2)).to(self.device)
+                mask = (mask_raw.abs() != 0.0).float().to(self.device)
 
                 t = t.to(device)
                 noise = noise.to(device)
@@ -360,7 +359,6 @@ class TrainOceanXL():
             self.retrain_this()
 
         if self.training_mode:
-            pdb.set_trace()
             self.training_loop(optimizer, self.loss_strategy)
 
         print("🎉 Training finished successfully!")
