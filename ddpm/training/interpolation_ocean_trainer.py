@@ -2,7 +2,6 @@ import csv
 import os
 import sys
 import logging
-import pygame
 import pdb
 from datetime import datetime
 
@@ -18,10 +17,9 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.temp_model_evaluation import evaluate
-from ddpm.neural_networks.temp_ddpm import MyDDPMGaussian
+from ddpm.neural_networks.interpolation_ddpm import InterpolationDDPM
 from ddpm.neural_networks.unets.new_unet_xl import MyUNet
 from data_prep.data_initializer import DDInitializer
-from concurrent.futures import ThreadPoolExecutor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -51,11 +49,15 @@ class TrainOceanXL():
         self.min_beta = dd.get_attribute('min_beta')
         self.max_beta = dd.get_attribute('max_beta')
         self.num_workers = dd.get_attribute('num_workers')
-        self.ddpm = MyDDPMGaussian(MyUNet(self.n_steps),
-                                   n_steps=self.n_steps,
-                                   min_beta=self.min_beta,
-                                   max_beta=self.max_beta,
-                                   device=self.device)
+        try:
+            self.ddpm = InterpolationDDPM(MyUNet(self.n_steps).to(self.device),
+                                     n_steps=self.n_steps,
+                                     min_beta=self.min_beta,
+                                     max_beta=self.max_beta,
+                                     device=self.device)
+        except Exception as e:
+            logging.exception("🔥 Failed to initialize MyDDPMGaussian model.")
+            raise e
         self.noise_strategy = dd.get_noise_strategy()
         self.loss_strategy = dd.get_loss_strategy()
         self.standardize_strategy = dd.get_standardizer()
@@ -63,7 +65,7 @@ class TrainOceanXL():
         self.batch_size = dd.get_attribute('batch_size')
         self.n_epochs = dd.get_attribute('epochs')
         self.lr = dd.get_attribute('lr')
-        self._DEFAULT_BEST = "./training_output/ddpm_ocean_model_best_checkpoint.pt"
+        self._DEFAULT_BEST = "ddpm/training/training_output/ddpm_ocean_model_best_checkpoint.pt"
 
         self.train_loader = DataLoader(dd.get_training_data(),
                                        batch_size=self.batch_size,
@@ -109,7 +111,6 @@ class TrainOceanXL():
         self.save_config_used()
         self.set_model_file()
         self.set_plot_file()
-        self.set_csv_description(dd)
 
     def load_checkpoint(self, optimizer: torch.optim.Optimizer):
         """
@@ -186,9 +187,6 @@ class TrainOceanXL():
         self.best_model_weights = os.path.join(os.path.dirname(__file__), best_model_weights)
         self.best_model_checkpoint = os.path.join(os.path.dirname(__file__), best_model_checkpoint)
 
-    def set_csv_description(self, dd: DDInitializer):
-        self.description = f"Standardization Method: {dd.get_attribute('standardizer_type')} | Noise: {dd.get_attribute('noise_function')} | Loss: {dd.get_attribute('loss_function')}  "
-
     def set_ddpm(self, ddpm: torch.nn.Module):
         """
         Replaces the current DDPM model.
@@ -242,104 +240,115 @@ class TrainOceanXL():
 
         with open(self.csv_file, mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow([self.description])
             writer.writerow(['Epoch', 'Epoch Loss', 'Train Loss', 'Test Loss'])
+        try:
+            for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
+                epoch_loss = 0.0
+                ddpm.train()
 
-        for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
-            epoch_loss = 0.0
-            ddpm.train()
+                for _, (x0, t, noise), in enumerate(
+                        tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{start_epoch + n_epochs}",
+                             colour="#005500")):
+                    n = len(x0)
+                    x0 = x0.to(device)
 
-            for _, (x0, t, noise), in enumerate(
-                    tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{start_epoch + n_epochs}",
-                         colour="#005500")):
-                n = len(x0)
-                x0 = x0.to(device)
+                    x0_reshaped = torch.permute(x0, (1, 2, 3, 0)).to(self.device)
+                    mask_raw = (self.standardize_strategy.unstandardize(x0_reshaped).abs() > 1e-5).float().to(self.device)
+                    mask = torch.permute(mask_raw, (3, 0, 1, 2)).to(self.device)
 
-                x0_reshaped = torch.permute(x0, (1, 2, 3, 0)).to(self.device)
-                mask_raw = (self.standardize_strategy.unstandardize(x0_reshaped).abs() != 0.0).float().to(self.device)
-                mask = torch.permute(mask_raw, (3, 0, 1, 2)).to(self.device)
+                    t = t.to(device)
+                    noise = noise.to(device)
 
-                t = t.to(device)
-                noise = noise.to(device)
+                    noisy_imgs = ddpm(x0, t, noise)
+                    predicted_noise, _ = ddpm.backward(noisy_imgs, t.reshape(n, -1), mask)
 
-                noisy_imgs = ddpm(x0, t, noise)
-                predicted_noise, _ = ddpm.backward(noisy_imgs, t.reshape(n, -1), mask)
+                    loss = loss_function(predicted_noise, noise)
 
-                loss = loss_function(predicted_noise, noise)
+                    optim.zero_grad()
+                    loss.backward()
+                    optim.step()
 
-                optim.zero_grad()
-                loss.backward()
-                optim.step()
-
-                epoch_loss += loss.item() * len(x0) / len(train_loader.dataset)
+                    epoch_loss += loss.item() * len(x0) / len(train_loader.dataset)
 
 
-            spinner = Halo("Evaluating DDPM...", spinner="dots")
-            spinner.start()
-            ddpm.eval()
-            spinner.succeed()
+                spinner = Halo("Evaluating DDPM...", spinner="dots")
+                spinner.start()
+                ddpm.eval()
+                spinner.succeed()
 
-            spinner = Halo("Evaluating average train loss...", spinner="dots")
-            spinner.start()
-            avg_train_loss = evaluate(ddpm, train_loader, device)
-            spinner.succeed()
+                spinner = Halo("Evaluating average train loss...", spinner="dots")
+                spinner.start()
+                avg_train_loss = evaluate(ddpm, train_loader, device)
+                spinner.succeed()
 
-            spinner = Halo("Evaluating average test loss...", spinner="dots")
-            spinner.start()
-            avg_test_loss = evaluate(ddpm, test_loader, device)
-            spinner.succeed()
+                spinner = Halo("Evaluating average test loss...", spinner="dots")
+                spinner.start()
+                avg_test_loss = evaluate(ddpm, test_loader, device)
+                spinner.succeed()
 
-            epoch_losses.append(epoch_loss)
-            train_losses.append(avg_train_loss)
-            test_losses.append(avg_test_loss)
+                epoch_losses.append(epoch_loss)
+                train_losses.append(avg_train_loss)
+                test_losses.append(avg_test_loss)
 
-            log_string = f"\nepoch {epoch + 1}: \n"
-            log_string += f"EPOCH Loss: {epoch_loss:.7f}\n"
-            log_string += f"TRAIN Loss: {avg_train_loss:.7f}\n"
-            log_string += f"TEST Loss: {avg_test_loss:.7f}\n"
+                log_string = f"\nepoch {epoch + 1}: \n"
+                log_string += f"EPOCH Loss: {epoch_loss:.7f}\n"
+                log_string += f"TRAIN Loss: {avg_train_loss:.7f}\n"
+                log_string += f"TEST Loss: {avg_test_loss:.7f}\n"
 
-            with open(csv_file, mode='a', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow([epoch + 1, epoch_loss, avg_train_loss, avg_test_loss])
-            ddpm.train()
+                with open(csv_file, mode='a', newline='') as file:
+                    writer = csv.writer(file)
+                    writer.writerow([epoch + 1, epoch_loss, avg_train_loss, avg_test_loss])
+                ddpm.train()
 
-            checkpoint = {
-                'epoch': epoch,
-                'model_state_dict': ddpm.state_dict(),
-                'optimizer_state_dict': optim.state_dict(),
-                'epoch_losses': epoch_losses,
-                'train_losses': train_losses,
-                'test_losses': test_losses,
-                'best_test_loss': best_test_loss,
-                'n_steps': self.n_steps,
-                'noise_strategy': self.noise_strategy,
-                'standardizer_type': self.standardize_strategy,
-            }
+                checkpoint = {
+                    'epoch': epoch,
+                    'model_state_dict': ddpm.state_dict(),
+                    'optimizer_state_dict': optim.state_dict(),
+                    'epoch_losses': epoch_losses,
+                    'train_losses': train_losses,
+                    'test_losses': test_losses,
+                    'best_test_loss': best_test_loss,
+                    'n_steps': self.n_steps,
+                    'noise_strategy': self.noise_strategy,
+                    'standardizer_type': self.standardize_strategy,
+                }
 
-            if best_test_loss > avg_test_loss:
-                best_test_loss = avg_test_loss
-                torch.save(ddpm.state_dict(), best_model_weights)
-                torch.save(checkpoint, best_model_checkpoint)
-                log_string += '\033[32m' + " --> Best model ever (stored based on test loss)" + '\033[0m'
-                best_epoch = epoch
-            else:
-                torch.save(checkpoint, model_file)
+                if best_test_loss > avg_test_loss:
+                    best_test_loss = avg_test_loss
+                    torch.save(ddpm.state_dict(), best_model_weights)
+                    torch.save(checkpoint, best_model_checkpoint)
+                    log_string += '\033[32m' + " --> Best model ever (stored based on test loss)" + '\033[0m'
+                    best_epoch = epoch
+                else:
+                    torch.save(checkpoint, model_file)
 
-            log_string += (f"\nAverage test loss: {avg_test_loss:.7f} -> best: {best_test_loss:.7f}\n"
-                           + f"Average train loss: {avg_train_loss:.7f}\n"
-                           + f"Best Epoch: {best_epoch}")
+                log_string += (f"\nAverage test loss: {avg_test_loss:.7f} -> best: {best_test_loss:.7f}\n"
+                               + f"Average train loss: {avg_train_loss:.7f}\n"
+                               + f"Best Epoch: {best_epoch}")
 
-            tqdm.write(log_string)
+                tqdm.write(log_string)
 
-        plt.figure(figsize=(20, 10))
-        plt.plot(epoch_losses, label='Epoch Loss')
-        plt.plot(train_losses, label='Train Loss')
-        plt.plot(test_losses, label='Test Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.legend()
-        plt.title('| || || |_')
-        plt.savefig(plot_file)
+        except KeyboardInterrupt:
+            print("💀 model got taken out back")
+
+        finally:
+            self.plot_graphs(epoch_losses, train_losses, test_losses)
+
+
+    def plot_graphs(self, epoch_losses, train_losses, test_losses):
+        try:
+            plt.figure(figsize=(20, 10))
+            plt.plot(epoch_losses, label='Epoch Loss')
+            plt.plot(train_losses, label='Train Loss')
+            plt.plot(test_losses, label='Test Loss')
+            plt.xlabel('Epoch')
+            plt.ylabel('Loss')
+            plt.legend()
+            plt.title('| || || |_')
+            plt.savefig(self.plot_file)
+            logging.info(f"🖼️ Saved training loss plot: {self.plot_file}")
+        except Exception as e:
+            logging.exception("🎨 Failed to generate/save training plot.")
 
     def train(self):
         """
@@ -360,7 +369,6 @@ class TrainOceanXL():
             self.retrain_this()
 
         if self.training_mode:
-            pdb.set_trace()
             self.training_loop(optimizer, self.loss_strategy)
 
         print("🎉 Training finished successfully!")

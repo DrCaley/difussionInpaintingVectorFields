@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import MagicMock
 
 from data_prep.data_initializer import DDInitializer
-from ddpm.neural_networks.ddpm import MyDDPMGaussian
+from ddpm.neural_networks.ddpm import GaussianDDPM
 
 from ddpm.utils.inpainting_utils import calculate_mse, avg_pixel_value
 
@@ -106,7 +106,7 @@ def test_forward_reconstructs_image():
 
     # Create dummy DDPM
     dummy_net = torch.nn.Identity()
-    ddpm = MyDDPMGaussian(network=dummy_net, n_steps=1000, device=device)
+    ddpm = GaussianDDPM(network=dummy_net, n_steps=1000, device=device)
     ddpm.eval()
 
     # Use real forward process with noise from noise_strat

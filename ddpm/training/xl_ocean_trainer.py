@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.model_evaluation import evaluate
-from ddpm.neural_networks.ddpm import MyDDPMGaussian
+from ddpm.neural_networks.ddpm import GaussianDDPM
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 from data_prep.data_initializer import DDInitializer
 
@@ -48,11 +48,11 @@ class TrainOceanXL():
         self.max_beta = dd.get_attribute('max_beta')
         self.num_workers = dd.get_attribute('num_workers')
         try:
-            self.ddpm = MyDDPMGaussian(MyUNet(self.n_steps).to(self.device),
-                                       n_steps=self.n_steps,
-                                       min_beta=self.min_beta,
-                                       max_beta=self.max_beta,
-                                       device=self.device)
+            self.ddpm = GaussianDDPM(MyUNet(self.n_steps).to(self.device),
+                                     n_steps=self.n_steps,
+                                     min_beta=self.min_beta,
+                                     max_beta=self.max_beta,
+                                     device=self.device)
         except Exception as e:
             logging.exception("🔥 Failed to initialize MyDDPMGaussian model.")
             raise e
@@ -109,7 +109,6 @@ class TrainOceanXL():
         self.save_config_used()
         self.set_model_file()
         self.set_plot_file()
-        self.set_csv_description(dd)
 
     def load_checkpoint(self, optimizer : torch.optim.Optimizer):
         """
@@ -185,10 +184,7 @@ class TrainOceanXL():
         self.model_file = os.path.join(os.path.dirname(__file__), f"{model_file}.pt")
         self.best_model_weights = os.path.join(os.path.dirname(__file__), best_model_weights)
         self.best_model_checkpoint = os.path.join(os.path.dirname(__file__), best_model_checkpoint)
-        
-    def set_csv_description(self, dd:DDInitializer):
-        self.description = f"Standardization Method: {dd.get_attribute('standardizer_type')} | Noise: {dd.get_attribute('noise_function')} | Loss: {dd.get_attribute('loss_function')}  "
-        
+
     def set_ddpm(self, ddpm : torch.nn.Module):
         """
         Replaces the current DDPM model.
@@ -247,7 +243,6 @@ class TrainOceanXL():
         # CSV output setup
         with open(self.csv_file, mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow([self.description])
             writer.writerow(['Epoch', 'Epoch Loss', 'Train Loss', 'Test Loss'])
 
         # Training arc
