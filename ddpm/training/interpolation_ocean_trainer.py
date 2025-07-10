@@ -2,7 +2,6 @@ import csv
 import os
 import sys
 import logging
-import pdb
 from datetime import datetime
 
 import torch
@@ -24,7 +23,7 @@ from data_prep.data_initializer import DDInitializer
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-class TrainOceanXL():
+class TrainOceanXL:
     """
     This file is being used to train the best model of all time baybee.
     There's never been a model better than this one, we got the best epsilons,
@@ -43,7 +42,7 @@ class TrainOceanXL():
         """
         self.dd = DDInitializer()
         dd = self.dd
-        self._setup_paths_and_files(dd)
+        self._setup_paths_and_files()
         self.device = dd.get_device()
         self.n_steps = dd.get_attribute('noise_steps')
         self.min_beta = dd.get_attribute('min_beta')
@@ -65,7 +64,7 @@ class TrainOceanXL():
         self.batch_size = dd.get_attribute('batch_size')
         self.n_epochs = dd.get_attribute('epochs')
         self.lr = dd.get_attribute('lr')
-        self._DEFAULT_BEST = "ddpm/training/training_output/ddpm_ocean_model_best_checkpoint.pt"
+        self._DEFAULT_BEST = "./training_output/ddpm_ocean_model_best_checkpoint.pt"
 
         self.train_loader = DataLoader(dd.get_training_data(),
                                        batch_size=self.batch_size,
@@ -101,7 +100,7 @@ class TrainOceanXL():
             self.model_to_retrain = path
             self.continue_training = True
 
-    def _setup_paths_and_files(self, dd):
+    def _setup_paths_and_files(self):
         """
         Prepares all output paths for saving models, plots, and logs.
         """
@@ -330,7 +329,6 @@ class TrainOceanXL():
 
         except KeyboardInterrupt:
             print("💀 model got taken out back")
-
         finally:
             self.plot_graphs(epoch_losses, train_losses, test_losses)
 
