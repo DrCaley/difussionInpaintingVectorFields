@@ -4,9 +4,9 @@ import torch.nn as nn
 from data_prep.data_initializer import DDInitializer
 dd = DDInitializer()
 
-class MyDDPMGaussian(nn.Module):
+class InterpolationDDPM(nn.Module):
     def __init__(self, network, n_steps=200, min_beta=10 ** -4, max_beta=0.02, device=None, image_chw=(1, 64, 128)):
-        super(MyDDPMGaussian, self).__init__()
+        super(InterpolationDDPM, self).__init__()
         self.n_steps = n_steps
         self.device = device
         # The shape of input images
@@ -52,7 +52,7 @@ class MyDDPMGaussian(nn.Module):
         # Return the noisy image
         return noisy
 
-    def backward(self, x, t, mask=torch.ones((1,1,1,1))):
+    def backward(self, x, t, mask):
         # Run each image through the network for each timestep t in the vector t.
         # The network returns its estimation of the noise that was added.
         x.to(self.device)

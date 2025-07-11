@@ -14,7 +14,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 from ddpm.helper_functions.masks import MaskGenerator
 from ddpm.helper_functions.masks import *
 from data_prep.data_initializer import DDInitializer
-from ddpm.neural_networks.ddpm import MyDDPMGaussian
+from ddpm.neural_networks.ddpm import GaussianDDPM
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 from plots.visualization_tools.pt_visualizer_plus import PTVisualizer
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
@@ -81,7 +81,7 @@ class ModelInpainter:
         self.dd.reinitialize(self.min_beta, self.max_beta, self.n_steps, self.standardizer_strategy)
 
     def _load_checkpoint(self):
-        self.best_model = MyDDPMGaussian(MyUNet(self.n_steps), n_steps=self.n_steps, device=self.dd.get_device())
+        self.best_model = GaussianDDPM(MyUNet(self.n_steps), n_steps=self.n_steps, device=self.dd.get_device())
         try:
             logging.info("Loading model")
             self.best_model.load_state_dict(self.model_state_dict)

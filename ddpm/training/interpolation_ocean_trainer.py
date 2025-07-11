@@ -2,7 +2,6 @@ import csv
 import os
 import sys
 import logging
-import pygame
 from datetime import datetime
 
 import torch
@@ -16,16 +15,16 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from ddpm.helper_functions.model_evaluation import evaluate
-from ddpm.neural_networks.temp_ddpm import MyDDPMGaussian
+from ddpm.helper_functions.temp_model_evaluation import evaluate
+from ddpm.neural_networks.interpolation_ddpm import InterpolationDDPM
+from ddpm.helper_functions.death_messages import get_death_message
 from ddpm.neural_networks.unets.new_unet_xl import MyUNet
 from data_prep.data_initializer import DDInitializer
-from concurrent.futures import ThreadPoolExecutor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-class TrainOceanXL():
+class TrainOceanXL:
     """
     This file is being used to train the best model of all time baybee.
     There's never been a model better than this one, we got the best epsilons,
@@ -44,17 +43,21 @@ class TrainOceanXL():
         """
         self.dd = DDInitializer()
         dd = self.dd
-        self._setup_paths_and_files(dd)
+        self._setup_paths_and_files()
         self.device = dd.get_device()
         self.n_steps = dd.get_attribute('noise_steps')
         self.min_beta = dd.get_attribute('min_beta')
         self.max_beta = dd.get_attribute('max_beta')
         self.num_workers = dd.get_attribute('num_workers')
-        self.ddpm = MyDDPMGaussian(MyUNet(self.n_steps),
-                                   n_steps=self.n_steps,
-                                   min_beta=self.min_beta,
-                                   max_beta=self.max_beta,
-                                   device=self.device)
+        try:
+            self.ddpm = InterpolationDDPM(MyUNet(self.n_steps).to(self.device),
+                                     n_steps=self.n_steps,
+                                     min_beta=self.min_beta,
+                                     max_beta=self.max_beta,
+                                     device=self.device)
+        except Exception as e:
+            logging.exception("🔥 Failed to initialize MyDDPMGaussian model.")
+            raise e
         self.noise_strategy = dd.get_noise_strategy()
         self.loss_strategy = dd.get_loss_strategy()
         self.standardize_strategy = dd.get_standardizer()
@@ -62,7 +65,7 @@ class TrainOceanXL():
         self.batch_size = dd.get_attribute('batch_size')
         self.n_epochs = dd.get_attribute('epochs')
         self.lr = dd.get_attribute('lr')
-        self._DEFAULT_BEST = "./training_output/ddpm_ocean_model_best_checkpoint.pt"
+        self._DEFAULT_BEST = "ddpm/training/training_output/ddpm_ocean_model_best_checkpoint.pt"
 
         self.train_loader = DataLoader(dd.get_training_data(),
                                        batch_size=self.batch_size,
@@ -98,10 +101,7 @@ class TrainOceanXL():
             self.model_to_retrain = path
             self.continue_training = True
 
-    def set_music(self, music_path='music.mp3'):  # 'music.mp3'):
-        self.music_path = os.path.join(os.path.dirname(__file__), music_path)
-
-    def _setup_paths_and_files(self, dd):
+    def _setup_paths_and_files(self):
         """
         Prepares all output paths for saving models, plots, and logs.
         """
@@ -111,8 +111,6 @@ class TrainOceanXL():
         self.save_config_used()
         self.set_model_file()
         self.set_plot_file()
-        self.set_csv_description(dd)
-        self.set_music()
 
     def load_checkpoint(self, optimizer: torch.optim.Optimizer):
         """
@@ -189,9 +187,6 @@ class TrainOceanXL():
         self.best_model_weights = os.path.join(os.path.dirname(__file__), best_model_weights)
         self.best_model_checkpoint = os.path.join(os.path.dirname(__file__), best_model_checkpoint)
 
-    def set_csv_description(self, dd: DDInitializer):
-        self.description = f"Standardization Method: {dd.get_attribute('standardizer_type')} | Noise: {dd.get_attribute('noise_function')} | Loss: {dd.get_attribute('loss_function')}  "
-
     def set_ddpm(self, ddpm: torch.nn.Module):
         """
         Replaces the current DDPM model.
@@ -214,10 +209,6 @@ class TrainOceanXL():
         """
         Main training logic. Trains DDPM over epochs, logs results, evaluates with multi-threading,
         and saves the best model based on test loss.
-
-        Args:
-            optim (torch.optim.Optimizer): Optimizer.
-            loss_function (callable, optional): Loss function for training.
         """
         best_test_loss = float("inf")
         epoch_losses = []
@@ -247,45 +238,39 @@ class TrainOceanXL():
 
         best_epoch = start_epoch
 
-        # CSV output setup
         with open(self.csv_file, mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow([self.description])
             writer.writerow(['Epoch', 'Epoch Loss', 'Train Loss', 'Test Loss'])
+        try:
+            for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
+                epoch_loss = 0.0
+                ddpm.train()
 
-        # Training arc
-        for epoch in tqdm(range(start_epoch, start_epoch + n_epochs), desc="training progress", colour="#00ff00"):
-            if (epoch % 100 == 87):
-                pygame.mixer.music.play()
+                for _, (x0, t, noise), in enumerate(
+                        tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{start_epoch + n_epochs}",
+                             colour="#005500")):
+                    n = len(x0)
+                    x0 = x0.to(device)
 
-            epoch_loss = 0.0
-            ddpm.train()
+                    x0_reshaped = torch.permute(x0, (1, 2, 3, 0)).to(self.device)
+                    mask_raw = (self.standardize_strategy.unstandardize(x0_reshaped).abs() > 1e-5).float().to(self.device)
+                    mask = torch.permute(mask_raw, (3, 0, 1, 2)).to(self.device)
 
-            for _, (x0, t, noise), in enumerate(
-                    tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{start_epoch + n_epochs}",
-                         colour="#005500")):
-                n = len(x0)
-                x0 = x0.to(device)
+                    t = t.to(device)
+                    noise = noise.to(device)
 
-                x0_reshaped = torch.permute(x0, (1, 2, 3, 0)).to(self.device)
-                mask_raw = (self.standardize_strategy.unstandardize(x0_reshaped).abs() != 0.0).float().to(self.device)
-                mask = torch.permute(mask_raw, (3, 0, 1, 2)).to(self.device)
+                    noisy_imgs = ddpm(x0, t, noise)
+                    predicted_noise, _ = ddpm.backward(noisy_imgs, t.reshape(n, -1), mask)
 
-                t = t.to(device)
-                noise = noise.to(device)
+                    loss = loss_function(predicted_noise, noise)
 
-                noisy_imgs = ddpm(x0, t, noise)
-                predicted_noise, _ = ddpm.backward(noisy_imgs, t.reshape(n, -1), mask)
+                    optim.zero_grad()
+                    loss.backward()
+                    optim.step()
 
-                loss = loss_function(predicted_noise, noise)
+                    epoch_loss += loss.item() * len(x0) / len(train_loader.dataset)
 
-                optim.zero_grad()
-                loss.backward()
-                optim.step()
 
-                epoch_loss += loss.item() * len(x0) / len(train_loader.dataset)
-
-            with ThreadPoolExecutor(max_workers=2) as executor:
                 spinner = Halo("Evaluating DDPM...", spinner="dots")
                 spinner.start()
                 ddpm.eval()
@@ -293,76 +278,76 @@ class TrainOceanXL():
 
                 spinner = Halo("Evaluating average train loss...", spinner="dots")
                 spinner.start()
-                train_future = executor.submit(evaluate, ddpm, train_loader, device)
+                avg_train_loss = evaluate(ddpm, train_loader, device)
+                spinner.succeed()
 
                 spinner = Halo("Evaluating average test loss...", spinner="dots")
                 spinner.start()
-                test_future = executor.submit(evaluate, ddpm, test_loader, device)
-
-                avg_train_loss = train_future.result()
-
-                spinner.succeed()
-                avg_test_loss = test_future.result()
+                avg_test_loss = evaluate(ddpm, test_loader, device)
                 spinner.succeed()
 
-            epoch_losses.append(epoch_loss)
-            train_losses.append(avg_train_loss)
-            test_losses.append(avg_test_loss)
+                epoch_losses.append(epoch_loss)
+                train_losses.append(avg_train_loss)
+                test_losses.append(avg_test_loss)
 
-            log_string = f"\nepoch {epoch + 1}: \n"
-            log_string += f"EPOCH Loss: {epoch_loss:.7f}\n"
-            log_string += f"TRAIN Loss: {avg_train_loss:.7f}\n"
-            log_string += f"TEST Loss: {avg_test_loss:.7f}\n"
+                log_string = f"\nepoch {epoch + 1}: \n"
+                log_string += f"EPOCH Loss: {epoch_loss:.7f}\n"
+                log_string += f"TRAIN Loss: {avg_train_loss:.7f}\n"
+                log_string += f"TEST Loss: {avg_test_loss:.7f}\n"
 
-            # Append current epoch results to CSV
-            with open(csv_file, mode='a', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow([epoch + 1, epoch_loss, avg_train_loss, avg_test_loss])
-            ddpm.train()
+                with open(csv_file, mode='a', newline='') as file:
+                    writer = csv.writer(file)
+                    writer.writerow([epoch + 1, epoch_loss, avg_train_loss, avg_test_loss])
+                ddpm.train()
 
-            checkpoint = {
-                'epoch': epoch,
-                'model_state_dict': ddpm.state_dict(),
-                'optimizer_state_dict': optim.state_dict(),
-                'epoch_losses': epoch_losses,
-                'train_losses': train_losses,
-                'test_losses': test_losses,
-                'best_test_loss': best_test_loss,
-                'n_steps': self.n_steps,
-                'noise_strategy': self.noise_strategy,
-                'standardizer_type': self.standardize_strategy,
-            }
+                checkpoint = {
+                    'epoch': epoch,
+                    'model_state_dict': ddpm.state_dict(),
+                    'optimizer_state_dict': optim.state_dict(),
+                    'epoch_losses': epoch_losses,
+                    'train_losses': train_losses,
+                    'test_losses': test_losses,
+                    'best_test_loss': best_test_loss,
+                    'n_steps': self.n_steps,
+                    'noise_strategy': self.noise_strategy,
+                    'standardizer_type': self.standardize_strategy,
+                }
 
-            if best_test_loss > avg_test_loss:
-                best_test_loss = avg_test_loss
-                torch.save(ddpm.state_dict(), best_model_weights)
-                torch.save(checkpoint, best_model_checkpoint)
-                log_string += '\033[32m' + " --> Best model ever (stored based on test loss)" + '\033[0m'
-                best_epoch = epoch
-            else:
-                torch.save(checkpoint, model_file)
+                if best_test_loss > avg_test_loss:
+                    best_test_loss = avg_test_loss
+                    torch.save(ddpm.state_dict(), best_model_weights)
+                    torch.save(checkpoint, best_model_checkpoint)
+                    log_string += '\033[32m' + " --> Best model ever (stored based on test loss)" + '\033[0m'
+                    best_epoch = epoch
+                else:
+                    torch.save(checkpoint, model_file)
 
-            log_string += (f"\nAverage test loss: {avg_test_loss:.7f} -> best: {best_test_loss:.7f}\n"
-                           + f"Average train loss: {avg_train_loss:.7f}\n"
-                           + f"Best Epoch: {best_epoch}")
+                log_string += (f"\nAverage test loss: {avg_test_loss:.7f} -> best: {best_test_loss:.7f}\n"
+                               + f"Average train loss: {avg_train_loss:.7f}\n"
+                               + f"Best Epoch: {best_epoch}")
 
-            tqdm.write(log_string)
-            # pygame.mixer.music.stop()
+                tqdm.write(log_string)
 
-            """
-            if display:
-                show_images(generate_new_images(ddpm, device=device), f"Images generated at epoch {epoch + 1}")
-            """
+        except KeyboardInterrupt:
+            print(get_death_message())
+        finally:
+            self.plot_graphs(epoch_losses, train_losses, test_losses)
 
-        plt.figure(figsize=(20, 10))
-        plt.plot(epoch_losses, label='Epoch Loss')
-        plt.plot(train_losses, label='Train Loss')
-        plt.plot(test_losses, label='Test Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.legend()
-        plt.title('| || || |_')
-        plt.savefig(plot_file)
+
+    def plot_graphs(self, epoch_losses, train_losses, test_losses):
+        try:
+            plt.figure(figsize=(20, 10))
+            plt.plot(epoch_losses, label='Epoch Loss')
+            plt.plot(train_losses, label='Train Loss')
+            plt.plot(test_losses, label='Test Loss')
+            plt.xlabel('Epoch')
+            plt.ylabel('Loss')
+            plt.legend()
+            plt.title('| || || |_')
+            plt.savefig(self.plot_file)
+            logging.info(f"🖼️ Saved training loss plot: {self.plot_file}")
+        except Exception as e:
+            logging.exception("🎨 Failed to generate/save training plot.")
 
     def train(self):
         """
@@ -383,9 +368,6 @@ class TrainOceanXL():
             self.retrain_this()
 
         if self.training_mode:
-            pygame.mixer.init()
-            pygame.mixer.music.load(self.music_path)
-            # pygame.mixer.music.play()
             self.training_loop(optimizer, self.loss_strategy)
 
         print("🎉 Training finished successfully!")
@@ -403,4 +385,5 @@ if __name__ == '__main__':
     except Exception as e:
         logging.error("🚨 Oops! Something went wrong during training.")
         logging.error(f"💥 Error: {str(e)}")
-        print("Training crashed. Check the logs or ask your local neighborhood AI expert 🧠.")
+        print(get_death_message())
+        print("Check the logs or ask your local neighborhood AI expert 🧠.")
