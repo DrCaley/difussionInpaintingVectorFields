@@ -8,6 +8,9 @@ from matplotlib import pyplot
 from loadMasks import CustomMasks
 
 
+
+# Dr. Mr. Caley's code we need to understand and use to fix new_unet_xl.py
+
 class Net(nn.Module):
 
     def __init__(self):
@@ -41,50 +44,59 @@ class Net(nn.Module):
         self.leakyRelu = nn.LeakyReLU(negative_slope=0.2)
         self.upsample = nn.UpsamplingNearest2d(scale_factor=2)
 
+
     def forward(self, input, input_mask):
-
-
+        # Contracting part of U-Net!
         conv1_output, conv1_output_mask = self.conv1(input, input_mask)
         batchNorm1_output = self.batchNorm1(conv1_output)
         # print(batchNorm1_output.shape)
         relu1_output =  self.Relu(batchNorm1_output)
         # 256x256
+
         conv2_output, conv2_output_mask =  self.conv2(relu1_output, conv1_output_mask)
         batchNorm2_output =  self.batchNorm2(conv2_output)
         # print(conv2_output.shape)
         relu2_output =  self.Relu(batchNorm2_output)
         # 128x128
+
         conv3_output, conv3_output_mask =  self.conv3(relu2_output, conv2_output_mask)
         batchNorm3_output =  self.batchNorm3(conv3_output)
         # print(conv3_output.shape)
         relu3_output =  self.Relu(batchNorm3_output)
         # 64x64
+
         conv4_output, conv4_output_mask =  self.conv4(relu3_output, conv3_output_mask)
         batchNorm4_output =  self.batchNorm4(conv4_output)
         # print(conv4_output.shape)
         relu4_output =  self.Relu(batchNorm4_output)
         # 32x32
+
         conv5_output, conv5_output_mask =  self.conv5(relu4_output, conv4_output_mask)
         batchNorm5_output =  self.batchNorm4(conv5_output)
         # print(conv5_output.shape)
         relu5_output =  self.Relu(batchNorm5_output)
         # 16x16
+
         conv6_output, conv6_output_mask =  self.conv6(relu5_output, conv5_output_mask)
         batchNorm6_output =  self.batchNorm4(conv6_output)
         # print(conv6_output.shape)
         relu6_output =  self.Relu(batchNorm6_output)
         # 8x8
+
         conv7_output, conv7_output_mask =  self.conv7(relu6_output, conv6_output_mask)
         batchNorm7_output =  self.batchNorm4(conv7_output)
         # print(conv7_output.shape)
         relu7_output =  self.Relu(batchNorm7_output)
         # 4x4
+
         conv8_output, conv8_output_mask =  self.conv8(relu7_output, conv7_output_mask)
         batchNorm8_output =  self.batchNorm4(conv8_output)
         # print(conv8_output.shape)
         relu8_output =  self.Relu(batchNorm8_output)
         # 2x2
 
+
+        # Expanding part of U-Net!
         upsample1 =  self.upsample(relu8_output)
         upsample1_mask =  self.upsample(conv8_output_mask)
         conv9_output, conv9_output_mask =  self.conv8_2(upsample1, upsample1_mask)
