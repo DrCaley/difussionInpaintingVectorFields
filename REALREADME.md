@@ -13,4 +13,4 @@ The paper about this will be groundbreaking if you are able to get things workin
 Collect data, train some different models with the parameters in the .yaml file,
 and - most importantly - have fun!
 
-- Matt
+- Volunteer
