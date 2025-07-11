@@ -161,7 +161,7 @@ class MyUNet(nn.Module):
 
         self.conv_out = PConv2d(16, 2, 3, 1, 1)
 
-    def forward(self, x, t, mask=None):
+    def forward(self, x, t, mask):
         # Get the time embedding
         t = self.time_embed(t)
         n = len(x)
