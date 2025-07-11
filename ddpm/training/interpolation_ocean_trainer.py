@@ -17,6 +17,7 @@ from tqdm import tqdm
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.temp_model_evaluation import evaluate
 from ddpm.neural_networks.interpolation_ddpm import InterpolationDDPM
+from ddpm.helper_functions.death_messages import get_death_message
 from ddpm.neural_networks.unets.new_unet_xl import MyUNet
 from data_prep.data_initializer import DDInitializer
 
@@ -64,7 +65,7 @@ class TrainOceanXL:
         self.batch_size = dd.get_attribute('batch_size')
         self.n_epochs = dd.get_attribute('epochs')
         self.lr = dd.get_attribute('lr')
-        self._DEFAULT_BEST = "./training_output/ddpm_ocean_model_best_checkpoint.pt"
+        self._DEFAULT_BEST = "ddpm/training/training_output/ddpm_ocean_model_best_checkpoint.pt"
 
         self.train_loader = DataLoader(dd.get_training_data(),
                                        batch_size=self.batch_size,
@@ -328,7 +329,7 @@ class TrainOceanXL:
                 tqdm.write(log_string)
 
         except KeyboardInterrupt:
-            print("💀 model got taken out back")
+            print(get_death_message())
         finally:
             self.plot_graphs(epoch_losses, train_losses, test_losses)
 
@@ -384,4 +385,5 @@ if __name__ == '__main__':
     except Exception as e:
         logging.error("🚨 Oops! Something went wrong during training.")
         logging.error(f"💥 Error: {str(e)}")
-        print("Training crashed. Check the logs or ask your local neighborhood AI expert 🧠.")
+        print(get_death_message())
+        print("Check the logs or ask your local neighborhood AI expert 🧠.")
