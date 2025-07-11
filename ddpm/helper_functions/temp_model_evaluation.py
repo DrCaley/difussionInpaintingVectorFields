@@ -13,6 +13,7 @@ def evaluate(model, data_loader, device):
     criterion = nn.MSELoss()
 
     with torch.no_grad():
+        print("using temp evaluation mode")
         for i, (x0, t, epsilon) in enumerate(data_loader):
             if i > 20 : #perhaps we can evaluate a small sample instead of all data?
                 break
