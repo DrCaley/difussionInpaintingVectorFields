@@ -8,7 +8,9 @@ import torch
 from halo import Halo
 import matplotlib
 
-matplotlib.use('Agg')  # Use non-interactive backend
+from ddpm.helper_functions.death_messages import get_death_message
+
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from torch.optim import Adam
 from torch.utils.data import DataLoader
@@ -48,30 +50,14 @@ class TrainOceanXL():
         self.partial_conv_mode = dd.get_attribute('partial_conv_mode')
 
         try:
-            print("running conv mode")
             if self.partial_conv_mode:
-                from ddpm.neural_networks.interpolation_ddpm import InterpolationDDPM
-                from ddpm.helper_functions.temp_model_evaluation import evaluate
-                from ddpm.neural_networks.unets.new_unet_xl import MyUNet
-                self.ddpm = InterpolationDDPM(MyUNet(self.n_steps).to(self.device),
-                                              n_steps=self.n_steps,
-                                              min_beta=self.min_beta,
-                                              max_beta=self.max_beta,
-                                              device=self.device)
-                self.evaluate = evaluate
+                self.set_partial_conv_mode()
             else:
-                from ddpm.neural_networks.ddpm import GaussianDDPM
-                from ddpm.helper_functions.model_evaluation import evaluate
-                from ddpm.neural_networks.unets.unet_xl import MyUNet
-                self.ddpm = GaussianDDPM(MyUNet(self.n_steps).to(self.device),
-                                         n_steps=self.n_steps,
-                                         min_beta=self.min_beta,
-                                         max_beta=self.max_beta,
-                                         device=self.device)
-                self.evaluate = evaluate
+                self.set_gaussian_cov_mode()
         except Exception as e:
-            logging.exception("🔥 Failed to initialize MyDDPMGaussian model.")
+            logging.exception("🔥 Failed to initialize ddpm model.")
             raise e
+
         self.noise_strategy = dd.get_noise_strategy()
         self.loss_strategy = dd.get_loss_strategy()
         self.standardize_strategy = dd.get_standardizer()
@@ -95,6 +81,30 @@ class TrainOceanXL():
         self.continue_training = False
         self.model_to_retrain = dd.get_attribute('model_to_retrain')
         self.retrain_mode = dd.get_attribute('retrain_mode')
+
+    def set_gaussian_cov_mode(self):
+        from ddpm.neural_networks.ddpm import GaussianDDPM
+        from ddpm.helper_functions.model_evaluation import evaluate
+        from ddpm.neural_networks.unets.unet_xl import MyUNet
+
+        self.ddpm = GaussianDDPM(MyUNet(self.n_steps).to(self.device),
+                                 n_steps=self.n_steps,
+                                 min_beta=self.min_beta,
+                                 max_beta=self.max_beta,
+                                 device=self.device)
+        self.evaluate = evaluate
+
+    def set_partial_conv_mode(self):
+        from ddpm.neural_networks.interpolation_ddpm import InterpolationDDPM
+        from ddpm.helper_functions.temp_model_evaluation import evaluate
+        from ddpm.neural_networks.unets.new_unet_xl import MyUNet
+
+        self.ddpm = InterpolationDDPM(MyUNet(self.n_steps).to(self.device),
+                                      n_steps=self.n_steps,
+                                      min_beta=self.min_beta,
+                                      max_beta=self.max_beta,
+                                      device=self.device)
+        self.evaluate = evaluate
 
     def retrain_this(self, path: str = ""):
         """
@@ -251,7 +261,6 @@ class TrainOceanXL():
             train_losses = checkpoint['train_losses']
             test_losses = checkpoint['test_losses']
             best_test_loss = checkpoint['best_test_loss']
-            print(f"Resuming training from epoch {start_epoch}. Training for {n_epochs} epochs!")
             logging.info(f"Resuming training from epoch {start_epoch}. Training for {n_epochs} epochs!")
 
         best_epoch = start_epoch
@@ -362,7 +371,7 @@ class TrainOceanXL():
                     show_images(generate_new_images(ddpm, device=device), f"Images generated at epoch {epoch + 1}")
                 """
         except KeyboardInterrupt:
-            print("💀 model got taken out back")
+            logging.error(get_death_message())
         finally:
             self.plot_graphs(epoch_losses, train_losses, test_losses)
 
@@ -390,6 +399,8 @@ class TrainOceanXL():
         logging.info(f"📦 Batch size: {self.batch_size}")
         logging.info(f"🧠 Epochs: {self.n_epochs}")
         logging.info(f"📁 Output Dir: {self.output_directory}")
+        if self.partial_conv_mode:
+            logging.info("🗺️ Running with a partial Convolution ddpm")
 
         optimizer = Adam(self.ddpm.parameters(), lr=self.lr)
 
@@ -402,13 +413,9 @@ class TrainOceanXL():
         if self.training_mode:
             self.training_loop(optimizer, self.loss_strategy)
 
-        print("🎉 Training finished successfully!")
-        print("last model saved in:", self.model_file)
-        print("best model checkpoint saved in:", self.best_model_checkpoint)
         logging.info("🎉 Training finished successfully!")
         logging.info(f"📦 Final model: {self.model_file}")
         logging.info(f"🏆 Best model: {self.best_model_checkpoint}")
-
 
 if __name__ == '__main__':
     try:
@@ -417,4 +424,5 @@ if __name__ == '__main__':
     except Exception as e:
         logging.error("🚨 Oops! Something went wrong during training.")
         logging.error(f"💥 Error: {str(e)}")
-        print("Training crashed. Check the logs or ask your local neighborhood AI expert 🧠.")
+        logging.error(get_death_message())
+        logging.error("Training crashed. Check the logs or ask your local neighborhood AI expert 🧠.")
