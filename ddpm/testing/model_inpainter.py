@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from scipy.ndimage import distance_transform_edt
 
+from ddpm.helper_functions.masks.n_coverage_mask import CoverageMaskGenerator
+
 CURRENT_DIR = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.masks import MaskGenerator
@@ -323,7 +325,9 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    mi.add_mask(ManualMaskDrawer())
+    for percentage in np.linspace(1, 0.1, 10):
+        for _ in range(10):
+            mi.add_mask(CoverageMaskGenerator(percentage))
 
     mi.visualize_images()
     mi.find_coverage()
