@@ -8,7 +8,6 @@ import torch
 from halo import Halo
 import matplotlib
 
-from ddpm.helper_functions.death_messages import get_death_message
 
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
@@ -17,6 +16,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+from ddpm.helper_functions.death_messages import get_death_message
 from data_prep.data_initializer import DDInitializer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

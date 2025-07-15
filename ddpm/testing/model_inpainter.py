@@ -12,6 +12,7 @@ from scipy.ndimage import distance_transform_edt
 
 CURRENT_DIR = os.path.dirname(__file__)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+from ddpm.helper_functions.masks import MaskGenerator
 from ddpm.helper_functions.masks import *
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import GaussianDDPM
