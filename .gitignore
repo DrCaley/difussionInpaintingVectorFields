@@ -9,6 +9,8 @@ example_nn/
 /plots/outputs
 /plots/images
 /noise/
+/results/
+/noise_images/
 *.csv
 *.txt
 *.pt
