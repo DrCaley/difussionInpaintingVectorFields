@@ -8,7 +8,7 @@ gpu_to_use: 1
 retrain_mode: False
 model_to_retrain: ""
 
-partial_conv_mode: True
+partial_conv_mode: False
 
 training_mode: True
 testSeed: 0

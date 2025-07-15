@@ -7,22 +7,22 @@ from datetime import datetime
 import torch
 from halo import Halo
 import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
+
+
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from ddpm.helper_functions.model_evaluation import evaluate
-from ddpm.neural_networks.ddpm import GaussianDDPM
-from ddpm.neural_networks.unets.unet_xl import MyUNet
+from ddpm.helper_functions.death_messages import get_death_message
 from data_prep.data_initializer import DDInitializer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-class TrainOceanXL():
+class TrainOceanXL:
     """
     This file is being used to train the best model of all time baybee.
     There's never been a model better than this one, we got the best epsilons,
@@ -47,15 +47,17 @@ class TrainOceanXL():
         self.min_beta = dd.get_attribute('min_beta')
         self.max_beta = dd.get_attribute('max_beta')
         self.num_workers = dd.get_attribute('num_workers')
+        self.partial_conv_mode = dd.get_attribute('partial_conv_mode')
+
         try:
-            self.ddpm = GaussianDDPM(MyUNet(self.n_steps).to(self.device),
-                                     n_steps=self.n_steps,
-                                     min_beta=self.min_beta,
-                                     max_beta=self.max_beta,
-                                     device=self.device)
+            if self.partial_conv_mode:
+                self.configure_partial_conv_mode()
+            else:
+                self.configure_gaussian_cov_mode()
         except Exception as e:
-            logging.exception("🔥 Failed to initialize MyDDPMGaussian model.")
+            logging.exception("🔥 Failed to initialize ddpm model.")
             raise e
+
         self.noise_strategy = dd.get_noise_strategy()
         self.loss_strategy = dd.get_loss_strategy()
         self.standardize_strategy = dd.get_standardizer()
@@ -80,6 +82,30 @@ class TrainOceanXL():
         self.model_to_retrain = dd.get_attribute('model_to_retrain')
         self.retrain_mode = dd.get_attribute('retrain_mode')
 
+    def configure_gaussian_cov_mode(self):
+        from ddpm.neural_networks.ddpm import GaussianDDPM
+        from ddpm.helper_functions.model_evaluation import evaluate
+        from ddpm.neural_networks.unets.unet_xl import MyUNet
+
+        self.ddpm = GaussianDDPM(MyUNet(self.n_steps).to(self.device),
+                                 n_steps=self.n_steps,
+                                 min_beta=self.min_beta,
+                                 max_beta=self.max_beta,
+                                 device=self.device)
+        self.evaluate = evaluate
+
+    def configure_partial_conv_mode(self):
+        from ddpm.neural_networks.interpolation_ddpm import InterpolationDDPM
+        from ddpm.helper_functions.temp_model_evaluation import evaluate
+        from ddpm.neural_networks.unets.new_unet_xl import MyUNet
+
+        self.ddpm = InterpolationDDPM(MyUNet(self.n_steps).to(self.device),
+                                      n_steps=self.n_steps,
+                                      min_beta=self.min_beta,
+                                      max_beta=self.max_beta,
+                                      device=self.device)
+        self.evaluate = evaluate
+
     def retrain_this(self, path: str = ""):
         """
         Sets the path of a model to resume training from.
@@ -95,7 +121,7 @@ class TrainOceanXL():
 
         if not os.path.exists(path):
             raise FileNotFoundError(f"path {path} doesn't exist")
-        else :
+        else:
             self.model_to_retrain = path
             self.continue_training = True
 
@@ -110,7 +136,7 @@ class TrainOceanXL():
         self.set_model_file()
         self.set_plot_file()
 
-    def load_checkpoint(self, optimizer : torch.optim.Optimizer):
+    def load_checkpoint(self, optimizer: torch.optim.Optimizer):
         """
         Loads a model + optimizer state from a checkpoint file.
 
@@ -125,7 +151,7 @@ class TrainOceanXL():
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         return checkpoint
 
-    def set_timestamp(self, timestamp = datetime.now().strftime("%h%d_%H%M")):
+    def set_timestamp(self, timestamp=datetime.now().strftime("%h%d_%H%M")):
         """
         Sets the training session timestamp for naming outputs.
 
@@ -133,8 +159,8 @@ class TrainOceanXL():
             timestamp (str, optional): Override timestamp value.
         """
         self.timestamp = timestamp
-        
-    def set_output_directory(self, training_output = "training_output"):
+
+    def set_output_directory(self, training_output="training_output"):
         """
         Creates the output directory for this training run.
 
@@ -160,7 +186,7 @@ class TrainOceanXL():
 
         csv_file = f"{self.output_directory}{csv_file}_{self.timestamp}.csv"
         self.csv_file = os.path.join(os.path.dirname(__file__), csv_file)
-        
+
     def set_plot_file(self, plot_file="training_test_loss_xl"):
         """
         Creates the path to the loss plot file.
@@ -170,7 +196,7 @@ class TrainOceanXL():
         """
         plot_file = f"{self.output_directory}{plot_file}_{self.timestamp}.png"
         self.plot_file = os.path.join(os.path.dirname(__file__), plot_file)
-        
+
     def set_model_file(self, initial_model_file="ddpm_ocean_model"):
         """
         Creates paths for saving the current model and best checkpoints.
@@ -185,7 +211,7 @@ class TrainOceanXL():
         self.best_model_weights = os.path.join(os.path.dirname(__file__), best_model_weights)
         self.best_model_checkpoint = os.path.join(os.path.dirname(__file__), best_model_checkpoint)
 
-    def set_ddpm(self, ddpm : torch.nn.Module):
+    def set_ddpm(self, ddpm: torch.nn.Module):
         """
         Replaces the current DDPM model.
 
@@ -194,7 +220,7 @@ class TrainOceanXL():
         """
         self.ddpm = ddpm
 
-    def set_epochs(self, epochs : int):
+    def set_epochs(self, epochs: int):
         """
         Sets the number of training epochs.
 
@@ -203,7 +229,7 @@ class TrainOceanXL():
         """
         self.epochs = epochs
 
-    def training_loop(self, optim : torch.optim.Optimizer, loss_function : callable):
+    def training_loop(self, optim: torch.optim.Optimizer, loss_function: callable, ):
         """
         Main training logic. Trains DDPM over epochs, logs results, evaluates with multi-threading,
         and saves the best model based on test loss.
@@ -235,7 +261,6 @@ class TrainOceanXL():
             train_losses = checkpoint['train_losses']
             test_losses = checkpoint['test_losses']
             best_test_loss = checkpoint['best_test_loss']
-            print(f"Resuming training from epoch {start_epoch}. Training for {n_epochs} epochs!")
             logging.info(f"Resuming training from epoch {start_epoch}. Training for {n_epochs} epochs!")
 
         best_epoch = start_epoch
@@ -251,7 +276,9 @@ class TrainOceanXL():
                 epoch_loss = 0.0
                 ddpm.train()
 
-                for _, (x0, t, noise), in enumerate( tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{start_epoch + n_epochs}", colour="#005500")):
+                for _, (x0, t, noise), in enumerate(
+                        tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{start_epoch + n_epochs}",
+                             colour="#005500")):
 
                     n = len(x0)
                     x0 = x0.to(device)
@@ -259,7 +286,15 @@ class TrainOceanXL():
                     noise = noise.to(device)
 
                     noisy_imgs = ddpm(x0, t, noise)
-                    predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))
+
+                    if self.partial_conv_mode:
+                        x0_reshaped = torch.permute(x0, (1, 2, 3, 0)).to(self.device)
+                        mask_raw = (self.standardize_strategy.unstandardize(x0_reshaped).abs() > 1e-5).float().to(
+                            self.device)
+                        mask = torch.permute(mask_raw, (3, 0, 1, 2)).to(self.device)
+                        predicted_noise, _ = ddpm.backward(noisy_imgs, t.reshape(n, -1), mask)
+                    else:
+                        predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
                     loss = loss_function(predicted_noise, noise)
 
@@ -276,12 +311,12 @@ class TrainOceanXL():
 
                 spinner = Halo("Evaluating average train loss...", spinner="dots")
                 spinner.start()
-                avg_train_loss = evaluate(ddpm, train_loader, device)
+                avg_train_loss = self.evaluate(ddpm, train_loader, device)
                 spinner.succeed()
 
                 spinner = Halo("Evaluating average test loss...", spinner="dots")
                 spinner.start()
-                avg_test_loss = evaluate(ddpm, test_loader, device)
+                avg_test_loss = self.evaluate(ddpm, test_loader, device)
                 spinner.succeed()
 
                 epoch_losses.append(epoch_loss)
@@ -312,8 +347,8 @@ class TrainOceanXL():
                     'test_losses': test_losses,
                     'best_test_loss': best_test_loss,
                     'n_steps': self.n_steps,
-                    'noise_strategy' : self.noise_strategy,
-                    'standardizer_type' : self.standardize_strategy,
+                    'noise_strategy': self.noise_strategy,
+                    'standardizer_type': self.standardize_strategy,
                     }
 
                 if best_test_loss > avg_test_loss:
@@ -336,10 +371,9 @@ class TrainOceanXL():
                     show_images(generate_new_images(ddpm, device=device), f"Images generated at epoch {epoch + 1}")
                 """
         except KeyboardInterrupt:
-            print("💀 model got taken out back")
+            logging.error(get_death_message())
         finally:
             self.plot_graphs(epoch_losses, train_losses, test_losses)
-
 
     def plot_graphs(self, epoch_losses, train_losses, test_losses):
         try:
@@ -365,6 +399,8 @@ class TrainOceanXL():
         logging.info(f"📦 Batch size: {self.batch_size}")
         logging.info(f"🧠 Epochs: {self.n_epochs}")
         logging.info(f"📁 Output Dir: {self.output_directory}")
+        if self.partial_conv_mode:
+            logging.info("🗺️ Running with a partial Convolution ddpm")
 
         optimizer = Adam(self.ddpm.parameters(), lr=self.lr)
 
@@ -374,12 +410,9 @@ class TrainOceanXL():
         if self.retrain_mode:
             self.retrain_this()
 
-        if self.training_mode :
+        if self.training_mode:
             self.training_loop(optimizer, self.loss_strategy)
 
-        # print("🎉 Training finished successfully!")
-        # print("last model saved in:", self.model_file)
-        # print("best model checkpoint saved in:", self.best_model_checkpoint)
         logging.info("🎉 Training finished successfully!")
         logging.info(f"📦 Final model: {self.model_file}")
         logging.info(f"🏆 Best model: {self.best_model_checkpoint}")
@@ -391,4 +424,5 @@ if __name__ == '__main__':
     except Exception as e:
         logging.error("🚨 Oops! Something went wrong during training.")
         logging.error(f"💥 Error: {str(e)}")
-        print("Training crashed. Check the logs or ask your local neighborhood AI expert 🧠.")
+        logging.error(get_death_message())
+        logging.error("Training crashed. Check the logs or ask your local neighborhood AI expert 🧠.")
