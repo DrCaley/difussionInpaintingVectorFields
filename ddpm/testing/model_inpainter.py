@@ -216,8 +216,8 @@ class ModelInpainter:
                             mask_cropped = top_left_crop(mask, 44, 94).to(device)
                             gp_field_cropped = top_left_crop(gp_field, 44, 94).to(device)
 
-                            mse_ddpm = calculate_mse(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped)
-                            mse_gp = calculate_mse(input_image_original_cropped, gp_field_cropped, mask_cropped)
+                            mse_ddpm = calculate_mse(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped, normalize=True)
+                            mse_gp = calculate_mse(input_image_original_cropped, gp_field_cropped, mask_cropped, normalize=True)
                             mask_percentage = self.compute_mask_percentage(mask)
                             avg_dist = self.compute_avg_distance_to_seen(mask_cropped)
 
