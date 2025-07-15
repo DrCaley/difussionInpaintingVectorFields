@@ -3,6 +3,7 @@ import os
 import sys
 import logging
 from datetime import datetime
+from pathlib import Path
 
 import torch
 from halo import Halo
@@ -15,7 +16,8 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+BASE_DIR = Path(__file__).resolve().parent
+sys.path.append(str(BASE_DIR.parent.parent))
 from ddpm.helper_functions.death_messages import get_death_message
 from data_prep.data_initializer import DDInitializer
 
@@ -65,7 +67,8 @@ class TrainOceanXL:
         self.batch_size = dd.get_attribute('batch_size')
         self.n_epochs = dd.get_attribute('epochs')
         self.lr = dd.get_attribute('lr')
-        self._DEFAULT_BEST = "ddpm/training/training_output/ddpm_ocean_model_best_checkpoint.pt"
+        self._DEFAULT_BEST = "training_output/ddpm_ocean_model_best_checkpoint.pt"
+
 
         self.train_loader = DataLoader(dd.get_training_data(),
                                        batch_size=self.batch_size,
@@ -119,7 +122,11 @@ class TrainOceanXL:
         if path == "":
             path = self._DEFAULT_BEST
 
-        if not os.path.exists(path):
+        path = (Path(__file__).resolve().parent / path)
+
+        print(path)
+
+        if not Path(path).exists():
             raise FileNotFoundError(f"path {path} doesn't exist")
         else:
             self.model_to_retrain = path
@@ -167,12 +174,13 @@ class TrainOceanXL:
         Args:
             training_output (str, optional): Name of the output directory.
         """
-        self.output_directory = os.path.join(os.path.dirname(__file__), f"{training_output}/")
-        os.makedirs(self.output_directory, exist_ok=True)
+        self.output_directory = (Path(__file__).parent / training_output).resolve()
+        self.output_directory.mkdir(parents=True, exist_ok=True)
 
     def save_config_used(self):
         import yaml
-        with open(os.path.join(self.output_directory, "config_used.yaml"), 'w') as f:
+        config_path = self.output_directory / "config_used.yaml"
+        with config_path.open('w') as f:
             yaml.dump(self.dd.get_full_config(), f)
         logging.info("💾 Saved training config to config_used.yaml")
 
@@ -184,8 +192,7 @@ class TrainOceanXL:
             csv_file (str, optional): Base name for CSV file.
         """
 
-        csv_file = f"{self.output_directory}{csv_file}_{self.timestamp}.csv"
-        self.csv_file = os.path.join(os.path.dirname(__file__), csv_file)
+        self.csv_file = self.output_directory / f"{csv_file}_{self.timestamp}.csv"
 
     def set_plot_file(self, plot_file="training_test_loss_xl"):
         """
@@ -194,8 +201,7 @@ class TrainOceanXL:
         Args:
             plot_file (str, optional): Base name for plot image.
         """
-        plot_file = f"{self.output_directory}{plot_file}_{self.timestamp}.png"
-        self.plot_file = os.path.join(os.path.dirname(__file__), plot_file)
+        self.plot_file = self.output_directory / f"{plot_file}_{self.timestamp}.png"
 
     def set_model_file(self, initial_model_file="ddpm_ocean_model"):
         """
@@ -204,12 +210,10 @@ class TrainOceanXL:
         Args:
             initial_model_file (str, optional): Base name for model files.
         """
-        model_file = f"{self.output_directory}{initial_model_file}_{self.timestamp}"
-        best_model_weights = f"{self.output_directory}{initial_model_file}_best_model_weights.pt"
-        best_model_checkpoint = f"{self.output_directory}{initial_model_file}_best_checkpoint.pt"
-        self.model_file = os.path.join(os.path.dirname(__file__), f"{model_file}.pt")
-        self.best_model_weights = os.path.join(os.path.dirname(__file__), best_model_weights)
-        self.best_model_checkpoint = os.path.join(os.path.dirname(__file__), best_model_checkpoint)
+        model_base = f"{initial_model_file}_{self.timestamp}"
+        self.model_file = self.output_directory / f"{model_base}.pt"
+        self.best_model_weights = self.output_directory / f"{initial_model_file}_best_model_weights.pt"
+        self.best_model_checkpoint = self.output_directory / f"{initial_model_file}_best_checkpoint.pt"
 
     def set_ddpm(self, ddpm: torch.nn.Module):
         """
@@ -266,7 +270,7 @@ class TrainOceanXL:
         best_epoch = start_epoch
 
         # CSV output setup
-        with open(self.csv_file, mode='w', newline='') as file:
+        with self.csv_file.open(mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['Epoch', 'Epoch Loss', 'Train Loss', 'Test Loss'])
 
@@ -330,7 +334,7 @@ class TrainOceanXL:
 
                 # Append current epoch results to CSV
                 try:
-                    with open(csv_file, mode='a', newline='') as file:
+                    with self.csv_file.open(mode='a', newline='') as file:
                         writer = csv.writer(file)
                         writer.writerow([epoch + 1, epoch_loss, avg_train_loss, avg_test_loss])
                 except Exception as e:
@@ -398,17 +402,19 @@ class TrainOceanXL:
         logging.info(f"👾 Device: {self.device}")
         logging.info(f"📦 Batch size: {self.batch_size}")
         logging.info(f"🧠 Epochs: {self.n_epochs}")
-        logging.info(f"📁 Output Dir: {self.output_directory}")
+
         if self.partial_conv_mode:
             logging.info("🗺️ Running with a partial Convolution ddpm")
+        logging.info(f"📁 Output Dir: {self.output_directory}")
 
         optimizer = Adam(self.ddpm.parameters(), lr=self.lr)
 
-        if os.path.exists(self.csv_file):
+        if self.csv_file.exists():
             logging.warning("⚠️ CSV log already exists. This training run may overwrite it.")
 
         if self.retrain_mode:
-            self.retrain_this()
+            path = self.dd.get_attribute('model_to_retrain')
+            self.retrain_this(path)
 
         if self.training_mode:
             self.training_loop(optimizer, self.loss_strategy)

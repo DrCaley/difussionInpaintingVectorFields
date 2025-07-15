@@ -26,4 +26,5 @@ def get_death_message():
         "🪲 model chased scuttlecrab for too long it got jumped by a fed Master Yi",
         "🎰 model put its house mortgage on red"
         ]
-    return random.choice(messages)
+    urandom = random.SystemRandom()
+    return urandom.choice(messages)
