@@ -57,48 +57,44 @@ class PConv2d(nn.Module):
         super().__init__()
         self.conv2d = nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding)
         self.mask2d = nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding)
+
         self.conv2d.apply(weights_init('kaiming'))
+
+        # Use constant 1 weights for mask kernel
         self.mask2d.weight.data.fill_(1.0)
         self.mask2d.bias.data.fill_(0.0)
-
-        # mask is not updated
         for param in self.mask2d.parameters():
-            param.requires_grad = True
+            param.requires_grad = False  # freeze
 
     def forward(self, input, input_mask):
-        # http://masc.cs.gmu.edu/wiki/partialconv
-        # C(X) = W^T * X + b, C(0) = b, D(M) = 1 * M + 0 = sum(M)
-        # W^T* (M .* X) / sum(M) + b = [C(M .* X) – C(0)] / D(M) + C(0)
+        device = input.device
+        # Convolve masked input
+        masked_input = input * input_mask
+        output = F.conv2d(masked_input, self.conv2d.weight, self.conv2d.bias,
+                          stride=self.conv2d.stride, padding=self.conv2d.padding)
 
-        input_0 = input.new_zeros(input.size()).to(dd.get_device())
+        # Convolve zero-input to get bias-only output
+        output_0 = F.conv2d(torch.zeros_like(input), self.conv2d.weight, self.conv2d.bias,
+                            stride=self.conv2d.stride, padding=self.conv2d.padding)
 
-        output = F.conv2d(
-            input * input_mask, self.conv2d.weight, self.conv2d.bias,
-            self.conv2d.stride, self.conv2d.padding, self.conv2d.dilation,
-            self.conv2d.groups).to(dd.get_device())
-
-        output_0 = F.conv2d(input_0, self.conv2d.weight, self.conv2d.bias,
-                            self.conv2d.stride, self.conv2d.padding,
-                            self.conv2d.dilation, self.conv2d.groups).to(dd.get_device())
-
+        # Convolve mask to count valid pixels
         with torch.no_grad():
-            output_mask = F.conv2d(
-                input_mask, self.mask2d.weight, self.mask2d.bias,
-                self.mask2d.stride, self.mask2d.padding, self.mask2d.dilation,
-                self.mask2d.groups).to(dd.get_device())
+            mask_sum = F.conv2d(input_mask, self.mask2d.weight, self.mask2d.bias,
+                                stride=self.mask2d.stride, padding=self.mask2d.padding)
 
-        n_z_ind = (output_mask != 0.0)
-        z_ind = (output_mask == 0.0)  # skip all the computation
+        # Avoid divide-by-zero
+        eps = 1e-8
+        mask_non_zero = mask_sum > eps
 
-        output[n_z_ind] = \
-            (output[n_z_ind] - output_0[n_z_ind]) / output_mask[n_z_ind] + \
-            output_0[n_z_ind]
-        output[z_ind] = 0.0
+        # Normalize output
+        # output = torch.where(mask_non_zero, (output - output_0) / (mask_sum + eps) + output_0, torch.zeros_like(output))
 
-        output_mask[n_z_ind] = 1.0
-        output_mask[z_ind] = 0.0
+        # Normalize mask
+        new_mask = torch.where(mask_sum > 0, torch.ones_like(mask_sum), torch.zeros_like(mask_sum))
 
-        return output.to(dd.get_device()), output_mask.to(dd.get_device())
+        return output, new_mask
+
+
 
 class PTranspose2d(nn.Module):
     def __init__(self, in_ch, out_ch, kernel_size, stride=1, padding=0):
@@ -241,30 +237,3 @@ class PConvUNet(nn.Module):
             for name, module in self.named_modules():
                 if isinstance(module, nn.BatchNorm2d) and 'enc' in name:
                     module.eval()
-
-
-if __name__ == '__main__':
-    size = (1, 3, 5, 5)
-    input = torch.ones(size)
-    input_mask = torch.ones(size)
-    input_mask[:, :, 2:, :][:, :, :, 2:] = 0
-
-    conv = PConv2d(3, 3, 3, 1, 1)
-    l1 = nn.L1Loss()
-    input.requires_grad = True
-
-    output, output_mask = conv(input, input_mask)
-    loss = l1(output, torch.randn(1, 3, 5, 5))
-    loss.backward()
-
-    assert (torch.sum(input.grad != input.grad).item() == 0)
-    assert (torch.sum(torch.isnan(conv.conv2d.weight.grad)).item() == 0)
-    assert (torch.sum(torch.isnan(conv.conv2d.bias.grad)).item() == 0)
-
-    from IPython import embed
-
-    embed()
-    exit()
-
-    # model = PConvUNet()
-    # output, output_mask = model(input, input_mask)

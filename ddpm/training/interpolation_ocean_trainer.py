@@ -259,7 +259,7 @@ class TrainOceanXL:
                     noise = noise.to(device)
 
                     noisy_imgs = ddpm(x0, t, noise)
-                    predicted_noise, _ = ddpm.backward(noisy_imgs, t.reshape(n, -1), 1.0 - mask)
+                    predicted_noise, _ = ddpm.backward(noisy_imgs, t.reshape(n, -1), mask)
 
                     loss = loss_function(predicted_noise * mask, noise * mask)
 

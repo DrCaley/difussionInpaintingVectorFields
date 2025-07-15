@@ -35,13 +35,10 @@ class my_block(nn.Module):
 
     def forward(self, x, mask):
         out = self.ln(x) if self.normalize else x
-
         out, mask = self.conv1(out, mask)
         out = self.activation(out)
-
         out, mask = self.conv2(out, mask)
         out = self.activation(out)
-
         return out, mask
 
 
