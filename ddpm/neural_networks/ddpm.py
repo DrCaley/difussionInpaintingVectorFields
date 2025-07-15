@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 from data_prep.data_initializer import DDInitializer
+
 dd = DDInitializer()
 
 class GaussianDDPM(nn.Module):

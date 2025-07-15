@@ -4,11 +4,11 @@ def get_death_message():
     messages = [
         "💀 model got taken out back",
         "🐟 model is sleeping with the fishies",
-        "🌊 model is now experiencing real ocean currents at the bottom of the ocean"
+        "🌊 model is now experiencing real ocean currents at the bottom of the ocean",
         "🖼️ model got buried in the noise",
         "📉 model dieded",
         "👮 model smoothed its last operator",
-        "🖼️ model could not denoise fast enough, survival of the fittest I suppose!",
+        "🖼️ model could not denoise fast enough, and drowned",
         "🧑‍🌾 model went to live with other models on a farm",
         "👁️ model got ████████ ██ █████, and went ████████",
         "⚰️ model got unalived",
@@ -23,6 +23,7 @@ def get_death_message():
         "🐉 model went to fight elder but had smite on cooldown",
         "📉 model was 0/10 before the training even started",
         "🧝 model got solo'd by a caster minion",
-        "🪲 model chased scuttlecrab for too long it got jumped by a fed Master Yi"
+        "🪲 model chased scuttlecrab for too long it got jumped by a fed Master Yi",
+        "🎰 model put its house mortgage on red"
         ]
     return random.choice(messages)

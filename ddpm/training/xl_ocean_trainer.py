@@ -377,9 +377,9 @@ class TrainOceanXL():
         if self.training_mode :
             self.training_loop(optimizer, self.loss_strategy)
 
-        print("🎉 Training finished successfully!")
-        print("last model saved in:", self.model_file)
-        print("best model checkpoint saved in:", self.best_model_checkpoint)
+        # print("🎉 Training finished successfully!")
+        # print("last model saved in:", self.model_file)
+        # print("best model checkpoint saved in:", self.best_model_checkpoint)
         logging.info("🎉 Training finished successfully!")
         logging.info(f"📦 Final model: {self.model_file}")
         logging.info(f"🏆 Best model: {self.best_model_checkpoint}")

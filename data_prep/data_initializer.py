@@ -7,8 +7,9 @@ import random
 import numpy as np
 import yaml
 from torchvision.transforms import Compose
+from pathlib import Path
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), './../')))
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from data_prep.ocean_image_dataset import OceanImageDataset
 from ddpm.utils.noise_utils import NoiseStrategy, get_noise_strategy
@@ -28,19 +29,25 @@ class DDInitializer:
                 boundaries_path='data/rams_head/boundaries.yaml'):
         if cls._instance is None:
             cls._instance = super(DDInitializer, cls).__new__(cls)
-            cls._instance._init(config_path, pickle_path, boundaries_path)
+            cls._instance._init(
+                Path(config_path),
+                Path(pickle_path),
+                Path(boundaries_path)
+                )
         return cls._instance
 
     def _init(self, config_path, pickle_path, boundaries_path):
-        self.using_pycharm = os.path.exists('../../data.yaml')
-        prefix = "../../" if self.using_pycharm else "./"
-        self.full_boundaries_path = os.path.join(prefix, boundaries_path)
+        root = Path(__file__).resolve().parent.parent
 
-        self._instance._setup_yaml_file(os.path.join(prefix, config_path))
-        self._instance._setup_tensors(os.path.join(prefix, pickle_path))
+        self.full_boundaries_path = root / boundaries_path
+
+        self._instance._setup_yaml_file(root / config_path)
+        self._instance._setup_tensors(root / pickle_path)
+
         self.gpu = self._config.get('gpu_to_use')
         self.device = torch.device(f"cuda:{self.gpu}" if torch.cuda.is_available() else "cpu")
         print("we are running on the:", self.device)
+
         self._setup_transforms()
         self._set_random_seed()
         self._setup_noise_strategy()
@@ -53,8 +60,8 @@ class DDInitializer:
         self._setup_transforms(standardizer)
         self._setup_datasets(self.full_boundaries_path)
 
-    def _setup_yaml_file(self, config_path) -> None:
-        if not os.path.exists(config_path):
+    def _setup_yaml_file(self, config_path : Path) -> None:
+        if not config_path.exists():
             raise FileNotFoundError(f"{config_path} does not exist")
 
         with open(config_path, 'r') as f:
@@ -69,8 +76,8 @@ class DDInitializer:
         self.alphas = 1 - self.betas
         self.alpha_bars = torch.tensor([torch.prod(self.alphas[:i + 1]) for i in range(len(self.alphas))])
 
-    def _setup_tensors(self, pickle_path) -> None:
-        if not os.path.exists(pickle_path):
+    def _setup_tensors(self, pickle_path : Path) -> None:
+        if not pickle_path.exists():
             raise PickleNotFoundException("Pickle file that contains the data was not found, "
                                           "make sure you created it with the slitting datasets python script")
 
@@ -186,9 +193,6 @@ class DDInitializer:
 
     def get_validation_data(self):
         return self.validation_data
-
-    def get_using_pycharm(self):
-        return self.using_pycharm
 
     def get_alphas(self):
         return self.alphas
