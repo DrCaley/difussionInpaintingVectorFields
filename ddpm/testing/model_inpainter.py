@@ -8,10 +8,9 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from scipy.ndimage import distance_transform_edt
+from pathlib import Path
 
 
-CURRENT_DIR = os.path.dirname(__file__)
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.masks import MaskGenerator
 from ddpm.helper_functions.masks import *
 from data_prep.data_initializer import DDInitializer
@@ -21,7 +20,6 @@ from plots.visualization_tools.pt_visualizer_plus import PTVisualizer
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
 
-os.chdir(CURRENT_DIR)
 
 class ModelInpainter:
     def __init__(self):
@@ -32,10 +30,7 @@ class ModelInpainter:
         self.model_paths = []
         self.masks_to_use = []
         self.resamples = self.dd.get_attribute("resample_nums")
-        self.mse_ddpm_list = []
-        self.mse_gp_list = []
-        self.mse_distance_ddpm = []
-        self.mse_distance_gp = []
+        self.reset_plot_lists()
         self.pixel_height = 1.0
         self.pixel_width = 1.0
         self.visualizer = False
@@ -50,6 +45,12 @@ class ModelInpainter:
     def set_results_path(self, results_path="."):
         self.results_path = results_path + "/results/"
         os.makedirs(self.results_path, exist_ok=True)
+
+    def reset_plot_lists(self):
+        self.mse_ddpm_list = []
+        self.mse_gp_list = []
+        self.mse_distance_ddpm = []
+        self.mse_distance_gp = []
 
     def set_pixel_dimensions(self, pixel_height, pixel_width):
         self.pixel_height = pixel_height
@@ -300,6 +301,8 @@ class ModelInpainter:
                     self.plot_mse_vs_mask_percentage_gp()
                     self.plot_mse_vs_distance()
 
+                self.reset_plot_lists()
+
             except Exception as e:
                 logging.error(f"Error inpainting model {model_path}: {e}", stack_info=True)
                 continue
@@ -324,8 +327,8 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    for percentage in np.linspace(1, 0.1, 10):
-        for _ in range(10):
+    for percentage in np.linspace(1, 0.1, 5):
+        for _ in range(1):
             mi.add_mask(CoverageMaskGenerator(percentage))
 
     mi.visualize_images()

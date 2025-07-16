@@ -43,9 +43,10 @@ max_beta: 0.02
 # === inpainting ===
 inpainting_batch_size: 1
 num_images_to_process: 1
-n_samples: 3
+n_samples: 1
 resample_nums: [5]
 save_pt_fields: False
 
 model_paths:
   - "../trained_models/weekend_ddpm_ocean_model.pt"
+  - "../trained_models/ddpm_ocean_model_0624.pt"
