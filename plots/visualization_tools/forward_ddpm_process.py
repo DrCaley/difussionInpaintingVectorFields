@@ -59,12 +59,10 @@ def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path=
 
         axs[0].quiver(X, Y, x0[..., 0], x0[..., 1], color='blue', scale=20)
         axs[0].set_title("Original x₀")
-        axs[0].invert_yaxis()
         axs[0].axis('off')
 
         axs[1].quiver(X, Y, noisy[..., 0], noisy[..., 1], color='blue', scale=20)
         axs[1].set_title(f"Noisy t={t}")
-        axs[1].invert_yaxis()
         axs[1].axis('off')
 
         buf = io.BytesIO()

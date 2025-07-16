@@ -67,64 +67,68 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
 
 def calculate_mse(original_image, predicted_image, mask, normalize=False):
     """
-    Calculate average MSE per pixel by summing squared error over channels,
-    then averaging only over masked pixels.
+    Calculates masked MSE between original and predicted image.
+    Optionally normalizes both using original_image's masked region stats.
 
     Args:
-        original_image: Tensor of shape (1, 2, H, W)
-        predicted_image: Tensor of shape (1, 2, H, W)
-        mask: Tensor of shape (1, 2, H, W) with identical info on both channels (0/1)
-        normalize: If True, normalize both images to [0, 1] using only masked region
+        original_image: (1, 2, H, W)
+        predicted_image: (1, 2, H, W)
+        mask: (1, 2, H, W)
+        normalize: bool, whether to normalize both images using shared scale
 
     Returns:
-        Scalar tensor: average MSE per pixel over masked region
+        Scalar MSE
     """
     single_mask = mask[:, 0:1, :, :]  # shape (1, 1, H, W)
 
     if normalize:
-        original_image = norm(original_image, single_mask)
-        predicted_image = norm(predicted_image, single_mask)
+        original_image, predicted_image = normalize_pair(original_image, predicted_image, single_mask)
 
-    squared_error = (original_image - predicted_image) ** 2  # shape (1, 2, H, W)
-    per_pixel_error = squared_error.sum(dim=1, keepdim=True)  # shape (1, 1, H, W)
+    squared_error = (original_image - predicted_image) ** 2  # (1, 2, H, W)
+    per_pixel_error = squared_error.sum(dim=1, keepdim=True)  # (1, 1, H, W)
 
     masked_error = per_pixel_error * single_mask
-
     total_error = masked_error.sum()
     num_valid_pixels = single_mask.sum()
 
     if num_valid_pixels == 0:
         return torch.tensor(float('nan'))
 
-    mse_per_pixel = total_error / num_valid_pixels
-    return mse_per_pixel
+    return total_error / num_valid_pixels
 
-def norm(img, mask):
+
+def normalize_pair(original_img, predicted_img, mask):
     """
-    Normalize each channel of img to [0, 1] using only the masked region.
+    Normalize both images to [0, 1] using the min/max of the original image
+    over the masked region, applied per channel.
 
     Args:
-        img: (1, C, H, W)
-        mask: (1, 1, H, W) or (1, C, H, W)
+        original_img, predicted_img: (1, C, H, W)
+        mask: (1, 1, H, W)
 
     Returns:
-        Normalized img: (1, C, H, W)
+        Tuple of normalized (original_img, predicted_img)
     """
-    B, C, H, W = img.shape
-    normalized = torch.zeros_like(img)
+    B, C, H, W = original_img.shape
+    norm_original = torch.zeros_like(original_img)
+    norm_predicted = torch.zeros_like(predicted_img)
 
     for c in range(C):
-        masked_pixels = img[0, c][mask[0, 0].bool()]
+        masked_pixels = original_img[0, c][mask[0, 0].bool()]
         if masked_pixels.numel() == 0:
-            # No valid pixels in mask → leave as zeros (or set to nan)
-            normalized[0, c] = img[0, c]
+            # Avoid div-by-zero
+            norm_original[0, c] = original_img[0, c]
+            norm_predicted[0, c] = predicted_img[0, c]
             continue
+
         min_val = masked_pixels.min()
         max_val = masked_pixels.max()
-        normalized[0, c] = (img[0, c] - min_val) / (max_val - min_val + 1e-8)
+        range_val = max_val - min_val + 1e-8  # avoid divide-by-zero
 
-    return normalized
+        norm_original[0, c] = (original_img[0, c] - min_val) / range_val
+        norm_predicted[0, c] = (predicted_img[0, c] - min_val) / range_val
 
+    return norm_original, norm_predicted
 
 def top_left_crop(tensor, crop_h, crop_w):
     """

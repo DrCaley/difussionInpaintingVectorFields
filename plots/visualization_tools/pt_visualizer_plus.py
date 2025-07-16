@@ -76,7 +76,6 @@ class PTVisualizer():
                 plt.figure(figsize=figsize)
                 plt.quiver(x, y, u.cpu(), v.cpu(), scale=1.0 / vector_scale)
                 plt.title(title + " (Vector Field)")
-                plt.gca().invert_yaxis()
                 plt.gca().set_aspect('equal', adjustable='box')
                 plt.savefig(os.path.join(save_dir, f"{title}_vector_field.png"))
                 plt.close()
