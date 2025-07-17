@@ -37,8 +37,9 @@ class DDInitializer:
         return cls._instance
 
     def _init(self, config_path, pickle_path, boundaries_path):
+        print(config_path)
         root = Path(__file__).resolve().parent.parent
-
+        self.config_name = config_path.stem
         self.full_boundaries_path = root / boundaries_path
 
         self._instance._setup_yaml_file(root / config_path)
@@ -205,3 +206,10 @@ class DDInitializer:
 
     def get_full_config(self):
         return self._config
+
+    def get_config_name(self):
+        return self.config_name
+
+    @classmethod
+    def reset_instance(cls):
+        cls._instance = None
