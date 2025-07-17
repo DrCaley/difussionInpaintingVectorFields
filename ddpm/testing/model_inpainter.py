@@ -187,10 +187,6 @@ class ModelInpainter:
                   desc=f"[{self.model_name}] Mask: {mask_generator}({mask_generator.get_num_lines()})", colour="#00ffff") as main_pbar:
 
             for step, batch in enumerate(loader):
-
-                if step < 45:
-                    continue
-
                 if image_counter >= num_images_to_process:
                     break
 

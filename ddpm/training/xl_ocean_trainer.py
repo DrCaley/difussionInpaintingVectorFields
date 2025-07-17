@@ -446,11 +446,11 @@ def main():
     ### Parse Arguments
     ##############################
 
+    results_dir = pkg_path / 'results' / 'training'
+    glob_list = list(results_dir.glob("*"))
+    results_dir = results_dir / f"{len(glob_list):04d}_{args.model_name}"
+    
     try:
-        results_dir = pkg_path / 'results' / 'training'
-        glob_list = list(results_dir.glob("*"))
-        results_dir = results_dir / f"{len(glob_list):04d}_{args.model_name}"
-
         trainer = TrainOceanXL(config_path=args.training_cfg, 
                                ouput_path=results_dir)
         trainer.train()
