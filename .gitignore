@@ -11,6 +11,7 @@ plots/images
 noise/
 results/
 noise_images/
+models_to_train/
 *.csv
 *.txt
 *.pt
