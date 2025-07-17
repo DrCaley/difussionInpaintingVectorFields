@@ -1,4 +1,5 @@
 data/
+cfg/divergence_weight
 /.venv/
 .idea/
 __pycache__/

@@ -187,6 +187,10 @@ class ModelInpainter:
                   desc=f"[{self.model_name}] Mask: {mask_generator}({mask_generator.get_num_lines()})", colour="#00ffff") as main_pbar:
 
             for step, batch in enumerate(loader):
+
+                if step < 45:
+                    continue
+
                 if image_counter >= num_images_to_process:
                     break
 
@@ -324,9 +328,11 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    for percentage in np.linspace(1, 0.1, 10):
-        for _ in range(10):
-            mi.add_mask(CoverageMaskGenerator(percentage))
+    mi.add_mask(ManualMaskDrawer())
+
+    # for percentage in np.linspace(1, 0.1, 10):
+    #     for _ in range(10):
+    #         mi.add_mask(CoverageMaskGenerator(percentage))
 
     mi.visualize_images()
     mi.find_coverage()

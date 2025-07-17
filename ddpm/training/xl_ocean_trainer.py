@@ -1,20 +1,22 @@
+import argparse
 import csv
 import os
 import sys
 import logging
-from datetime import datetime
-from pathlib import Path
-
 import torch
-from halo import Halo
 import matplotlib
 
+from datetime import datetime
+from halo import Halo
+from pathlib import Path
 
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+pkg_path = Path(__file__).resolve().parents[2]
 
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent.parent))
@@ -37,13 +39,13 @@ class TrainOceanXL:
         |   |
     """
 
-    def __init__(self):
+    def __init__(self, config_path, ouput_path):
         """
         Initializes model, datasets, loaders, and all training configs using DDInitializer.
         """
-        self.dd = DDInitializer()
+        self.dd = DDInitializer(config_path)
         dd = self.dd
-        self._setup_paths_and_files(dd)
+        self._setup_paths_and_files(dd, ouput_path)
         self.device = dd.get_device()
         self.n_steps = dd.get_attribute('noise_steps')
         self.min_beta = dd.get_attribute('min_beta')
@@ -132,12 +134,12 @@ class TrainOceanXL:
             self.model_to_retrain = path
             self.continue_training = True
 
-    def _setup_paths_and_files(self, dd):
+    def _setup_paths_and_files(self, dd, output_directory):
         """
         Prepares all output paths for saving models, plots, and logs.
         """
         self.set_timestamp()
-        self.set_output_directory()
+        self.set_output_directory(output_directory)
         self.set_csv_file()
         self.save_config_used()
         self.set_model_file()
@@ -167,14 +169,14 @@ class TrainOceanXL:
         """
         self.timestamp = timestamp
 
-    def set_output_directory(self, training_output="training_output"):
+    def set_output_directory(self, output_directory):
         """
         Creates the output directory for this training run.
 
         Args:
             training_output (str, optional): Name of the output directory.
         """
-        self.output_directory = (Path(__file__).parent / training_output).resolve()
+        self.output_directory = output_directory.resolve()
         self.output_directory.mkdir(parents=True, exist_ok=True)
 
     def save_config_used(self):
@@ -423,12 +425,42 @@ class TrainOceanXL:
         logging.info(f"📦 Final model: {self.model_file}")
         logging.info(f"🏆 Best model: {self.best_model_checkpoint}")
 
-if __name__ == '__main__':
+
+def main():
+
+    ##############################
+    ### Parse Arguments
+    ##############################
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--training_cfg", 
+                        default=pkg_path / "data.yaml")
+
+    parser.add_argument("--model_name",
+                        default='ddpm')
+
+    args = parser.parse_args()   
+
+    ##############################
+    ### Parse Arguments
+    ##############################
+
     try:
-        trainer = TrainOceanXL()
+        results_dir = pkg_path / 'results' / 'training'
+        glob_list = list(results_dir.glob("*"))
+        results_dir = results_dir / f"{len(glob_list):04d}_{args.model_name}"
+
+        trainer = TrainOceanXL(config_path=args.training_cfg, 
+                               ouput_path=results_dir)
         trainer.train()
     except Exception as e:
         logging.error("🚨 Oops! Something went wrong during training.")
         logging.error(f"💥 Error: {str(e)}")
         logging.error(get_death_message())
         logging.error("Training crashed. Check the logs or ask your local neighborhood AI expert 🧠.")
+
+
+
+if __name__ == '__main__':
+    main()
