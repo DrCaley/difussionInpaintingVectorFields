@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR))
 
 from ddpm.helper_functions.death_messages import get_death_message
@@ -14,8 +14,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 RESET = '\033[0m'
 GREEN = '\033[32m'
-
-directory = Path("../models_to_train")
+directory = Path("./models_to_train")
 models_to_train = []
 
 print("JARVIS: hello there, here are the yaml files that we are going to be running-")

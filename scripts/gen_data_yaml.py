@@ -22,7 +22,7 @@ def main():
         data_yaml['w1'] = float(divergence_weight)
         data_yaml['w2'] = float(mse_weight)
 
-        with open(run_dir / f"{data_yaml['noise_function']}mse_{mse_weight:.1f}_div_{divergence_weight:.1f}.yaml", 'w') as f:
+        with open(run_dir / f"{data_yaml['noise_function']}_mse_{mse_weight:.1f}_div_{divergence_weight:.1f}.yaml", 'w') as f:
             yaml.dump(data_yaml, f)
 
 if __name__ == '__main__':
