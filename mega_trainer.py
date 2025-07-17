@@ -24,6 +24,9 @@ for entry in directory.iterdir():
         print(entry.name)
         models_to_train.append(entry)
 
+if len(models_to_train) == 0:
+    print(f"no models in {GREEN}models_to_train{RESET}")
+
 for file in models_to_train:
     try:
         print(f"Currently training:{GREEN} {file.name}{RESET}")
