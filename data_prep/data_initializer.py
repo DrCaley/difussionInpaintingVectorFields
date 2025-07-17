@@ -37,7 +37,6 @@ class DDInitializer:
         return cls._instance
 
     def _init(self, config_path, pickle_path, boundaries_path):
-        print(config_path)
         root = Path(__file__).resolve().parent.parent
         self.config_name = config_path.stem
         self.full_boundaries_path = root / boundaries_path

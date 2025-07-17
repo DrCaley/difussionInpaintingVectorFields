@@ -109,6 +109,7 @@ class ManualMaskDrawer(MaskGenerator):
         _, _, H, W = image_shape
         mask_H, mask_W = self.tensor_mask.shape[-2:]
 
+
         if mask_H > H or mask_W > W:
             raise ValueError(f"Drawn mask is larger than the image. "
                              f"Image: ({H}, {W}), Mask: ({mask_H}, {mask_W})")
@@ -116,9 +117,12 @@ class ManualMaskDrawer(MaskGenerator):
         pad_H = H - mask_H
         pad_W = W - mask_W
 
-        padded_mask = torch.nn.functional.pad(self.tensor_mask,
+        flipped_mask = torch.flip(self.tensor_mask, dims=[-2])
+
+        padded_mask = torch.nn.functional.pad(flipped_mask,
                                               (0, pad_W, 0, pad_H),
                                               mode='constant', value=0)
+
         return 1.0 - padded_mask
 
     def __str__(self):
