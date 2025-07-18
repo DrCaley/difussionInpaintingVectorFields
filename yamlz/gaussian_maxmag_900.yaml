@@ -2,7 +2,7 @@ u_training_mean: -0.06929559429949586
 u_training_std: 0.1358005549716049
 v_training_mean: -0.0323937796117541
 v_training_std: 0.08899177232117582
-gpu_to_use: 1
+gpu_to_use: 0
 
 # === training ===
 retrain_mode: False
@@ -16,7 +16,7 @@ epochs: 2000
 batch_size: 100  #use ~80 for server
 lr: 0.001
 
-standardizer_type: zscore
+standardizer_type: maxmag
                   # zscore
                   # maxmag
                   # units
@@ -36,7 +36,7 @@ w2: 0.5
 num_workers: 0
 
 # === Both ===
-noise_steps: 100
+noise_steps: 900
 min_beta: 0.0001
 max_beta: 0.02
 
