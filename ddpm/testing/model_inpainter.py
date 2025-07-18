@@ -1,8 +1,8 @@
 import csv
 import sys
+
 import torch
 import logging
-import os.path
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader
 from scipy.ndimage import distance_transform_edt
 from pathlib import Path
 
+BASE_DIR = Path(__file__).resolve().parent
+sys.path.append(str(BASE_DIR.parent.parent))
 
 from ddpm.helper_functions.masks import MaskGenerator
 from ddpm.helper_functions.masks import *
@@ -24,8 +26,8 @@ from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_m
 class ModelInpainter:
     def __init__(self):
         self.dd = DDInitializer()
-        self.set_results_path()
-        self.csv_file = os.path.join(self.results_path, f"inpainting_xl_data.csv")
+        self.set_results_path("./results")
+        self.csv_file = self.results_path / "inpainting_xl_data.csv"
         self.write_header()
         self.model_paths = []
         self.masks_to_use = []
@@ -40,11 +42,11 @@ class ModelInpainter:
 
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s - %(levelname)s - %(message)s',
-                            filename=f"{self.results_path}inpainting_model_test_log.txt")
+                            filename=self.results_path / "inpainting_model_test_log.txt")
 
     def set_results_path(self, results_path="."):
-        self.results_path = results_path + "/results/"
-        os.makedirs(self.results_path, exist_ok=True)
+        self.results_path = Path(results_path)
+        self.results_path.mkdir(exist_ok=True)
 
     def reset_plot_lists(self):
         self.mse_ddpm_list = []
@@ -60,7 +62,8 @@ class ModelInpainter:
         self.save_pt_fields = True
 
     def add_model(self, model_path: str):
-        if not os.path.exists(model_path):
+        path = Path(model_path)
+        if not path.exists():
             print(f"Warning: {model_path} does not exist and will be skipped.")
             return
         self.model_paths.append(model_path)
@@ -136,7 +139,7 @@ class ModelInpainter:
         plt.ylabel("MSE (DDPM)")
         plt.grid(True)
         plt.tight_layout()
-        plot_path = os.path.join(self.results_path, f"mse_vs_mask_percentage_{self.model_name}.png")
+        plot_path = self.results_path / f"mse_vs_mask_percentage_{self.model_name}.png"
         plt.savefig(plot_path)
         plt.close()
         logging.info(f"Saved DDPM MSE vs. mask percentage plot to {plot_path}")
@@ -153,7 +156,7 @@ class ModelInpainter:
         plt.ylabel("MSE (GP Fill)")
         plt.grid(True)
         plt.tight_layout()
-        plot_path = os.path.join(self.results_path, f"gp_mse_vs_mask_percentage_{self.model_name}.png")
+        plot_path = self.results_path / f"gp_mse_vs_mask_percentage_{self.model_name}.png"
         plt.savefig(plot_path)
         plt.close()
         logging.info(f"Saved GP Fill MSE vs. mask percentage plot to {plot_path}")
@@ -173,7 +176,7 @@ class ModelInpainter:
         plt.grid(True)
         plt.legend()
         plt.tight_layout()
-        path = os.path.join(self.results_path, f"mse_vs_distance_{self.model_name}.png")
+        path = self.results_path / f"mse_vs_distance_{self.model_name}.png"
         plt.savefig(path)
         plt.close()
         logging.info(f"Saved MSE vs. distance plot to {path}")
@@ -224,10 +227,10 @@ class ModelInpainter:
 
                             base_id = f"{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}"
 
-                            torch.save(final_image_ddpm_cropped, f"{self.results_path}ddpm{base_id}.pt")
-                            torch.save(mask_cropped, f"{self.results_path}mask{base_id}.pt")
-                            torch.save(input_image_original_cropped, f"{self.results_path}initial{base_id}.pt")
-                            torch.save(gp_field_cropped, f"{self.results_path}gp_field{base_id}.pt")
+                            torch.save(final_image_ddpm_cropped, self.results_path / f"ddpm{base_id}.pt")
+                            torch.save(mask_cropped, self.results_path / f"mask{base_id}.pt")
+                            torch.save(input_image_original_cropped, self.results_path / f"initial{base_id}.pt")
+                            torch.save(gp_field_cropped, self.results_path / f"gp_field{base_id}.pt")
 
 
                             writer.writerow([self.model_name, image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mse_gp.item(), mask_percentage, avg_dist])
@@ -245,10 +248,10 @@ class ModelInpainter:
                                 ptv.calc()
 
                             if not self.save_pt_fields:
-                                os.remove(f"{self.results_path}ddpm{base_id}.pt")
-                                os.remove(f"{self.results_path}mask{base_id}.pt")
-                                os.remove(f"{self.results_path}initial{base_id}.pt")
-                                os.remove(f"{self.results_path}gp_field{base_id}.pt")
+                                (self.results_path / f"ddpm{base_id}.pt").unlink()
+                                (self.results_path / f"mask{base_id}.pt").unlink()
+                                (self.results_path / f"initial{base_id}.pt").unlink()
+                                (self.results_path / f"gp_field{base_id}.pt").unlink()
 
                             del final_image_ddpm, input_image_original_cropped, mask_cropped, gp_field
 
@@ -266,13 +269,13 @@ class ModelInpainter:
             writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "ddp_mse", "gp_mse", "mask_percent", "average_pixel_distance"])
 
     def _set_up_model(self, model_path):
-        self.store_path = model_path
-        self.model_name = os.path.splitext(os.path.basename(model_path))[0]
-        self.set_results_path(f"./results/{self.model_name}/")
+        self.store_path = Path(model_path)
+        self.model_name = self.store_path.stem
+        self.set_results_path(f"./results/{self.model_name}")
 
         try:
             import yaml
-            config_path = os.path.join(self.results_path, "config.yaml")
+            config_path = self.results_path / "config.yaml"
             with open(config_path, 'w') as f:
                 yaml.dump(self.dd.get_full_config(), f)
             logging.info(f"Saved config to {config_path}")
@@ -327,9 +330,7 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    for percentage in np.linspace(1, 0.1, 5):
-        for _ in range(1):
-            mi.add_mask(CoverageMaskGenerator(percentage))
+    mi.add_mask(ManualMaskDrawer())
 
     mi.visualize_images()
     mi.find_coverage()

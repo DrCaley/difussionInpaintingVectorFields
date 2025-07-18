@@ -37,11 +37,15 @@ class TrainOceanXL:
         |   |
     """
 
-    def __init__(self):
+    def __init__(self, config_path = None):
         """
         Initializes model, datasets, loaders, and all training configs using DDInitializer.
         """
-        self.dd = DDInitializer()
+        if config_path is None:
+            self.dd = DDInitializer()
+        else:
+            self.dd = DDInitializer(config_path=config_path)
+
         dd = self.dd
         self._setup_paths_and_files(dd)
         self.device = dd.get_device()
@@ -137,7 +141,7 @@ class TrainOceanXL:
         Prepares all output paths for saving models, plots, and logs.
         """
         self.set_timestamp()
-        self.set_output_directory()
+        self.set_output_directory(self.dd.get_config_name())
         self.set_csv_file()
         self.save_config_used()
         self.set_model_file()
@@ -167,14 +171,14 @@ class TrainOceanXL:
         """
         self.timestamp = timestamp
 
-    def set_output_directory(self, training_output="training_output"):
+    def set_output_directory(self, training_output = "model"):
         """
         Creates the output directory for this training run.
 
         Args:
             training_output (str, optional): Name of the output directory.
         """
-        self.output_directory = (Path(__file__).parent / training_output).resolve()
+        self.output_directory = (Path(__file__).parent / "training_output" / training_output).resolve()
         self.output_directory.mkdir(parents=True, exist_ok=True)
 
     def save_config_used(self):
