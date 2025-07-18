@@ -44,7 +44,7 @@ class ModelInpainter:
         self.visualizer = False
         self.compute_coverage_plot = False
         self.save_pt_fields = self.dd.get_attribute("save_pt_fields")
-        self.model_name = "default"
+        self.model_name = None
 
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s - %(levelname)s - %(message)s',
@@ -274,10 +274,11 @@ class ModelInpainter:
             writer = csv.writer(file)
             writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "ddp_mse", "gp_mse", "mask_percent", "average_pixel_distance"])
 
-    def _set_up_model(self, model_path, num):
+    def _set_up_model(self, model_path):
         self.store_path = Path(model_path)
-        self.model_name = self.store_path.stem
-        self.set_results_path(f"./results/{self.model_name}_{num}")
+        if self.model_name is None:
+            self.model_name = self.store_path.stem
+        self.set_results_path(f"./results/{self.model_name}")
 
         try:
             import yaml
@@ -297,9 +298,8 @@ class ModelInpainter:
             raise Exception('No masks available! Use `add_mask(...)` before running.')
 
         for model_path in self.model_paths:
-            num = 0
             try:
-                self._set_up_model(model_path, num)
+                self._set_up_model(model_path)
 
                 with open(self.csv_file, 'a', newline="") as file:
                     for mask in self.masks_to_use:
@@ -316,7 +316,6 @@ class ModelInpainter:
             except Exception as e:
                 logging.error(f"Error inpainting model {model_path}: {e}", stack_info=True)
                 continue
-            num += 1
 
     def visualize_images(self, vector_scale=0.15):
         self.visualizer = True
@@ -332,6 +331,8 @@ class ModelInpainter:
         if len(self.model_paths) == 0:
             print("no models in model_paths attribute in data.yaml")
 
+    def set_model_name(self, model_name):
+        self.model_name = model_name
 
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':

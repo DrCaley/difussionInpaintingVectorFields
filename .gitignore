@@ -3,6 +3,7 @@ data/
 .idea/
 __pycache__/
 output/
+trained_models/*
 example_nn/
 training_output/
 plots/visualization_tools/pt_visualizer_images
@@ -16,4 +17,6 @@ models_to_train/
 *.txt
 *.pt
 *.pickle
+*.png
+
 util.py

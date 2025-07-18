@@ -16,15 +16,18 @@ print("JARVIS: hello there, here are the models we are going to be testing:")
 directory = Path("./ddpm/trained_models")
 config_files = []
 models = []
+names = []
 
 for entry in directory.iterdir():
     if entry.is_dir():
         config_files.append(entry.absolute() / "config_used.yaml")
         models.append(entry.absolute() / "ddpm_ocean_model_best_checkpoint.pt")
-        print(entry)
+        names.append(entry.stem)
+        print(entry.stem)
 
 for i in range(len(models)):
     mi = ModelInpainter(config_path=config_files[i], model_file=models[i])
+    mi.set_model_name(names[i])
 
     for _ in range(1):
         mi.add_mask(CoverageMaskGenerator(0.5))
