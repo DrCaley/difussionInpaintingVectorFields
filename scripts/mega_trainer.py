@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 RESET = '\033[0m'
 GREEN = '\033[32m'
-directory = Path("./models_to_train")
+directory = Path("../models_to_train")
 models_to_train = []
 
 print("JARVIS: hello there, here are the yaml files that we are going to be running-")

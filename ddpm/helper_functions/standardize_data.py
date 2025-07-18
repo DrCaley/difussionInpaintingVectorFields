@@ -47,8 +47,8 @@ class MaxMagnitudeStandardizer(Standardizer):
         return tensor * self.last_max_mag
 
 class UnitVectorNormalizer(Standardizer):
-    def __init__(self, eps=1e-8):
-        self.eps = eps
+    def __init__(self):
+        self.eps = 1e-8
         self.last_magnitudes = None  # Store per-vector magnitudes
 
     def __call__(self, tensor):
