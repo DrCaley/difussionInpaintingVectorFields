@@ -5,13 +5,14 @@ import oyaml as yaml
 
 from pathlib import Path
 
-pkg_path = Path(__file__).resolve().parent.parent
+
+pkg_path = Path(__file__).resolve().parents[1]
 
 def main():
     with open(pkg_path / "data.yaml") as f:
         data_yaml = yaml.load(f, Loader=yaml.SafeLoader)
 
-    run_dir = pkg_path / 'models_to_train'
+    run_dir = pkg_path / 'cfg' / "divergence_weight"
     os.makedirs(run_dir, exist_ok=True)
 
     print(run_dir)
