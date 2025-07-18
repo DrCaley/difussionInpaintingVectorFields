@@ -24,12 +24,18 @@ from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_m
 
 
 class ModelInpainter:
-    def __init__(self):
-        self.dd = DDInitializer()
+    def __init__(self, config_path = None, model_file = None):
+        if config_path is None:
+            self.dd = DDInitializer()
+        else:
+            self.dd = DDInitializer(config_path=config_path)
         self.set_results_path("./results")
         self.csv_file = self.results_path / "inpainting_xl_data.csv"
         self.write_header()
         self.model_paths = []
+        if model_file is not None:
+            self.model_paths.append(model_file)
+
         self.masks_to_use = []
         self.resamples = self.dd.get_attribute("resample_nums")
         self.reset_plot_lists()
@@ -268,10 +274,10 @@ class ModelInpainter:
             writer = csv.writer(file)
             writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "ddp_mse", "gp_mse", "mask_percent", "average_pixel_distance"])
 
-    def _set_up_model(self, model_path):
+    def _set_up_model(self, model_path, num):
         self.store_path = Path(model_path)
         self.model_name = self.store_path.stem
-        self.set_results_path(f"./results/{self.model_name}")
+        self.set_results_path(f"./results/{self.model_name}_{num}")
 
         try:
             import yaml
@@ -291,8 +297,9 @@ class ModelInpainter:
             raise Exception('No masks available! Use `add_mask(...)` before running.')
 
         for model_path in self.model_paths:
+            num = 0
             try:
-                self._set_up_model(model_path)
+                self._set_up_model(model_path, num)
 
                 with open(self.csv_file, 'a', newline="") as file:
                     for mask in self.masks_to_use:
@@ -309,6 +316,7 @@ class ModelInpainter:
             except Exception as e:
                 logging.error(f"Error inpainting model {model_path}: {e}", stack_info=True)
                 continue
+            num += 1
 
     def visualize_images(self, vector_scale=0.15):
         self.visualizer = True
