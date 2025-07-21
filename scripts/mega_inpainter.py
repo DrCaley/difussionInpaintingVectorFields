@@ -4,6 +4,7 @@
 
 import sys
 from pathlib import Path
+import numpy as np
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR))
@@ -29,8 +30,9 @@ for i in range(len(models)):
     mi = ModelInpainter(config_path=config_files[i], model_file=models[i])
     mi.set_model_name(names[i])
 
-    for _ in range(1):
-        mi.add_mask(CoverageMaskGenerator(0.5))
+    for percentage in np.linspace(1, 0, 10):
+        for _ in range(10):
+            mi.add_mask(CoverageMaskGenerator(percentage))
 
     mi.visualize_images()
     mi.find_coverage()
