@@ -24,12 +24,18 @@ from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_m
 
 
 class ModelInpainter:
-    def __init__(self):
-        self.dd = DDInitializer()
+    def __init__(self, config_path = None, model_file = None):
+        if config_path is None:
+            self.dd = DDInitializer()
+        else:
+            self.dd = DDInitializer(config_path=config_path)
         self.set_results_path("./results")
         self.csv_file = self.results_path / "inpainting_xl_data.csv"
         self.write_header()
         self.model_paths = []
+        if model_file is not None:
+            self.model_paths.append(model_file)
+
         self.masks_to_use = []
         self.resamples = self.dd.get_attribute("resample_nums")
         self.reset_plot_lists()
@@ -38,7 +44,7 @@ class ModelInpainter:
         self.visualizer = False
         self.compute_coverage_plot = False
         self.save_pt_fields = self.dd.get_attribute("save_pt_fields")
-        self.model_name = "default"
+        self.model_name = None
 
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s - %(levelname)s - %(message)s',
@@ -270,7 +276,8 @@ class ModelInpainter:
 
     def _set_up_model(self, model_path):
         self.store_path = Path(model_path)
-        self.model_name = self.store_path.stem
+        if self.model_name is None:
+            self.model_name = self.store_path.stem
         self.set_results_path(f"./results/{self.model_name}")
 
         try:
@@ -324,6 +331,8 @@ class ModelInpainter:
         if len(self.model_paths) == 0:
             print("no models in model_paths attribute in data.yaml")
 
+    def set_model_name(self, model_name):
+        self.model_name = model_name
 
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
