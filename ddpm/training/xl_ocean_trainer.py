@@ -43,16 +43,13 @@ class TrainOceanXL:
         """
         Initializes model, datasets, loaders, and all training configs using DDInitializer.
         """
+        if config_path is None:
+            self.dd = DDInitializer()
+        else:
+            self.dd = DDInitializer(config_path=config_path)
 
-        self.dd = DDInitializer(config_path=config_path)
-
-    def __init__(self, config_path, ouput_path):
-        """
-        Initializes model, datasets, loaders, and all training configs using DDInitializer.
-        """
-        self.dd = DDInitializer(config_path)
         dd = self.dd
-        self._setup_paths_and_files(dd, ouput_path)
+        self._setup_paths_and_files(dd)
         self.device = dd.get_device()
         self.n_steps = dd.get_attribute('noise_steps')
         self.min_beta = dd.get_attribute('min_beta')
@@ -141,12 +138,12 @@ class TrainOceanXL:
             self.model_to_retrain = path
             self.continue_training = True
 
-    def _setup_paths_and_files(self, dd, output_directory):
+    def _setup_paths_and_files(self, dd):
         """
         Prepares all output paths for saving models, plots, and logs.
         """
         self.set_timestamp()
-        self.set_output_directory(output_directory)
+        self.set_output_directory(self.dd.get_config_name())
         self.set_csv_file()
         self.save_config_used()
         self.set_model_file()
@@ -176,17 +173,14 @@ class TrainOceanXL:
         """
         self.timestamp = timestamp
 
-
-    def set_output_directory(self, output_directory):
-
+    def set_output_directory(self, training_output = "model"):
         """
         Creates the output directory for this training run.
 
         Args:
             training_output (str, optional): Name of the output directory.
         """
-
-        self.output_directory = output_directory.resolve()
+        self.output_directory = (Path(__file__).parent / "training_output" / training_output).resolve()
         self.output_directory.mkdir(parents=True, exist_ok=True)
 
     def save_config_used(self):
@@ -455,14 +449,8 @@ def main():
     ##############################
     ### Parse Arguments
     ##############################
-
-    results_dir = pkg_path / 'results' / 'training'
-    glob_list = list(results_dir.glob("*"))
-    results_dir = results_dir / f"{len(glob_list):04d}_{args.model_name}"
-    
     try:
-        trainer = TrainOceanXL(config_path=args.training_cfg, 
-                               ouput_path=results_dir)
+        trainer = TrainOceanXL(config_path=args.training_cfg)
         trainer.train()
     except Exception as e:
         logging.error("🚨 Oops! Something went wrong during training.")
