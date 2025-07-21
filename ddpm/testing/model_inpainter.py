@@ -297,12 +297,16 @@ class ModelInpainter:
         if len(self.masks_to_use) == 0:
             raise Exception('No masks available! Use `add_mask(...)` before running.')
 
-        for model_path in self.model_paths:
+        model_bar = tqdm(self.model_paths, desc="🧠 Models", colour="magenta")
+
+        for model_path in model_bar:
             try:
                 self._set_up_model(model_path)
 
                 with open(self.csv_file, 'a', newline="") as file:
-                    for mask in self.masks_to_use:
+                    mask_bar = tqdm(self.masks_to_use, desc=f"🎭 Masks ({self.model_name})", leave=False, colour="cyan")
+                    for mask in mask_bar:
+                        mask_bar.set_postfix(model=self.model_name, mask=str(mask))
                         logging.info(f"Running mask {mask} with model {self.model_name}")
                         image_counter = self._inpaint_testing(mask, 0, file)
 
