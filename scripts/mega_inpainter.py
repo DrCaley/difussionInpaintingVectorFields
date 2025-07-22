@@ -57,8 +57,8 @@ for i in range(len(models)):
         mi = ModelInpainter(config_path=config_files[i], model_file=models[i])
         mi.set_model_name(names[i])
 
-        for percentage in np.linspace(1, 0, 1):
-            for _ in range(1):
+        for percentage in np.linspace(1, 0, 10):
+            for _ in range(10):
                 mi.add_mask(CoverageMaskGenerator(percentage))
 
         mi.visualize_images()

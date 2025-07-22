@@ -75,7 +75,7 @@ class CalculatorFactorySingletonAdapter:
         print("5. ^")
         input("which one? ")
         for i in tqdm(range(100), desc="Calculation Progress", colour="#ff0000"):
-            time.sleep(0.5)
+            time.sleep(0.25)
 
         time.sleep(0.5)
         print("Hello, World!")
