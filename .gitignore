@@ -13,6 +13,7 @@ plots/images
 noise/
 results/
 noise_images/
+tested_models/
 *.csv
 *.txt
 *.pt

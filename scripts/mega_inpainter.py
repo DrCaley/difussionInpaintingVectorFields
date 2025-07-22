@@ -19,13 +19,31 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 
 directory = Path("./ddpm/trained_models")
+destination_directory = Path("./ddpm/tested_models")
+destination_directory.mkdir(parents=True, exist_ok=True)
 config_files = []
 models = []
+model_dirs = []
 names = []
+
+def move_finished_model(model_dir: Path):
+    try:
+        # Check if the source directory exists
+        if model_dir.is_dir():
+            # Move the directory
+            model_dir.rename(destination_directory / model_dir.name)
+            print(f"Directory '{model_dir}' moved to '{destination_directory}' successfully.")
+        else:
+            print(f"Source directory '{model_dir}' does not exist.")
+    except FileExistsError:
+        print(f"Destination '{destination_directory}' already exists and is not empty or is a file.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 for entry in directory.iterdir():
     if entry.is_dir():
-        config_file_path =entry.absolute() / "config_used.yaml"
+        model_dirs.append(entry)
+        config_file_path = entry.absolute() / "config_used.yaml"
         if config_file_path.exists():
             config_files.append(entry.absolute() / "config_used.yaml")
             models.append(entry.absolute() / "ddpm_ocean_model_best_checkpoint.pt")
@@ -39,16 +57,18 @@ for i in range(len(models)):
         mi = ModelInpainter(config_path=config_files[i], model_file=models[i])
         mi.set_model_name(names[i])
 
-        for percentage in np.linspace(1, 0, 10):
-            for _ in range(10):
+        for percentage in np.linspace(1, 0, 1):
+            for _ in range(1):
                 mi.add_mask(CoverageMaskGenerator(percentage))
 
         mi.visualize_images()
         mi.find_coverage()
         mi.begin_inpainting()
         DDInitializer.reset_instance()
+        move_finished_model(model_dirs[i])
     except Exception as e:
         logging.error("🚨 Oops! Something went wrong during inpatinting.")
         logging.error(f"💥 Error: {str(e)}")
         logging.error(get_death_message())
         logging.error(f"Inpainting {names[i]} crashed. Check the logs or ask your local neighborhood AI expert 🧠.")
+        continue
