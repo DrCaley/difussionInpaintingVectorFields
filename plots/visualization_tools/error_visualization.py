@@ -57,6 +57,48 @@ def save_mse_heatmap(tensor1, tensor2, mask, save_path="mse_heatmap.png",
     plt.close()
 
 
+def save_percent_heatmap(true, observed, mask, save_path="mse_heatmap.png",
+                     title="Masked Pixel-wise MSE Heatmap", mask_color="lightgray",
+                     crop_shape=(44, 94), cmap_name="viridis"):
+    save_path = ensure_save_path(save_path)
+
+    assert true.shape == observed.shape, "Tensors must be the same shape"
+    assert true.shape[1] == 2, "Expected tensors with shape (1, 2, H, W)"
+    assert mask.shape == (1, 2, true.shape[2], true.shape[3]), "Mask must be shape (1, 2, H, W)"
+
+    single_mask = mask[:, 0:1, :, :]
+
+    percent_error = ( torch.abs( (observed - true) / true ) )
+    pixel_mse = percent_error.sum(dim=1, keepdim=True)
+    masked_per = pixel_mse * single_mask
+
+    masked_per_np = masked_per.squeeze().cpu().numpy()
+    mask_np = single_mask.squeeze().cpu().numpy()
+
+    crop_h, crop_w = crop_shape
+    cropped_per = masked_per_np[:crop_h, :crop_w]
+    cropped_mask = mask_np[:crop_h, :crop_w]
+
+    valid_pixels = cropped_mask == 1
+    avg_per = cropped_per[valid_pixels].mean() if np.any(valid_pixels) else float('nan')
+    print(f"Average percent error per pixel over masked area in crop: {avg_per:.6f}")
+
+    masked_array = np.where(cropped_mask == 1, cropped_per, np.nan)
+
+    plt.figure(figsize=(8, 6))
+    cmap = plt.get_cmap(cmap_name).copy()
+    cmap.set_bad(color=mask_color)
+
+    plt.imshow(masked_array, cmap=cmap, interpolation='nearest')
+    plt.colorbar(label="Pixel Percent Error")
+    full_title = f"{title}\nAverage Percent Error: {avg_per:.6f}"
+    plt.title(full_title)
+    plt.xlabel("Width")
+    plt.ylabel("Height")
+    plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    plt.close()
+
+
 def save_angular_error_heatmap(tensor1, tensor2, mask, save_path="angular_error_heatmap.png",
                                crop_shape=(44, 94), mask_color="lightgray", cmap_name="viridis",
                                title="Masked Angular Error Heatmap"):

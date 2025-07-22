@@ -96,6 +96,33 @@ def calculate_mse(original_image, predicted_image, mask, normalize=False):
 
     return total_error / num_valid_pixels
 
+def calculate_percent_error(original_image, predicted_image, mask):
+    """
+    Calculates masked percent error between original and predicted image.
+    Optionally normalizes both using original_image's masked region stats.
+
+    Args:
+        original_image: (1, 2, H, W)
+        predicted_image: (1, 2, H, W)
+        mask: (1, 2, H, W)
+
+    Returns:
+        Scalar MSE
+    """
+    single_mask = mask[:, 0:1, :, :]  # shape (1, 1, H, W)
+
+    percent_error = ( torch.abs( (predicted_image - original_image) / original_image ) )  # (1, 2, H, W)
+    per_pixel_error = percent_error.sum(dim=1, keepdim=True)  # (1, 1, H, W)
+
+    masked_error = per_pixel_error * single_mask
+    total_error = masked_error.nansum()
+    num_valid_pixels = single_mask.nansum()
+
+    if num_valid_pixels == 0:
+        return torch.tensor(float('nan'))
+
+    return total_error / num_valid_pixels
+
 
 def normalize_pair(original_img, predicted_img, mask):
     """
