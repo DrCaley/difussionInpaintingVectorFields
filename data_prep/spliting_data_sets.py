@@ -52,13 +52,17 @@ this_is_a_dictionary = {'training_data':training_data,
                         'test_data':test_data,
                         'meta_data':meta_data}
 
-u_values = this_is_a_dictionary['training_data'][:, :, 0, :].reshape(-1)
-v_values = this_is_a_dictionary['training_data'][:, :, 1, :].reshape(-1)
+u = this_is_a_dictionary['training_data'][:, :, 0, :]
+v = this_is_a_dictionary['training_data'][:, :, 1, :]
 
-u_training_mean = np.nanmean(u_values)
-u_training_std = np.nanstd(u_values)
-v_training_mean = np.nanmean(v_values)
-v_training_std = np.nanstd(v_values)
+u_training_mean = np.nanmean(u)
+u_training_std = np.nanstd(u)
+v_training_mean = np.nanmean(v)
+v_training_std = np.nanstd(v)
+
+magnitudes = np.sqrt(u ** 2 + v ** 2)
+avg_magnitude = np.nanmean(magnitudes)
+print("Average vector magnitude in training data:", avg_magnitude)
 
 try:
     path = '../data.pickle' if pycharm_dumb_flag else 'data.pickle'

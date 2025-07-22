@@ -15,23 +15,22 @@ def get_dd_initializer():
 def exact_div_free_field_from_stream(H, W, freq, device='cpu'):
     dd = get_dd_initializer()
     device = dd.get_device()
-    x = torch.linspace(0, 2 * torch.pi, W, device=device)
-    y = torch.linspace(0, 2 * torch.pi, H, device=device)
+
+    # Create a slightly larger meshgrid for safe finite differences
+    x = torch.linspace(0, 2 * torch.pi, W + 1, device=device)
+    y = torch.linspace(0, 2 * torch.pi, H + 1, device=device)
     X, Y = torch.meshgrid(x, y, indexing='ij')
 
     phase_x, phase_y = 2 * torch.pi * torch.rand(2, device=device)
     psi = torch.sin(freq * X + phase_x) * torch.sin(freq * Y + phase_y)
 
-    vx = torch.zeros_like(psi)
-    vy = torch.zeros_like(psi)
+    # Compute forward differences
+    vx = psi[1:, :-1] - psi[:-1, :-1]  # dψ/dy (crop to [H, W])
+    vy = -(psi[:-1, 1:] - psi[:-1, :-1])  # -dψ/dx (crop to [H, W])
 
-    vx[:-1, :] = psi[1:, :] - psi[:-1, :]
-    vx[-1, :] = 0
+    return vx, vy  # Both are shape (H, W)
 
-    vy[:, :-1] = -(psi[:, 1:] - psi[:, :-1])
-    vy[:, -1] = 0
 
-    return vx, vy
 
 # Beta
 def gaussian_each_step_divergence_free_noise(shape: torch.Size, t: torch.Tensor, device='cpu') -> torch.Tensor:

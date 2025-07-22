@@ -20,7 +20,8 @@ from ddpm.neural_networks.ddpm import GaussianDDPM
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 from plots.visualization_tools.pt_visualizer_plus import PTVisualizer
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
-from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop
+from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop, \
+    calculate_percent_error
 
 
 class ModelInpainter:
@@ -222,6 +223,10 @@ class ModelInpainter:
 
                             mse_ddpm = calculate_mse(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped, normalize=True)
                             mse_gp = calculate_mse(input_image_original_cropped, gp_field_cropped, mask_cropped, normalize=True)
+
+                            per_ddpm = calculate_percent_error(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped)
+                            per_gp = calculate_percent_error(input_image_original_cropped, gp_field_cropped, mask_cropped)
+
                             mask_percentage = self.compute_mask_percentage(mask)
                             avg_dist = self.compute_avg_distance_to_seen(mask_cropped)
 
