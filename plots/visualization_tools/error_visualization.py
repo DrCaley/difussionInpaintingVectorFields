@@ -57,6 +57,64 @@ def save_mse_heatmap(tensor1, tensor2, mask, save_path="mse_heatmap.png",
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.close()
 
+def save_magnitude_difference_heatmap(tensor1, tensor2, mask, avg_magnitude,
+                                      save_path="magnitude_diff_heatmap.png",
+                                      title="Normalized Magnitude Difference Heatmap",
+                                      mask_color="lightgray", crop_shape=(44, 94),
+                                      cmap_name="viridis"):
+    save_path = ensure_save_path(save_path)
+
+    assert tensor1.shape == tensor2.shape, "Tensors must be the same shape"
+    assert tensor1.shape[1] == 2, "Expected tensors with shape (1, 2, H, W)"
+    assert mask.shape == (1, 2, tensor1.shape[2], tensor1.shape[3]), "Mask must be shape (1, 2, H, W)"
+
+    single_mask = mask[:, 0:1, :, :]  # Only use first channel for mask
+
+    # Compute magnitudes for each vector in tensor1 and tensor2
+    mag1 = torch.sqrt(tensor1[:, 0, :, :] ** 2 + tensor1[:, 1, :, :] ** 2)
+    mag2 = torch.sqrt(tensor2[:, 0, :, :] ** 2 + tensor2[:, 1, :, :] ** 2)
+
+    # Compute absolute difference in magnitude
+    mag_diff = torch.abs(mag1 - mag2)
+
+    # Normalize by average magnitude
+    norm_mag_diff = mag_diff / avg_magnitude
+
+    # Apply the mask
+    norm_mag_diff = norm_mag_diff * single_mask.squeeze(1)
+
+    # Convert to NumPy
+    norm_mag_diff_np = norm_mag_diff.squeeze().cpu().numpy()
+    mask_np = single_mask.squeeze().cpu().numpy()
+
+    # Crop the result
+    crop_h, crop_w = crop_shape
+    cropped_diff = norm_mag_diff_np[:crop_h, :crop_w]
+    cropped_mask = mask_np[:crop_h, :crop_w]
+
+    # Compute average magnitude difference in the crop
+    valid_pixels = cropped_mask == 1
+    avg_diff = cropped_diff[valid_pixels].mean() if np.any(valid_pixels) else float('nan')
+    print(f"Average normalized magnitude difference over masked area in crop: {avg_diff:.6f}")
+
+    # Mask invalid pixels with NaN for plotting
+    masked_array = np.where(cropped_mask == 1, cropped_diff, np.nan)
+
+    # Plot
+    plt.figure(figsize=(8, 6))
+    cmap = plt.get_cmap(cmap_name).copy()
+    cmap.set_bad(color=mask_color)
+
+    plt.imshow(masked_array, cmap=cmap, interpolation='nearest')
+    plt.colorbar(label="Normalized |mag1 - mag2| / avg_mag")
+    full_title = f"{title}\nAverage Norm Diff: {avg_diff:.6f}"
+    plt.title(full_title)
+    plt.xlabel("Width")
+    plt.ylabel("Height")
+    plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    plt.close()
+
+
 
 def save_percent_heatmap(true, observed, mask, save_path="mse_heatmap.png",
                      title="Masked Pixel-wise MSE Heatmap", mask_color="lightgray",
