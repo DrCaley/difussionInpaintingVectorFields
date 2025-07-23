@@ -10,7 +10,6 @@ from torch.utils.data import DataLoader
 from scipy.ndimage import distance_transform_edt
 from pathlib import Path
 
-
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent.parent))
 
@@ -114,7 +113,7 @@ class ModelInpainter:
             batch_size = self.dd.get_attribute("inpainting_batch_size")
             self.train_loader = DataLoader(self.dd.get_training_data(), batch_size=batch_size, shuffle=True)
             self.test_loader = DataLoader(self.dd.get_test_data(), batch_size=batch_size)
-            self.val_loader = DataLoader(self.dd.get_validation_data(), batch_size=batch_size)
+            self.val_loader = DataLoader(self.dd.get_validation_data(), batch_size=batch_size, shuffle=True)
             logging.info("Data prepared successfully")
         except Exception as e:
             logging.error(f"Error loading data: {e}")
@@ -317,10 +316,14 @@ class ModelInpainter:
 
                 with open(self.csv_file, 'a', newline="") as file:
                     mask_bar = tqdm(self.masks_to_use, desc=f"🎭 Masks ({self.model_name})", leave=False, colour="cyan")
+                    image_counter = 0
+
                     for mask in mask_bar:
                         mask_bar.set_postfix(model=self.model_name, mask=str(mask))
                         logging.info(f"Running mask {mask} with model {self.model_name}")
-                        image_counter = self._inpaint_testing(mask, 0, file)
+                        image_counter = self._inpaint_testing(mask, image_counter, file)
+                        image_counter = 0
+
 
                 if self.compute_coverage_plot:
                     self.plot_mse_vs_mask_percentage()
@@ -355,7 +358,8 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    mi.add_mask(ManualMaskDrawer())
+    for _ in range (10):
+        mi.add_mask(CoverageMaskGenerator(0.3))
 
     mi.visualize_images()
     mi.find_coverage()

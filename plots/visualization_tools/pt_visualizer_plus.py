@@ -13,7 +13,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 from data_prep.data_initializer import DDInitializer
 from plots.visualization_tools.error_visualization import save_mse_heatmap, save_angular_error_heatmap, \
     save_scaled_error_vectors_scalar_field, save_percent_heatmap, save_magnitude_difference_heatmap
-from ddpm.utils.inpainting_utils import calculate_mse
 
 dd = DDInitializer()
 
