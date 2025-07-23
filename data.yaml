@@ -34,8 +34,8 @@ loss_function: best_loss
               # mse
               # physical
               # best_loss
-w1: 0.75
-w2: 0.25
+w1: 0.5
+w2: 0.5
 num_workers: 0
 
 # === Both ===
