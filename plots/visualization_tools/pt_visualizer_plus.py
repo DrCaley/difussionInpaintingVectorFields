@@ -61,7 +61,8 @@ class PTVisualizer():
 
         if tensor.ndim == 2:
             tensor = crop(tensor)
-            plt.imshow(tensor.cpu(), cmap='gray')
+            arr = np.flipud(tensor.cpu().numpy())
+            plt.imshow(arr, cmap='gray')
             plt.title(title)
             plt.colorbar()
             plt.savefig(os.path.join(save_dir, f"{title}.png"))
@@ -87,6 +88,7 @@ class PTVisualizer():
                 tensor = crop(tensor)
                 for i in range(tensor.shape[0]):
                     plt.imshow(tensor[i].cpu(), cmap='gray')
+                    plt.gca().invert_yaxis()
                     plt.title(f"{title} - Channel {i}")
                     plt.colorbar()
                     plt.savefig(os.path.join(save_dir, f"{title}_channel_{i}.png"))

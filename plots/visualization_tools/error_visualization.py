@@ -48,6 +48,7 @@ def save_mse_heatmap(tensor1, tensor2, mask, save_path="mse_heatmap.png",
     cmap.set_bad(color=mask_color)
 
     plt.imshow(masked_array, cmap=cmap, interpolation='nearest')
+    plt.gca().invert_yaxis()
     plt.colorbar(label="Pixel MSE")
     full_title = f"{title}\nAverage MSE: {avg_mse:.6f}"
     plt.title(full_title)
@@ -148,6 +149,7 @@ def save_percent_heatmap(true, observed, mask, save_path="mse_heatmap.png",
     cmap.set_bad(color=mask_color)
 
     plt.imshow(masked_array, cmap=cmap, interpolation='nearest')
+    plt.gca().invert_yaxis()
     plt.colorbar(label="Pixel Percent Error")
     full_title = f"{title}\nAverage Percent Error: {avg_per:.6f}"
     plt.title(full_title)
@@ -198,6 +200,7 @@ def save_angular_error_heatmap(tensor1, tensor2, mask, save_path="angular_error_
     cmap.set_bad(color=mask_color)
 
     plt.imshow(masked_angle, cmap=cmap, interpolation='nearest')
+    plt.gca().invert_yaxis()
     plt.colorbar(label="Angular error (degrees)")
     full_title = f"{title}\nAverage Angular Error: {avg_angle_error:.3f}°"
     plt.title(full_title)
@@ -261,6 +264,7 @@ def save_scaled_error_vectors_scalar_field(tensor1, tensor2, mask, save_path="sc
     cmap.set_bad(color=mask_color)
 
     plt.imshow(masked_array, cmap=cmap, interpolation='nearest')
+    plt.gca().invert_yaxis()
     plt.colorbar(label="Scaled Error Magnitude")
     full_title = f"{title}\nAverage Scaled Error: {avg_scaled_error:.6f}"
     plt.title(full_title)
