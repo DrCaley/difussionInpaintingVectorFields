@@ -1,11 +1,10 @@
 import torch
 import torch.nn as nn
-
 from ddpm.helper_functions.compute_divergence import compute_divergence
 
 # Base class for loss strategies
 class LossStrategy(nn.Module):
-    def forward(self, predicted_noise: torch.Tensor, target_noise: torch.Tensor) -> torch.Tensor:
+    def forward(self, predicted_noise: torch.Tensor, target_noise: torch.Tensor, x0 : torch.Tensor) -> torch.Tensor:
         raise NotImplementedError("Loss strategy must implement forward()")
 
 
@@ -15,7 +14,7 @@ class MSELossStrategy(LossStrategy):
         super().__init__()
         self.loss_fn = nn.MSELoss()
 
-    def forward(self, predicted_noise, target_noise):
+    def forward(self, predicted_noise, target_noise, x0 = None) -> torch.Tensor:
         return self.loss_fn(predicted_noise, target_noise)
 
 
@@ -27,7 +26,7 @@ class PhysicalLossStrategy(LossStrategy):
         self.w1 = w1
         self.w2 = w2
 
-    def forward(self, predicted_noise, target_noise):
+    def forward(self, predicted_noise, target_noise, x0 = None) -> torch.Tensor:
         mse_loss = self.mse(predicted_noise, target_noise)
         div_loss = self.physical_loss(predicted_noise)
         return self.w1 * mse_loss + self.w2 * div_loss
@@ -41,9 +40,36 @@ class PhysicalLossStrategy(LossStrategy):
             batch_divs.append(div.pow(2).mean())
         return torch.stack(batch_divs).mean()
 
+class HotGarbage(LossStrategy):
+    def __init__(self):
+        super().__init__()
+
+        from data_prep.data_initializer import DDInitializer
+        dd = DDInitializer()
+
+        self.standardizer = dd.get_standardizer()
+        self.mse = nn.MSELoss()
+
+    def forward(self, predicted_noise, target_noise, noisy_img):
+        mse_loss = self.mse(predicted_noise, target_noise)
+        prediction = noisy_img - predicted_noise
+        unstandardized = self.standardizer.unstandardize(prediction)
+        div_loss = self.physical_loss(unstandardized)
+        return self.w1 * mse_loss + self.w2 * div_loss
+
+    @staticmethod
+    def physical_loss(predicted: torch.Tensor) -> torch.Tensor:
+        batch_divs = []
+        for field in predicted:
+            u, v = field[0], field[1]
+            div = compute_divergence(u, v)
+            batch_divs.append(div.pow(2).mean())
+        return torch.stack(batch_divs).mean()
+
 LOSS_REGISTRY = {
     "mse": MSELossStrategy,
-    "physical": PhysicalLossStrategy
+    "physical": PhysicalLossStrategy,
+    "best_loss": HotGarbage
 }
 
 def get_loss_strategy(name: str, **kwargs) -> LossStrategy:

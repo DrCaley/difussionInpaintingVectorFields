@@ -123,7 +123,6 @@ def calculate_percent_error(original_image, predicted_image, mask):
 
     return total_error / num_valid_pixels
 
-
 def normalize_pair(original_img, predicted_img, mask):
     """
     Normalize both images to [0, 1] using the min/max of the original image

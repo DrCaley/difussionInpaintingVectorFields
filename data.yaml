@@ -23,16 +23,17 @@ standardizer_type: zscore
                   # maxmag
                   # units
 
-noise_function: div_free
+noise_function: gaussian
               # gaussian
               # div_free
               # div_gaussian
               # hh_decomp_div_free
               # cached_div
 
-loss_function: physical
+loss_function: best_loss
               # mse
               # physical
+              # best_loss
 w1: 0.75
 w2: 0.25
 num_workers: 0

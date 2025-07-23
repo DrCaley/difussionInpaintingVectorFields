@@ -306,7 +306,7 @@ class TrainOceanXL:
                     else:
                         predicted_noise = ddpm.backward(noisy_imgs, t.reshape(n, -1))
 
-                    loss = loss_function(predicted_noise, noise)
+                    loss = loss_function(predicted_noise, noise, noisy_imgs)
 
                     optim.zero_grad()
                     loss.backward()
