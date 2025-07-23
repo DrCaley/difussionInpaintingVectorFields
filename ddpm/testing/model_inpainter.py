@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 from scipy.ndimage import distance_transform_edt
 from pathlib import Path
 
+
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent.parent))
 
@@ -18,6 +19,7 @@ from ddpm.helper_functions.masks import *
 from data_prep.data_initializer import DDInitializer
 from ddpm.neural_networks.ddpm import GaussianDDPM
 from ddpm.neural_networks.unets.unet_xl import MyUNet
+from ddpm.helper_functions.death_messages import get_death_message
 from plots.visualization_tools.pt_visualizer_plus import PTVisualizer
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop, \
@@ -96,7 +98,10 @@ class ModelInpainter:
         self.best_model = GaussianDDPM(MyUNet(self.n_steps), n_steps=self.n_steps, device=self.dd.get_device())
         try:
             logging.info("Loading model")
-            self.best_model.load_state_dict(self.model_state_dict)
+            try:
+                self.best_model.load_state_dict(self.model_state_dict)
+            except (EOFError, RuntimeError, FileNotFoundError) as e:
+                logging.error(f"❌ Could not load checkpoint: {e}")
             self.best_model.eval()
             logging.info("Model loaded successfully")
         except Exception as e:
@@ -280,31 +285,33 @@ class ModelInpainter:
             writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "ddp_mse", "gp_mse", "mask_percent", "average_pixel_distance"])
 
     def _set_up_model(self, model_path):
-        self.store_path = Path(model_path)
-        if self.model_name is None:
-            self.model_name = self.store_path.stem
-        self.set_results_path(f"./results/{self.model_name}")
-
         try:
-            import yaml
-            config_path = self.results_path / "config.yaml"
-            with open(config_path, 'w') as f:
-                yaml.dump(self.dd.get_full_config(), f)
-            logging.info(f"Saved config to {config_path}")
-        except Exception as e:
-            logging.warning(f"Failed to save config: {e}")
+            self.store_path = Path(model_path)
+            if self.model_name is None:
+                self.model_name = self.store_path.stem
+            self.set_results_path(f"./results/{self.model_name}")
 
-        self._configure_model()
-        self._load_checkpoint()
-        self._load_dataset()
+            try:
+                import yaml
+                config_path = self.results_path / "config.yaml"
+                with open(config_path, 'w') as f:
+                    yaml.dump(self.dd.get_full_config(), f)
+                logging.info(f"Saved config to {config_path}")
+            except Exception as e:
+                logging.warning(f"Failed to save config: {e}")
+
+            self._configure_model()
+            self._load_checkpoint()
+            self._load_dataset()
+        except Exception as e:
+            print(get_death_message())
+            print(f"something went wrong setting up model: {e}")
 
     def begin_inpainting(self):
         if len(self.masks_to_use) == 0:
             raise Exception('No masks available! Use `add_mask(...)` before running.')
 
-        model_bar = tqdm(self.model_paths, desc="🧠 Models", colour="magenta")
-
-        for model_path in model_bar:
+        for model_path in self.model_paths:
             try:
                 self._set_up_model(model_path)
 

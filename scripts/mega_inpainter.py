@@ -5,7 +5,7 @@ import logging
 import sys
 from pathlib import Path
 import numpy as np
-
+from tqdm import tqdm
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR))
@@ -14,11 +14,12 @@ from ddpm.testing.model_inpainter import ModelInpainter
 from ddpm.helper_functions.masks.n_coverage_mask import CoverageMaskGenerator
 from ddpm.helper_functions.death_messages import get_death_message
 
+print("================================================\n")
 print("JARVIS: hello there, here are the models we are going to be testing:")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-directory = Path("./ddpm/trained_models")
+directory = Path("./ddpm/trained_models") # double dot for pycharm, one dot for terminal
 destination_directory = Path("./ddpm/tested_models")
 destination_directory.mkdir(parents=True, exist_ok=True)
 config_files = []
@@ -48,12 +49,17 @@ for entry in directory.iterdir():
             config_files.append(entry.absolute() / "config_used.yaml")
             models.append(entry.absolute() / "ddpm_ocean_model_best_checkpoint.pt")
             names.append(entry.stem)
-            print(entry.stem)
+            print("- " + entry.stem)
         else:
             print(f"config file missing for {entry.stem}, skipping model.")
 
-for i in range(len(models)):
+print("================================================")
+
+models_bar = tqdm(models, colour="magenta", desc="👁️ models", leave=False)
+
+for i, model_path in enumerate(models_bar):
     try:
+        logging.info(f"Loading model {models[i]}")
         mi = ModelInpainter(config_path=config_files[i], model_file=models[i])
         mi.set_model_name(names[i])
 
