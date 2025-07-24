@@ -10,7 +10,7 @@ gpu_to_use: 0
 retrain_mode: False
 model_to_retrain: ""
 
-partial_conv_mode: False
+partial_conv_mode: True
 
 training_mode: True
 testSeed: 0
@@ -51,5 +51,5 @@ resample_nums: [5]
 save_pt_fields: False
 
 model_paths:
-  - "../trained_models/weekend_ddpm_ocean_model.pt"
+  - "../trained_models/div.pt"
  
