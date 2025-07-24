@@ -23,14 +23,14 @@ standardizer_type: zscore
                   # maxmag
                   # units
 
-noise_function: gaussian
+noise_function: div_free
               # gaussian
               # div_free
               # div_gaussian
               # hh_decomp_div_free
               # cached_div
 
-loss_function: best_loss
+loss_function: mse
               # mse
               # physical
               # best_loss

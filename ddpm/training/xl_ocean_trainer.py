@@ -10,6 +10,8 @@ from datetime import datetime
 from halo import Halo
 from pathlib import Path
 
+from ddpm.helper_functions.compute_divergence import compute_divergence
+
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from torch.optim import Adam

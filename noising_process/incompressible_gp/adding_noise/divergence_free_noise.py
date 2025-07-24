@@ -54,7 +54,7 @@ def gaussian_each_step_divergence_free_noise(shape: torch.Size, t: torch.Tensor,
             std = torch.sqrt(beta_val)
 
             freq = torch.normal(mean, std)
-            vx, vy = exact_div_free_field_from_stream(width, height, freq * 10, device=device)
+            vx, vy = exact_div_free_field_from_stream(width, height, freq * 10, device=device) # This number of iterations and frequency is designed to keep the magnitudes of the divergence below the avg divergence of the inital images
 
             magnitude = torch.sqrt(vx ** 2 + vy ** 2)
             max_val = torch.max(magnitude)
