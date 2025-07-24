@@ -10,7 +10,6 @@ from datetime import datetime
 from halo import Halo
 from pathlib import Path
 
-from ddpm.helper_functions.compute_divergence import compute_divergence
 
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
@@ -22,8 +21,8 @@ pkg_path = Path(__file__).resolve().parents[2]
 
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent.parent))
-from ddpm.helper_functions.death_messages import get_death_message
 from data_prep.data_initializer import DDInitializer
+from ddpm.helper_functions.death_messages import get_death_message
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
