@@ -39,14 +39,17 @@ class TrainOceanXL:
         |   |
     """
 
-    def __init__(self, config_path = None):
+    def __init__(self, config_path = None, pickle_path = None):
         """
         Initializes model, datasets, loaders, and all training configs using DDInitializer.
         """
-        if config_path is None:
-            self.dd = DDInitializer()
-        else:
-            self.dd = DDInitializer(config_path=config_path)
+        kwargs = {}
+        if config_path is not None:
+            kwargs['config_path'] = config_path
+        if pickle_path is not None:
+            kwargs['pickle_path'] = pickle_path
+
+        self.dd = DDInitializer(**kwargs)
 
         dd = self.dd
         self._setup_paths_and_files(dd)
