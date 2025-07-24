@@ -2,6 +2,11 @@ import torch
 import os
 import sys
 
+from matplotlib import pyplot as plt
+
+from ddpm.helper_functions.compute_divergence import compute_divergence
+from plots.visualization_tools.plot_vector_field_tool import plot_vector_field, make_heatmap
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from ddpm.helper_functions.HH_decomp import decompose_vector_field
 
@@ -45,6 +50,9 @@ def gaussian_each_step_divergence_free_noise(shape: torch.Size, t: torch.Tensor,
     batch, _, height, width = shape
     output = torch.zeros((batch, 2, height, width), device=device)
 
+    frequencies = []
+    divergences = []
+
     for i in range(batch):
         t_i = int(t[i].item())  # Make this once and use below
         beta_val = betas[t_i].to(device)  # Move to device if needed
@@ -67,11 +75,27 @@ def gaussian_each_step_divergence_free_noise(shape: torch.Size, t: torch.Tensor,
             vx *= mag_scale
             vy *= mag_scale
 
-            output[i, 0] += vx
-            output[i, 1] += vy
+            divergence_tensor = compute_divergence(vx, vy)
+            div = divergence_tensor.abs().mean()
+
+            if div < 0.002:
+                output[i, 0] += vx
+                output[i, 1] += vy
+
+            frequencies.append(freq.abs().item())
+            divergences.append(div.item())
+
 
     mean, std, var = torch.mean(output), torch.std(output), torch.var(output)
     output = (output - mean) / std
+
+    #plot_vector_field(output[0][0],output[0][1], scale=100)
+    #div = compute_divergence(output[0][0],output[0][1])
+    #make_heatmap(div)
+    #plt.close()
+
+    #plt.scatter(frequencies, divergences)
+    #plt.savefig("my_plot.png")
 
     return output
 

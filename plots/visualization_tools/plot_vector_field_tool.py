@@ -52,7 +52,7 @@ def plot_vector_field(vx: torch.Tensor, vy: torch.Tensor, step: int = 1, scale: 
     plt.close()
 
 
-def make_heatmap(tensor_2d, title=None, save_path=None, show=True, cmap='viridis'):
+def make_heatmap(tensor_2d, title=None, save_path='heat_map.png', show=True, cmap='viridis'):
     """
     Create a heatmap from a 2D torch tensor.
 

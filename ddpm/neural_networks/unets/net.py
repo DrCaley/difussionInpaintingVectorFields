@@ -3,6 +3,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from sympy.codegen.fnodes import dimension
 from torchvision import models
 from data_prep.data_initializer import DDInitializer
 
@@ -89,8 +90,14 @@ class PConv2d(nn.Module):
         # Normalize output
         # output = torch.where(mask_non_zero, (output - output_0) / (mask_sum + eps) + output_0, torch.zeros_like(output))
 
+        if self.conv2d.stride[0] == 1:
+            new_mask = input_mask.repeat(1, int(self.mask2d.out_channels / input_mask.size()[1]), 1, 1)
+        else:
+            new_mask = torch.max_pool2d(input_mask, (2, 2))
+
+
         # Normalize mask
-        new_mask = torch.where(mask_sum > 0, torch.ones_like(mask_sum), torch.zeros_like(mask_sum))
+        # new_mask = torch.where(mask_sum > 0, torch.ones_like(mask_sum), torch.zeros_like(mask_sum))
 
         return output, new_mask
 
