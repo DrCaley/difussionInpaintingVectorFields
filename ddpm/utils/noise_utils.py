@@ -5,7 +5,6 @@ from typing import Optional
 
 from noising_process.incompressible_gp.adding_noise.divergence_free_noise import \
     gaussian_each_step_divergence_free_noise, layered_div_free_noise, gaussian_divergence_free_noise, hh_decomped_div_free_noise
-from noise_database.noise_query import QueryNoise
 
 
 class NoiseStrategy:
@@ -75,14 +74,6 @@ class HH_Decomp_Div_Free(NoiseStrategy):
 
     def get_gaussian_scaling(self):
         return False
-    
-class CachedNoisedStrategy(NoiseStrategy):
-    def __init__(self,):
-        if os.path.exists("../..noise"):
-            self.noise_query = QueryNoise(noise_dir="../../noise")
-        else :
-            self.noise_query = QueryNoise(noise_dir="./noise")
-
 
     def generate(
             self,
@@ -117,7 +108,6 @@ NOISE_REGISTRY = {
     "div_free": DivergenceFreeNoise,
     "div_gaussian": DivergenceFreeGaussianNoise,
     "hh_decomp_div_free": HH_Decomp_Div_Free,
-    "cached_div" : CachedNoisedStrategy
 }
 
 def get_noise_strategy(name: str) -> NoiseStrategy:

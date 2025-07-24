@@ -35,6 +35,7 @@ class PTVisualizer():
         self.prediction_path = f"{save_dir}pt_predictions/"
         self.error_path = f"{save_dir}pt_errors/"
         self.prefixes = ['ddpm', 'initial', 'mask', 'gp_field']
+        self.polar = False # TODO fixx
 
     def build_filename(self, prefix):
         return f"{prefix}{self.sample_num}_{self.noise_type}_resample{self.resamples}_num_lines_{self.num_lines}.pt"
@@ -68,6 +69,27 @@ class PTVisualizer():
             plt.close()
 
         elif tensor.ndim == 3:
+            if tensor.shape[0] == 2 and self.polar:
+                tensor = crop(tensor)
+
+                r, theta = tensor[0], tensor[1]
+
+                u = r * torch.sin(theta)
+                v = r * torch.cos(theta)
+
+                H, W = u.shape
+                x, y = np.meshgrid(np.arange(W), np.arange(H))
+
+                max_dim = 9
+                figsize = (max_dim, max_dim* H / W) if W > H else (max_dim * W / H, max_dim)
+
+                plt.figure(figsize=figsize)
+                plt.quiver(x, y, u.cpu(), v.cpu(), scale=1.0 / vector_scale)
+                plt.title(title + " (Vector Field - Polar to Cartesian)")
+                plt.gca().set_aspect('equal', adjustable='box')
+                plt.savefig(os.path.join(save_dir, f"{title}_polar_vector_field.png"))
+                plt.close()
+
             if tensor.shape[0] == 2:
                 tensor = crop(tensor)
                 u, v = tensor[0], tensor[1]
