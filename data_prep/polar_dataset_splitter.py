@@ -86,7 +86,7 @@ print("Sample direction range:", np.nanmin(training_data[:,:,1,:]), "to", np.nan
 
 
 try:
-    path = '../super_data.pickle' if pycharm_dumb_flag else 'polarized_data.pickle'
+    path = '../polarized_data.pickle' if pycharm_dumb_flag else 'polarized_data.pickle'
     with open(path, 'wb') as file:
         pickle.dump([training_data, validation_data, test_data], file)
     print(f"Pickle saved to: {path}")
