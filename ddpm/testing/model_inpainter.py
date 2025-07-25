@@ -358,7 +358,7 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    for _ in range (5):
+    for _ in range (2):
         mi.add_mask(CoverageMaskGenerator(0.3))
 
     mi.visualize_images()

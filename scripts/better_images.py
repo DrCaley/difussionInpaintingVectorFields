@@ -1,9 +1,7 @@
 import sys
 from pathlib import Path
-from PIL import Image, ImageDraw
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-
+from PIL import Image
+import re
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR))
 
@@ -59,6 +57,7 @@ if __name__ == '__main__':
     pictures_dictionary = {}
 
     for model in models:
+        print(model.parent.parent.name)
         for entry in model.iterdir():
             name = entry.name
 
@@ -69,10 +68,15 @@ if __name__ == '__main__':
                         index += name[len(prefix) + 1]
                     index = int(index)
 
-                    if index not in pictures_dictionary:
-                        pictures_dictionary[index] = {}
+                    match = re.search(r'num_lines_([0-9.]+).*', name)
+                    num_lines = match.group(1).rstrip('.')
 
-                    pictures_dictionary[index][prefix] = entry
+                    key = (index, num_lines)
+
+                    if key not in pictures_dictionary:
+                        pictures_dictionary[key] = {}
+
+                    pictures_dictionary[key][prefix] = entry
                     break
 
         bundle_dict = {}
