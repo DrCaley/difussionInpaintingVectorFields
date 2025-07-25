@@ -41,8 +41,7 @@ def draw_image(ddpm_image : Path, gp_image : Path, mask_image : Path, initial_im
 
 if __name__ == '__main__':
 
-    # source = input("enter directory of where all models produced results, should be a \'results\' directory:\n")
-    source = "../ddpm/testing/results"
+    source = input("enter directory of where all models produced results, should be a \'results\' directory:\n")
     source = Path(source)
 
     if not source.exists():
