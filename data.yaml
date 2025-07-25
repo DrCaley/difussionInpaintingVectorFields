@@ -23,7 +23,7 @@ standardizer_type: zscore
                   # maxmag
                   # units
 
-noise_function: div_free
+noise_function: gaussian
               # gaussian
               # div_free
               # div_gaussian
@@ -36,7 +36,6 @@ loss_function: mse
               # best_loss
 w1: 0.5
 w2: 0.5
-num_workers: 0
 
 # === Both ===
 noise_steps: 100
@@ -51,5 +50,5 @@ resample_nums: [5]
 save_pt_fields: False
 
 model_paths:
-  - "../trained_models/div.pt"
+  - "../trained_models/weekend_ddpm_ocean_model.pt"
  
