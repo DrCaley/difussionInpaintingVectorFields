@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from ddpm.neural_networks.unets.net import PConv2d, PTranspose2d
+from ddpm.neural_networks.unets.pconv_base import PConv2d, PTranspose2d
 
 """The framework for the xl model, currently the best as of Feb 2025"""
 
@@ -185,25 +185,25 @@ class MyUNet(nn.Module):
         # First upsampling block
         up1_out, up1_mask = self.up1(out_mid, mask_mid)  # (N, 128, 8, 16)
         out5 = torch.cat((out4, up1_out), dim=1)  # (N, 256, 8, 16)
-        mask5 = torch.cat((mask4, up1_mask), dim=1)  # (N, 256, 8, 16)
+        mask5 = torch.cat((mask4, mask4), dim=1)  # (N, 256, 8, 16)
         out5, mask5 = self.b5(out5 + self.te5(t).reshape(n, -1, 1, 1), mask=mask5)  # (N, 64, 8, 16)
 
         # Second upsampling block
         up2_out, up2_mask = self.up2(out5, mask5)  # (N, 64, 16, 32)
         out6 = torch.cat((out3, up2_out), dim=1)  # (N, 128, 16, 32)
-        mask6 = torch.cat((mask3, up2_mask), dim=1)  # (N, 128, 16, 32)
+        mask6 = torch.cat((mask3, mask3), dim=1)  # (N, 128, 16, 32)
         out6, mask6 = self.b6(out6 + self.te6(t).reshape(n, -1, 1, 1), mask=mask6)  # (N, 32, 16, 32)
 
         # Third upsampling block
         up3_out, up3_mask = self.up3(out6, mask6)  # (N, 32, 32, 64)
         out7 = torch.cat((out2, up3_out), dim=1)  # (N, 64, 32, 64)
-        mask7 = torch.cat((mask2, up3_mask), dim=1)  # (N, 64, 32, 64)
+        mask7 = torch.cat((mask2, mask2), dim=1)  # (N, 64, 32, 64)
         out7, mask7 = self.b7(out7 + self.te7(t).reshape(n, -1, 1, 1), mask=mask7)  # (N, 16, 32, 64)
 
         # Fourth upsampling block
         up4_out, up4_mask = self.up4(out7, mask7)  # (N, 16, 64, 128)
         out = torch.cat((out1, up4_out), dim=1)  # (N, 32, 64, 128)
-        final_mask = torch.cat((mask1, up4_mask), dim=1)  # (N, 32, 64, 128)
+        final_mask = torch.cat((mask1, mask1), dim=1)  # (N, 32, 64, 128)
         out, final_mask = self.b_out(out + self.te_out(t).reshape(n, -1, 1, 1), mask=final_mask)  # (N, 16, 64, 128)
 
         # Final convolution to get the output

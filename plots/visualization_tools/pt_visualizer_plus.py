@@ -1,6 +1,4 @@
 import matplotlib
-from setuptools.sandbox import save_path
-
 matplotlib.use('Agg')
 
 import torch

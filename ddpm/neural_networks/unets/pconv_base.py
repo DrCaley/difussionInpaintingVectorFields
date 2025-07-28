@@ -91,7 +91,10 @@ class PConv2d(nn.Module):
         # output = torch.where(mask_non_zero, (output - output_0) / (mask_sum + eps) + output_0, torch.zeros_like(output))
 
         if self.conv2d.stride[0] == 1:
-            new_mask = input_mask.repeat(1, int(self.mask2d.out_channels / input_mask.size()[1]), 1, 1)
+            if self.mask2d.out_channels > input_mask.size()[1]:
+                new_mask = input_mask.repeat(1, int(self.mask2d.out_channels / input_mask.size()[1]), 1, 1)
+            else:
+                new_mask = input_mask[:,:self.mask2d.out_channels,:,:]
         else:
             new_mask = torch.max_pool2d(input_mask, (2, 2))
 

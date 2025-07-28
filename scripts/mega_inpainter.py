@@ -59,7 +59,7 @@ models_bar = tqdm(models, colour="magenta", desc="👁️ models", leave=False)
 
 for i, model_path in enumerate(models_bar):
     try:
-        logging.info(f"Loading model {models[i]}")
+        logging.info(f"JARVIS: Loading model {models[i]}")
         mi = ModelInpainter(config_path=config_files[i], model_file=models[i])
         mi.set_model_name(names[i])
 
@@ -73,8 +73,8 @@ for i, model_path in enumerate(models_bar):
         DDInitializer.reset_instance()
         move_finished_model(model_dirs[i])
     except Exception as e:
-        logging.error("🚨 Oops! Something went wrong during inpatinting.")
+        logging.error("JARVIS: 🚨 Oops! Something went wrong during inpatinting.")
         logging.error(f"💥 Error: {str(e)}")
         logging.error(get_death_message())
-        logging.error(f"Inpainting {names[i]} crashed. Check the logs or ask your local neighborhood AI expert 🧠.")
+        logging.error(f"JARVIS: Inpainting {names[i]} crashed. Check the logs or ask your local neighborhood AI expert 🧠.")
         continue
