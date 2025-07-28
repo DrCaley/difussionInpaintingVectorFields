@@ -1,6 +1,5 @@
 import argparse
 import csv
-import os
 import sys
 import logging
 import torch
@@ -110,7 +109,7 @@ class TrainOceanXL:
     def configure_partial_conv_mode(self):
         from ddpm.neural_networks.interpolation_ddpm import InterpolationDDPM
         from ddpm.helper_functions.temp_model_evaluation import evaluate
-        from ddpm.neural_networks.unets.new_unet_xl import MyUNet
+        from ddpm.neural_networks.unets.pconv_unet_xl import MyUNet
 
         self.ddpm = InterpolationDDPM(MyUNet(self.n_steps).to(self.device),
                                       n_steps=self.n_steps,
@@ -192,7 +191,7 @@ class TrainOceanXL:
         config_path = self.output_directory / "config_used.yaml"
         with config_path.open('w') as f:
             yaml.dump(self.dd.get_full_config(), f)
-        logging.info("💾 Saved training config to config_used.yaml")
+        logging.info("JARVIS: 💾 Saved training config to config_used.yaml")
 
     def set_csv_file(self, csv_file="training_log"):
         """

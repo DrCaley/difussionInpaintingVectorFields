@@ -330,6 +330,8 @@ class ModelInpainter:
                     self.plot_mse_vs_mask_percentage_gp()
                     self.plot_mse_vs_distance()
 
+                avg_mse = self.mse_ddpm_list
+
                 self.reset_plot_lists()
 
             except Exception as e:

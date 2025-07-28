@@ -27,7 +27,7 @@ for entry in directory.iterdir():
         models_to_train.append(entry)
 
 if len(models_to_train) == 0:
-    print(f"no models in {GREEN}models_to_train{RESET}")
+    print(f"JARVIS: no models in {GREEN}models_to_train{RESET}")
 
 for file in models_to_train:
     try:
@@ -36,7 +36,7 @@ for file in models_to_train:
         trainer.train()
         DDInitializer.reset_instance()
     except Exception as e:
-        logging.error("🚨 Oops! Something went wrong during training.")
+        logging.error("JARVIS: 🚨 Oops! Something went wrong during training.")
         logging.error(f"💥 Error: {str(e)}")
         logging.error(get_death_message())
-        logging.error("Training crashed. Check the logs or ask your local neighborhood AI expert 🧠.")
+        logging.error("JARVIS: Training crashed. Check the logs or ask your local neighborhood AI expert 🧠.")

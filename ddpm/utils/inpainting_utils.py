@@ -35,7 +35,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
             sigma_t = beta_t.sqrt()
             less_noised_img = less_noised_img + sigma_t * z
 
-        return less_noised_img
+        return less_noised_img, noise
 
     def noise_one_step(unnoised_img, t, noise_strat):
         epsilon = noise_strat(unnoised_img, None)
@@ -48,7 +48,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         input_img = input_image.clone().to(device)
         mask = mask.to(device)
 
-        noise = noise_strat(input_img, torch.tensor([ddpm.n_steps], device=device))
+        noise = noise_strat(input_img, torch.tensor([ddpm.n_steps] , device=device))
 
         # Step-by-step forward noising
         noised_images[0] = input_img
@@ -59,7 +59,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
 
         for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
             for i in range(resample_steps):
-                x = denoise_one_step(x, noise_strat, t)
+                x, noise = denoise_one_step(x, noise_strat, t)
                 x = noised_images[t] * (1 - mask) + (x * mask)
                 if (i + 1) < resample_steps:
                     x = noise_one_step(x, t, noise_strat)

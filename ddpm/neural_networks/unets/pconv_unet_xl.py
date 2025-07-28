@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from ddpm.neural_networks.unets.net import PConv2d, PTranspose2d
+from ddpm.neural_networks.unets.pconv_base import PConv2d, PTranspose2d
 
 """The framework for the xl model, currently the best as of Feb 2025"""
 
