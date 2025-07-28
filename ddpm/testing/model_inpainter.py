@@ -258,7 +258,8 @@ class ModelInpainter:
 
                             if self.visualizer:
                                 ptv = PTVisualizer(mask_type=mask_generator, sample_num=batch[1].item(),
-                                                   vector_scale=self.vector_scale, num_lines=num_lines, resamples=resample, results_dir=self.results_path)
+                                                   vector_scale=self.vector_scale, num_lines=num_lines,
+                                                   resamples=resample, results_dir=self.results_path)
                                 ptv.visualize()
                                 ptv.calc()
 
