@@ -81,7 +81,7 @@ class OceanImageDataset(Dataset):
 
     def load_array(self, n: int) -> Tensor:
         """
-        Process and return the (u, v, mask) tensor for time index n.
+        Process and return the (magnitude, angle, mask) tensor for time index n.
         """
         # Extract single time step
         u = self.raw_tensor[..., n][..., 0].T  # shape: (44, 94)
@@ -92,4 +92,9 @@ class OceanImageDataset(Dataset):
         u = torch.nan_to_num(u, nan=0.0)
         v = torch.nan_to_num(v, nan=0.0)
 
-        return torch.stack((u, v, mask), dim=0)  # shape: (3, 44, 94)
+        # Convert to polar coordinates
+        magnitude = torch.sqrt(u ** 2 + v ** 2)
+        angle = torch.atan2(v, u)
+        angle = (angle + 2 * torch.pi) % (2 * torch.pi)
+
+        return torch.stack((magnitude, angle, mask), dim=0)  # shape: (3, 44, 94)

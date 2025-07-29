@@ -17,7 +17,6 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 pkg_path = Path(__file__).resolve().parents[2]
-
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent.parent))
 from data_prep.data_initializer import DDInitializer

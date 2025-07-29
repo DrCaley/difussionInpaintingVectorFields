@@ -100,9 +100,6 @@ class HH_Decomp_Div_Free(NoiseStrategy):
 
         return torch.stack(noises, dim=0)  # Final shape: (B, 2, H, W)
 
-    def get_gaussian_scaling(self) -> bool:
-        return False
-
 NOISE_REGISTRY = {
     "gaussian": GaussianNoise,
     "div_free": DivergenceFreeNoise,

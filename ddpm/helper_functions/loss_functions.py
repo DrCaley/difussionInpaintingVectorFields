@@ -7,6 +7,36 @@ class LossStrategy(nn.Module):
     def forward(self, predicted_noise: torch.Tensor, target_noise: torch.Tensor, noisy_img : torch.Tensor) -> torch.Tensor:
         raise NotImplementedError("Loss strategy must implement forward()")
 
+# wrapper for using loss functions with polar coordinates
+class PolarLossWrapper(LossStrategy):
+    def __init__(self, base_loss: LossStrategy, coordinate_mode: str = "cartesian"):
+        """
+        Wraps a base loss strategy to optionally convert inputs from polar to cartesian.
+        coordinate_mode: either "cartesian" or "polar"
+        """
+        super().__init__()
+        assert coordinate_mode in ["cartesian", "polar"], "coordinate_mode must be 'cartesian' or 'polar'"
+        self.base_loss = base_loss
+        self.coordinate_mode = coordinate_mode
+
+    def forward(self, predicted_noise, target_noise, noisy_img=None) -> torch.Tensor:
+        if self.coordinate_mode == "polar":
+            # Convert polar → cartesian
+            predicted_noise = self.polar_to_cartesian(predicted_noise)
+            target_noise = self.polar_to_cartesian(target_noise)
+        return self.base_loss(predicted_noise, target_noise, noisy_img)
+
+    @staticmethod
+    def polar_to_cartesian(tensor: torch.Tensor) -> torch.Tensor:
+        """
+        Expects tensor shape (B, 2, H, W): (magnitude, angle)
+        Returns (B, 2, H, W): (u, v)
+        """
+        mag = tensor[:, 0]
+        ang = tensor[:, 1]
+        u = mag * torch.cos(ang)
+        v = mag * torch.sin(ang)
+        return torch.stack((u, v), dim=1)
 
 # === Standard MSE Loss ===
 class MSELossStrategy(LossStrategy):
@@ -16,7 +46,6 @@ class MSELossStrategy(LossStrategy):
 
     def forward(self, predicted_noise, target_noise, noisy_img = None) -> torch.Tensor:
         return self.loss_fn(predicted_noise, target_noise)
-
 
 # === Physical Loss (Weighted Divergence + MSE) ===
 class PhysicalLossStrategy(LossStrategy):
@@ -91,7 +120,7 @@ class HotGarbage(LossStrategy):
 LOSS_REGISTRY = {
     "mse": MSELossStrategy,
     "physical": PhysicalLossStrategy,
-    "best_loss": HotGarbage
+    "best_loss": HotGarbage,
 }
 
 def get_loss_strategy(name: str, **kwargs) -> LossStrategy:
