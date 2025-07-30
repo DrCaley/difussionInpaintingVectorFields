@@ -362,9 +362,8 @@ if __name__ == '__main__':
     mi.load_models_from_yaml()
     print(mi.model_paths)
 
-    for _ in range (2):
+    for _ in range (1):
         mi.add_mask(CoverageMaskGenerator(0.3))
-        mi.add_mask(CoverageMaskGenerator(0.6))
 
     mi.visualize_images()
     mi.find_coverage()

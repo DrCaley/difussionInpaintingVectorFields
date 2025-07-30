@@ -92,6 +92,9 @@ def save_magnitude_difference_heatmap(tensor1, tensor2, mask, avg_magnitude,
     cropped_diff = norm_mag_diff_np[:crop_h, :crop_w]
     cropped_mask = mask_np[:crop_h, :crop_w]
 
+    cropped_diff = np.flipud(cropped_diff)
+    cropped_mask = np.flipud(cropped_mask)
+
     # Compute average magnitude difference in the crop
     valid_pixels = cropped_mask == 1
     avg_diff = cropped_diff[valid_pixels].mean() if np.any(valid_pixels) else float('nan')

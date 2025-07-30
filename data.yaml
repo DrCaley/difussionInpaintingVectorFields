@@ -52,5 +52,3 @@ save_pt_fields: False
 
 model_paths:
   - "../trained_models/ddpm_polar.pt"
-  - "../trained_models/weekend_ddpm_ocean_model.pt"
- 
