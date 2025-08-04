@@ -360,8 +360,7 @@ if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
 
-    for _ in range (2):
-        mi.add_mask(CoverageMaskGenerator(0.3))
+    mi.add_mask(ManualMaskDrawer())
 
     mi.visualize_images()
     mi.find_coverage()
