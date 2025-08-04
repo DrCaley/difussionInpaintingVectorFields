@@ -51,5 +51,4 @@ resample_nums: [5]
 save_pt_fields: False
 
 model_paths:
-  - "../trained_models/div_free_model.pt"
- 
+  - "../trained_models/ddpm_polar.pt"

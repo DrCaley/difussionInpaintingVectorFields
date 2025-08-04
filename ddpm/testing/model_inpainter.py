@@ -33,7 +33,8 @@ class ModelInpainter:
             self.dd = DDInitializer(config_path=config_path)
         self.set_results_path("./results")
         self.csv_file = self.results_path / "inpainting_xl_data.csv"
-        self.write_header()
+        if not self.csv_file.exists():
+            self.write_header()
         self.model_paths = []
         if model_file is not None:
             self.model_paths.append(model_file)
@@ -258,7 +259,8 @@ class ModelInpainter:
 
                             if self.visualizer:
                                 ptv = PTVisualizer(mask_type=mask_generator, sample_num=batch[1].item(),
-                                                   vector_scale=self.vector_scale, num_lines=num_lines, resamples=resample, results_dir=self.results_path)
+                                                   vector_scale=self.vector_scale, num_lines=num_lines,
+                                                   resamples=resample, results_dir=self.results_path)
                                 ptv.visualize()
                                 ptv.calc()
 
@@ -286,8 +288,7 @@ class ModelInpainter:
     def _set_up_model(self, model_path):
         try:
             self.store_path = Path(model_path)
-            if self.model_name is None:
-                self.model_name = self.store_path.stem
+            self.model_name = self.store_path.stem
             self.set_results_path(f"./results/{self.model_name}")
 
             try:
@@ -359,6 +360,7 @@ class ModelInpainter:
 if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
+    print(mi.model_paths)
 
     mi.add_mask(ManualMaskDrawer())
 

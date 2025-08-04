@@ -157,18 +157,33 @@ class PTVisualizer():
             for key in data:
                 if key in ("initial", "mask"):
                     continue
+
+                model_name = key
+                prefix = f"{model_name}{self.sample_num}_num_lines_{self.num_lines}"
+
                 try:
                     tensor = data[key]
-                    save_mse_heatmap(tensor, initial_tensor, mask_tensor, title=f"{key}_vs_initial",
-                                     save_path=f"{self.error_path}/{self.noise_type}{self.num_lines}_mse_{key}_vs_initial.png")
-                    save_angular_error_heatmap(initial_tensor, tensor, mask_tensor, title=f"{key}_vs_initial",
-                                               save_path=f"{self.error_path}/{self.noise_type}{self.num_lines}_angular_{key}_vs_initial.png")
-                    save_scaled_error_vectors_scalar_field(tensor, initial_tensor, mask_tensor, title=f"{key}_vs_initial",
-                                     save_path=f"{self.error_path}/{self.noise_type}{self.num_lines}_vector_{key}_vs_initial.png")
-                    save_percent_heatmap(initial_tensor, tensor, mask_tensor, title=f"{key}_vs_initial",
-                                         save_path=f"{self.error_path}/{self.noise_type}{self.num_lines}_PE_{key}_vs_initial.png")
-                    save_magnitude_difference_heatmap(initial_tensor, tensor, mask_tensor, avg_magnitude=dd.get_attribute(attr='mag_mean'), title=f"{key}_vs_initial",
-                                                      save_path=f"{self.error_path}/{self.noise_type}{self.num_lines}_mag_{key}_vs_initial.png")
+
+                    save_mse_heatmap(tensor, initial_tensor, mask_tensor,
+                                     title=f"{key}_vs_initial",
+                                     save_path=f"{self.error_path}/{prefix}_mse_{model_name}_vs_initial.png")
+
+                    save_angular_error_heatmap(initial_tensor, tensor, mask_tensor,
+                                               title=f"{key}_vs_initial",
+                                               save_path=f"{self.error_path}/{prefix}_angular_{model_name}_vs_initial.png")
+
+                    save_scaled_error_vectors_scalar_field(tensor, initial_tensor, mask_tensor,
+                                                title=f"{key}_vs_initial",
+                                                save_path=f"{self.error_path}/{prefix}_vector_{key}_vs_initial.png")
+
+                    save_percent_heatmap(initial_tensor, tensor, mask_tensor,
+                                                title=f"{key}_vs_initial",
+                                                save_path=f"{self.error_path}/{prefix}_PE_{key}_vs_initial.png")
+
+                    save_magnitude_difference_heatmap(initial_tensor, tensor, mask_tensor, avg_magnitude=dd.get_attribute(attr='mag_mean'),
+                                                title=f"{key}_vs_initial",
+                                                save_path=f"{self.error_path}/{prefix}_mag_{key}_vs_initial.png")
+
                 except Exception as e:
                     print(f"Failed to compute/save errors between {key} and initial: {e}")
         else:
