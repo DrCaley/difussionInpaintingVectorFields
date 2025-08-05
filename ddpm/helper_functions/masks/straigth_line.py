@@ -16,8 +16,6 @@ class StraightLineMaskGenerator(MaskGenerator):
     def generate_mask(self, image_shape = None):
         if image_shape is None:
             print("image_shape is None")
-        if land_mask is None:
-            print("land_mask is None")
 
         num_lines = self.num_lines
         line_thickness = self.line_thickness

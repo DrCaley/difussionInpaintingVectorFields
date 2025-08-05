@@ -363,8 +363,6 @@ if __name__ == '__main__':
     print(mi.model_paths)
 
     for _ in range (1):
-        mi.add_mask(CoverageMaskGenerator(0.3))
+        mi.add_mask(StraightLineMaskGenerator(1,1))
 
-    mi.visualize_images()
-    mi.find_coverage()
     mi.begin_inpainting()
