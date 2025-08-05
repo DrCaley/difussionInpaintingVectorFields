@@ -55,7 +55,14 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         for t in range(ddpm.n_steps):
             noised_images[t + 1] = noise_one_step(noised_images[t], t, noise_strat)
 
-        x = noised_images[ddpm.n_steps] * (1 - mask) + (noise * mask)
+        doing_the_thing = False
+
+        if doing_the_thing:
+            x = noised_images[ddpm.n_steps] * (1 - mask) + (noise * mask)
+        else:
+            x = masked_poisson_projection(noised_images[ddpm.n_steps], mask)
+
+
 
         for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
             for i in range(resample_steps):
@@ -174,3 +181,84 @@ def avg_pixel_value(original_image, predicted_image, mask):
     avg_pixel_value = torch.sum(torch.abs(original_image * mask)) / mask.sum()
     avg_diff = torch.sum(torch.abs((predicted_image * mask) - (original_image * mask))) / mask.sum()
     return avg_diff * (100 / avg_pixel_value)
+
+
+import torch
+import torch.nn.functional as F
+
+import torch
+import torch.nn.functional as F
+
+
+def masked_poisson_projection(vector_field, mask, num_iter=500, tol=1e-5):
+    """
+    Performs divergence-free projection of a 2D vector field with masked inpainting regions.
+
+    Args:
+        vector_field: (N, 2, H, W) torch tensor (vx, vy)
+        mask:         (N, 2, H, W) binary tensor, 1 = region to inpaint
+        num_iter:     max Jacobi iterations
+        tol:          early stopping tolerance on residual (L2 norm)
+
+    Returns:
+        projected_field: (N, 2, H, W) divergence-free vector field
+    """
+    N, _, H, W = vector_field.shape
+    device = vector_field.device
+
+    vx, vy = vector_field[:, 0], vector_field[:, 1]
+
+    # Compute divergence: ∂vx/∂x + ∂vy/∂y (forward diff)
+    div = torch.zeros(N, H, W, device=device)
+    div[:, :, :-1] += vx[:, :, 1:] - vx[:, :, :-1]
+    div[:, :-1, :] += vy[:, 1:, :] - vy[:, :-1, :]
+
+    # Initialize scalar potential φ
+    phi = torch.zeros(N, H, W, device=device)
+
+    # Combine mask across components: (N, H, W)
+    M = torch.maximum(mask[:, 0], mask[:, 1])  # 1 where inpaint, 0 where known
+    known = (1 - M)
+
+    # Jacobi solver
+    for i in range(num_iter):
+        phi_new = phi.clone()
+
+        # Sum of neighbors (up, down, left, right)
+        neighbor_sum = torch.zeros_like(phi)
+
+        neighbor_sum[:, 1:, :] += phi[:, :-1, :]    # up
+        neighbor_sum[:, :-1, :] += phi[:, 1:, :]    # down
+        neighbor_sum[:, :, 1:] += phi[:, :, :-1]    # left
+        neighbor_sum[:, :, :-1] += phi[:, :, 1:]    # right
+
+        # Jacobi update
+        phi_new = (div + neighbor_sum) / 4.0
+
+        # Only update masked/inpaint regions
+        updated_phi = torch.where(M == 1, phi_new, phi)
+
+        # Residual for early stopping
+        residual = torch.norm(updated_phi - phi, dim=(1, 2)).mean()
+
+        phi = updated_phi
+
+        if residual < tol:
+            break
+
+    # Compute gradient of φ (forward diff)
+    dphix = torch.zeros_like(vx)
+    dphiy = torch.zeros_like(vy)
+
+    dphix[:, :, :-1] = phi[:, :, 1:] - phi[:, :, :-1]
+    dphiy[:, :-1, :] = phi[:, 1:, :] - phi[:, :-1, :]
+
+    # Subtract gradient to get divergence-free field
+    vx_proj = vx - dphix
+    vy_proj = vy - dphiy
+
+    # Restore known values (preserve unmasked regions per channel)
+    vx_proj = torch.where(mask[:, 0] == 0, vx, vx_proj)
+    vy_proj = torch.where(mask[:, 1] == 0, vy, vy_proj)
+
+    return torch.stack([vx_proj, vy_proj], dim=1)

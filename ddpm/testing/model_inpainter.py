@@ -365,4 +365,6 @@ if __name__ == '__main__':
     for _ in range (1):
         mi.add_mask(StraightLineMaskGenerator(1,1))
 
+    mi.visualize_images()
+    mi.find_coverage()
     mi.begin_inpainting()
