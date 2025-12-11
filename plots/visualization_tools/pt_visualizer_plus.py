@@ -1,4 +1,5 @@
 import matplotlib
+from tqdm import tqdm
 matplotlib.use('Agg')
 
 import torch
@@ -9,7 +10,7 @@ import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from data_prep.data_initializer import DDInitializer
-from plots.visualization_tools.error_visualization import save_mse_heatmap, save_angular_error_heatmap, \
+from plots.visualization_tools.error_visualization import save_magnitude_relative_difference_heatmap, save_mse_heatmap, save_angular_error_heatmap, \
     save_scaled_error_vectors_scalar_field, save_percent_heatmap, save_magnitude_difference_heatmap
 
 dd = DDInitializer()
@@ -149,6 +150,7 @@ class PTVisualizer():
                 print(f"Failed to load or visualize {title}: {e}")
 
     def calc(self):
+        metrics = {}
         data = self.data
         mask_tensor = data.get("mask", None)
         initial_tensor = data.get("initial", None)
@@ -164,27 +166,33 @@ class PTVisualizer():
                 try:
                     tensor = data[key]
 
-                    save_mse_heatmap(tensor, initial_tensor, mask_tensor,
+                    metrics[key+"_mse"] = save_mse_heatmap(tensor, initial_tensor, mask_tensor,
                                      title=f"{key}_vs_initial",
                                      save_path=f"{self.error_path}/{prefix}_mse_{model_name}_vs_initial.png")
 
-                    save_angular_error_heatmap(initial_tensor, tensor, mask_tensor,
+                    metrics[key+"_angular_error"] = save_angular_error_heatmap(tensor, initial_tensor, mask_tensor,
                                                title=f"{key}_vs_initial",
                                                save_path=f"{self.error_path}/{prefix}_angular_{model_name}_vs_initial.png")
 
-                    save_scaled_error_vectors_scalar_field(tensor, initial_tensor, mask_tensor,
+                    metrics[key+"_scaled_error"] = save_scaled_error_vectors_scalar_field(tensor, initial_tensor, mask_tensor,
                                                 title=f"{key}_vs_initial",
                                                 save_path=f"{self.error_path}/{prefix}_vector_{key}_vs_initial.png")
 
-                    save_percent_heatmap(initial_tensor, tensor, mask_tensor,
+                    metrics[key+"_percent_error"] = save_percent_heatmap(tensor, initial_tensor, mask_tensor,
                                                 title=f"{key}_vs_initial",
                                                 save_path=f"{self.error_path}/{prefix}_PE_{key}_vs_initial.png")
 
-                    save_magnitude_difference_heatmap(initial_tensor, tensor, mask_tensor, avg_magnitude=dd.get_attribute(attr='mag_mean'),
+                    metrics[key+"_magnitude_error"] = save_magnitude_difference_heatmap(tensor, initial_tensor, mask_tensor, avg_magnitude=dd.get_attribute(attr='mag_mean'),
                                                 title=f"{key}_vs_initial",
                                                 save_path=f"{self.error_path}/{prefix}_mag_{key}_vs_initial.png")
-
+                    
+                    metrics[key+"_magnitude_percent_error"] = save_magnitude_relative_difference_heatmap(tensor, initial_tensor, mask_tensor, avg_magnitude=dd.get_attribute(attr='mag_mean'),
+                                                title=f"{key}_vs_initial",
+                                                save_path=f"{self.error_path}/{prefix}_mag_relative_{key}_vs_initial.png")
+                    tqdm.write("")
                 except Exception as e:
                     print(f"Failed to compute/save errors between {key} and initial: {e}")
         else:
             print("Missing 'initial' or 'mask' tensor — skipping error comparisons.")
+        
+        return metrics

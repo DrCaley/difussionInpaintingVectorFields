@@ -54,21 +54,7 @@ def rbf_kernel(X1, X2, lengthscale=1.0, variance=1.0):
     dist_sq = torch.cdist(X1, X2).pow(2)
     return variance * torch.exp(-0.5 * dist_sq / lengthscale**2)
 
-def gp_fill(tensor, mask, lengthscale=1.5, variance=1.0, noise=1e-5, use_double=True):
-    """
-    Fills in missing values (mask == 1) in a tensor using Gaussian Process regression.
-
-    Args:
-        tensor: Tensor of shape (1, 2, H, W)
-        mask: Binary mask of shape (1, 2, H, W), 0 = known, 1 = unknown
-        lengthscale: GP RBF kernel lengthscale
-        variance: GP RBF kernel variance
-        noise: small base noise added to kernel diagonal
-        use_double: whether to cast tensors to float64 for better numerical stability
-
-    Returns:
-        Tensor with missing values filled in.
-    """
+def gp_fill(tensor, mask, lengthscale=1.5, variance=1.0, noise=1e-6, use_double=True):
     dtype = torch.float64 if use_double else tensor.dtype
     device = tensor.device
 
@@ -78,57 +64,41 @@ def gp_fill(tensor, mask, lengthscale=1.5, variance=1.0, noise=1e-5, use_double=
     _, C, H, W = tensor.shape
     filled = tensor.clone()
 
+    # Normalize factor
+    norm_factor = torch.tensor([H, W], dtype=dtype, device=device)
+
     for c in range(C):
         channel_data = tensor[0, c]
         channel_mask = mask[0, c]
 
-        known_indices = (channel_mask == 0).nonzero(as_tuple=False)
-        unknown_indices = (channel_mask == 1).nonzero(as_tuple=False)
+        known_idx = (channel_mask == 0).nonzero()
+        unknown_idx = (channel_mask == 1).nonzero()
 
-        if known_indices.numel() == 0 or unknown_indices.numel() == 0:
-            continue  # nothing to fill
+        if known_idx.numel() == 0 or unknown_idx.numel() == 0:
+            continue
 
-        # Normalize coordinates
-        norm_factor = torch.tensor([H, W], dtype=dtype, device=device)
-        known_coords = known_indices.float() / norm_factor
-        unknown_coords = unknown_indices.float() / norm_factor
+        known_xy = known_idx.float() / norm_factor
+        unknown_xy = unknown_idx.float() / norm_factor
 
-        known_values = channel_data[known_indices[:, 0], known_indices[:, 1]]
+        y = channel_data[known_idx[:, 0], known_idx[:, 1]]
 
-        # Compute covariance matrices
-        K = rbf_kernel(known_coords, known_coords, lengthscale, variance)
-        K_s = rbf_kernel(unknown_coords, known_coords, lengthscale, variance)
+        K = rbf_kernel(known_xy, known_xy, lengthscale, variance)
+        K_s = rbf_kernel(unknown_xy, known_xy, lengthscale, variance)
+        K_ss = rbf_kernel(unknown_xy, unknown_xy, lengthscale, variance)
 
-        # Add noise (jitter) robustly
-        jitter = noise
-        max_tries = 5
-        for _ in range(max_tries):
+        # Cholesky solve
+        jitter = max(noise, 1e-6)
+        for _ in range(5):
             try:
                 L = torch.linalg.cholesky(K + jitter * torch.eye(K.shape[0], device=device, dtype=dtype))
                 break
             except RuntimeError:
                 jitter *= 10
-        else:
-            raise RuntimeError("Cholesky decomposition failed after increasing jitter.")
 
-        K_ss = rbf_kernel(unknown_coords, unknown_coords, lengthscale, variance)
-        v = torch.cholesky_solve(known_values.unsqueeze(-1), L)
-        pred_mean = K_s @ v
+        alpha = torch.cholesky_solve(y.unsqueeze(-1), L)
+        pred_mean = (K_s @ alpha).squeeze()
 
-        # Posterior covariance
-        cov_post = K_ss - K_s @ torch.cholesky_solve(K_s.T, L)
-        cov_post += noise * torch.eye(cov_post.shape[0], device=device, dtype=dtype)  # ensure positive-definite
+        # Fill in one batched operation
+        filled[0, c][unknown_idx[:,0], unknown_idx[:,1]] = pred_mean
 
-        # Sample from multivariate normal
-        dist = torch.distributions.MultivariateNormal(pred_mean.squeeze(), covariance_matrix=cov_post)
-        sampled = dist.sample()
-
-        # Fill with samples instead of mean
-        for idx, val in zip(unknown_indices, sampled):
-            filled[0, c, idx[0], idx[1]] = val.item()
-
-        # Assign predictions
-        for idx, val in zip(unknown_indices, pred_mean):
-            filled[0, c, idx[0], idx[1]] = val.item()
-
-    return filled.to(torch.float32)  # Return to float32 for compatibility
+    return filled.to(torch.float32)

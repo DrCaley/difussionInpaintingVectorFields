@@ -140,10 +140,11 @@ class DDInitializer:
 
     def _set_random_seed(self):
         seed = self._config.get('testSeed')
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
+        if seed != -1:
+            random.seed(seed)
+            np.random.seed(seed)
+            torch.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
 
     def _setup_transforms(self, standardizer: Standardizer = None):
         if standardizer is not None:

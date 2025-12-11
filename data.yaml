@@ -4,7 +4,7 @@ v_training_mean: -0.0323937796117541
 v_training_std: 0.08899177232117582
 mag_mean: 0.1446947511640557
 
-gpu_to_use: 0
+gpu_to_use: 1
 
 # === training ===
 retrain_mode: False
@@ -13,32 +13,35 @@ model_to_retrain: ""
 partial_conv_mode: False
 
 training_mode: True
-testSeed: 0
 epochs: 2000
-batch_size: 100  #use ~80 for server
+batch_size: 100 #use ~80 for server
 lr: 0.001
 
-standardizer_type: zscore
-                  # zscore
-                  # maxmag
-                  # units
+standardizer_type:
+  zscore
+  # zscore
+  # maxmag
+  # units
 
-noise_function: gaussian
-              # gaussian
-              # div_free
-              # div_gaussian
-              # hh_decomp_div_free
-              # cached_div
+noise_function:
+  gaussian
+  # gaussian
+  # div_free
+  # div_gaussian
+  # hh_decomp_div_free
+  # cached_div
 
-loss_function: mse
-              # mse
-              # physical
-              # best_loss
+loss_function:
+  mse
+  # mse
+  # physical
+  # best_loss
 w1: 0.6
 w2: 0.4
 num_workers: 0
 
 # === Both ===
+testSeed: 1 #use -1 for random seed
 noise_steps: 100
 min_beta: 0.0001
 max_beta: 0.02
@@ -49,6 +52,7 @@ num_images_to_process: 1
 n_samples: 1
 resample_nums: [5]
 save_pt_fields: False
+enable_visualization: True # Set to True to generate plots
 
 model_paths:
   - "../trained_models/weekend_ddpm_ocean_model.pt"
