@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader
 from scipy.ndimage import distance_transform_edt
 from pathlib import Path
 
+from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator
+
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent.parent))
 

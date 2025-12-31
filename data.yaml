@@ -14,7 +14,7 @@ partial_conv_mode: False
 
 training_mode: True
 testSeed: 0
-epochs: 2000
+epochs: 1
 batch_size: 100  #use ~80 for server
 lr: 0.001
 
@@ -23,7 +23,7 @@ standardizer_type: zscore
                   # maxmag
                   # units
 
-noise_function: gaussian
+noise_function: div_free
               # gaussian
               # div_free
               # div_gaussian
@@ -51,4 +51,4 @@ resample_nums: [5]
 save_pt_fields: False
 
 model_paths:
-  - "../trained_models/weekend_ddpm_ocean_model.pt"
+  - "../../models/div_free_model.pt"

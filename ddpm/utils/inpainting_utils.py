@@ -1,6 +1,8 @@
+import pandas as pd
 import torch
 import torch.nn.functional as f
 
+from ddpm.vector_combination.combination_loss import get_loss
 from data_prep.data_initializer import DDInitializer
 
 dd = DDInitializer()
@@ -48,7 +50,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         input_img = input_image.clone().to(device)
         mask = mask.to(device)
 
-        noise = noise_strat(input_img, torch.tensor([ddpm.n_steps] , device=device))
+        noise = noise_strat(input_img, torch.tensor([ddpm.n_steps], device=device))
 
         # Step-by-step forward noising
         noised_images[0] = input_img
@@ -62,15 +64,21 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         else:
             x = masked_poisson_projection(noised_images[ddpm.n_steps], mask)
 
-
+        loss_data = []
 
         for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
             for i in range(resample_steps):
-                x, noise = denoise_one_step(x, noise_strat, t)
-                x = noised_images[t] * (1 - mask) + (x * mask)
+                v_pred, noise = denoise_one_step(x, noise_strat, t)
+                v_naive = noised_images[t] * (1 - mask) + (v_pred * mask) #This step is the one where the recombination happens
+                fidelity_loss, physics_loss, smooth_loss = get_loss(v_naive, noised_images[t], v_pred, mask)
+                loss_data.append({"index": idx, "t": t, "resample": i,
+                                  "fidelity_loss": fidelity_loss.item(), "physics_loss": physics_loss.item(), "smooth_loss": smooth_loss.item()})
                 if (i + 1) < resample_steps:
-                    x = noise_one_step(x, t, noise_strat)
-    return x
+                    v_naive = noise_one_step(v_naive, t, noise_strat)
+    df = pd.DataFrame(loss_data)
+    df.to_csv("test_losses.csv", index=False)
+    return v_naive
+
 
 def calculate_mse(original_image, predicted_image, mask, normalize=False):
     """
@@ -103,6 +111,7 @@ def calculate_mse(original_image, predicted_image, mask, normalize=False):
 
     return total_error / num_valid_pixels
 
+
 def calculate_percent_error(original_image, predicted_image, mask):
     """
     Calculates masked percent error between original and predicted image.
@@ -129,6 +138,7 @@ def calculate_percent_error(original_image, predicted_image, mask):
         return torch.tensor(float('nan'))
 
     return total_error / num_valid_pixels
+
 
 def normalize_pair(original_img, predicted_img, mask):
     """
@@ -163,6 +173,7 @@ def normalize_pair(original_img, predicted_img, mask):
 
     return norm_original, norm_predicted
 
+
 def top_left_crop(tensor, crop_h, crop_w):
     """
     Crop the top-left corner of a tensor of shape (1, 2, H, W).
@@ -177,17 +188,11 @@ def top_left_crop(tensor, crop_h, crop_w):
     """
     return tensor[:, :, :crop_h, :crop_w]
 
+
 def avg_pixel_value(original_image, predicted_image, mask):
     avg_pixel_value = torch.sum(torch.abs(original_image * mask)) / mask.sum()
     avg_diff = torch.sum(torch.abs((predicted_image * mask) - (original_image * mask))) / mask.sum()
     return avg_diff * (100 / avg_pixel_value)
-
-
-import torch
-import torch.nn.functional as F
-
-import torch
-import torch.nn.functional as F
 
 
 def masked_poisson_projection(vector_field, mask, num_iter=500, tol=1e-5):
