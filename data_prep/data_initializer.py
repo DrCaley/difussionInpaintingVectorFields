@@ -51,6 +51,7 @@ class DDInitializer:
         self._setup_transforms()
         self._set_random_seed()
         self._setup_noise_strategy()
+        self._setup_vector_combination()
         self._setup_loss_strategy()
         self._setup_alphas()
         self._setup_datasets(self.full_boundaries_path)
@@ -121,6 +122,21 @@ class DDInitializer:
 
     def get_noise_strategy(self) -> NoiseStrategy:
         return self.noise_strategy
+
+    def _setup_vector_combination(self):
+        comb_net_instruction = self._config.get("use_comb_net", "auto")
+        match comb_net_instruction:
+            case "auto":
+                self.use_comb_net = self._config.get("noise_function") == "div_free"
+            case "yes" | True:
+                self.use_comb_net = True
+            case "no" | False:
+                self.use_comb_net = False
+            case _:
+                raise ValueError(f"Unknown combination net instruction: {comb_net_instruction}")
+
+    def get_use_comb_net(self) -> bool:
+        return self.use_comb_net
 
     def _setup_loss_strategy(self):
         loss_type = self._config.get("loss_function", "mse")

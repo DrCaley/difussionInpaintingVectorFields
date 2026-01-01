@@ -1,9 +1,9 @@
-import pandas as pd
 import torch
 import torch.nn.functional as f
+from tqdm import tqdm
 
-from ddpm.vector_combination.combination_loss import get_loss
 from data_prep.data_initializer import DDInitializer
+from ddpm.vector_combination.vector_combiner import combine_fields
 
 dd = DDInitializer()
 
@@ -57,27 +57,29 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         for t in range(ddpm.n_steps):
             noised_images[t + 1] = noise_one_step(noised_images[t], t, noise_strat)
 
-        doing_the_thing = False
+        doing_the_thing = True
 
         if doing_the_thing:
             x = noised_images[ddpm.n_steps] * (1 - mask) + (noise * mask)
         else:
             x = masked_poisson_projection(noised_images[ddpm.n_steps], mask)
 
-        loss_data = []
+        with tqdm(total=ddpm.n_steps, desc="Denoising") as pbar:
+            for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
+                for i in range(resample_steps):
+                    inpainted, noise = denoise_one_step(x, noise_strat, t)
+                    known = noised_images[t]
 
-        for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
-            for i in range(resample_steps):
-                v_pred, noise = denoise_one_step(x, noise_strat, t)
-                v_naive = noised_images[t] * (1 - mask) + (v_pred * mask) #This step is the one where the recombination happens
-                fidelity_loss, physics_loss, smooth_loss = get_loss(v_naive, noised_images[t], v_pred, mask)
-                loss_data.append({"index": idx, "t": t, "resample": i,
-                                  "fidelity_loss": fidelity_loss.item(), "physics_loss": physics_loss.item(), "smooth_loss": smooth_loss.item()})
-                if (i + 1) < resample_steps:
-                    v_naive = noise_one_step(v_naive, t, noise_strat)
-    df = pd.DataFrame(loss_data)
-    df.to_csv("test_losses.csv", index=False)
-    return v_naive
+                    naive = known * (1 - mask) + (inpainted * mask)
+                    combined = combine_fields(known, inpainted, mask)
+
+                    if (i + 1) < resample_steps:
+                        x = noise_one_step(combined, t, noise_strat)
+                pbar.update(1)
+
+    result = input_img * (1 - mask) + combined * mask
+    #result = combined
+    return result
 
 
 def calculate_mse(original_image, predicted_image, mask, normalize=False):

@@ -55,9 +55,9 @@ use_comb_net: auto
               #yes
               #no
               #auto
-comb_training_steps: 40
+comb_training_steps: 10
 fidelity_weight: .01
-physics_weight: 2
+physics_weight: 1
 smooth_weight: 0
 
 

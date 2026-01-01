@@ -1,104 +1,125 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+# Assuming this import exists in your environment
 from ddpm.helper_functions.compute_divergence import compute_divergence
-import csv
 
-class PhysicsLoss(nn.Module):
+class PhysicsInformedLoss(nn.Module):
     def __init__(self, weight_fidelity=1.0, weight_physics=1.0, weight_smooth=0.1):
+        """
+        Physics-Informed Loss for Vector Field Inpainting.
+
+        Args:
+            weight_fidelity (float): Weight for MSE loss against the naive stitch.
+            weight_physics (float): Weight for the divergence constraint.
+            weight_smooth (float): Weight for smoothness regularization.
+        """
         super().__init__()
-        self.w_fid = weight_fidelity
-        self.w_phys = weight_physics
-        self.w_smooth = weight_smooth
+        self.weights = {
+            'fidelity': weight_fidelity,
+            'physics': weight_physics,
+            'smooth': weight_smooth
+        }
 
-        # Kernel for "dilating" the mask to find boundaries
-        # A 3x3 block of ones effectively looks at all neighbors
-        self.dilate_kernel = torch.ones((1, 1, 3, 3))
+        # Register kernel as a buffer so it automatically moves to GPU with the model
+        # 3x3 block of ones for 8-neighbor dilation
+        self.register_buffer('dilate_kernel', torch.ones((1, 1, 3, 3)))
 
-    def get_boundary_mask(self, binary_mask):
+    @staticmethod
+    def _compute_mean_abs_divergence(vector_field):
         """
-        Creates a 'Seam Mask' by finding pixels where 0 meets 1.
+        Computes the mean absolute divergence of a vector field.
         """
-        # Ensure mask is float for conv2d
-        mask_float = binary_mask.float()
+        # vector_field shape: [B, 2, H, W]
+        vx = vector_field[0, 0, :, :]
+        vy = vector_field[0, 1, :, :]
 
-        # Dilate: If any neighbor is 1, output becomes 1
-        # padding=1 ensures output size stays same
-        dilated = F.conv2d(mask_float, self.dilate_kernel.to(mask_float.device), padding=1)
-        dilated = torch.clamp(dilated, 0, 1) # Clamp to binary
+        # compute_divergence is imported from helper_functions
+        div = compute_divergence(vx, vy)
+        return div.abs().mean()
 
-        # Erode: (Optional, or just subtract original from dilated)
-        # Boundary = Dilated - Original (Points that were 0 but are next to 1)
-        # Note: Depending on if you want the boundary on the 'known' or 'unknown' side,
-        # you can adjust this logic. This captures the 'unknown' side of the seam.
+    def _get_boundary_mask(self, mask):
+        """
+        Creates a boundary mask (seam) where 0 meets 1.
+        """
+        mask_float = mask.float()
+
+        # Dilate: padding=1 keeps size identical
+        dilated = F.conv2d(mask_float, self.dilate_kernel, padding=1)
+        dilated = torch.clamp(dilated, 0, 1)
+
+        # Boundary is where dilation added a 1 that wasn't there before
         boundary = dilated - mask_float
-
         return boundary
 
-    def forward(self, v_combined, v_naive, max_div, mask):
+    def forward(self, predicted, known, inpainted, mask):
         """
-        v_pred:  The output from the U-Net (Corrected Field)
-        v_naive: The original stitched input
-        mask:    Binary mask (1 = Known Data, 0 = Hole)
+        Calculates the combined physics loss.
+
+        Args:
+            predicted (Tensor): The refined output from the model (Combined/Corrected Field).
+            known (Tensor): The ground truth known data.
+            inpainted (Tensor): The generated inpainted data (prior to refinement).
+            mask (Tensor): Binary mask. Based on recombination logic:
+                           1 = Inpainted Region (Hole), 0 = Known Data.
+
+        Returns:
+            total_loss (Tensor): The weighted sum of all losses.
+            metrics (dict): A dictionary containing individual loss components.
         """
 
-        # --- 1. PREPARE MAPS ---
-        # Find the seam where the stitching happened
-        #boundary = self.get_boundary_mask(mask)
+        # --- 1. RECONSTRUCT NAIVE FIELD ---
+        # Recreate the stitching logic previously in get_loss
+        naive = known * (1 - mask) + (inpainted * mask)
 
-        # Create Fidelity Weight Map (W)
-        # Trust data everywhere (1.0) EXCEPT at boundary (0.1)
-        # We give the model freedom to change the seam.
+        # --- 2. CALCULATE DYNAMIC THRESHOLDS ---
+        # We detach these because they are targets/constraints, not parameters to optimize.
+        with torch.no_grad():
+            div_known = self._compute_mean_abs_divergence(known)
+            div_inp = self._compute_mean_abs_divergence(inpainted)
+            # The divergence should not exceed the worst part of the input components
+            max_div_threshold = torch.max(div_known, div_inp)
+
+        # --- 3. FIDELITY LOSS ---
+        # We define a weight map to relax constraints at the stitching seam
+        # boundary = self._get_boundary_mask(mask)
+        # W_fidelity = torch.ones_like(mask) - (boundary * 0.9)
+
+        # Current implementation: Trust data equally everywhere
         W_fidelity = torch.ones_like(mask)
-        W_fidelity = W_fidelity #- (boundary * 0.9) # 1.0 everywhere, 0.1 at seam
 
-        # --- 2. FIDELITY LOSS (Data Consistency) ---
-        # Weighted MSE: Penalize changes, but penalize them LESS at the seam
-        diff = (v_combined - v_naive) ** 2
-        loss_fidelity = torch.mean(W_fidelity * diff)
+        loss_fidelity = torch.mean(W_fidelity * (predicted - naive) ** 2)
 
-        # --- 3. PHYSICS LOSS (Divergence Inequality) ---
-        divergence = get_mean_abs_div(v_combined)
+        # --- 4. PHYSICS LOSS (Divergence Constraint) ---
+        div_pred = self._compute_mean_abs_divergence(predicted)
 
-        # Constraint: Don't make divergence WORSE than the original.
-        # ReLU( |Div_Pred| - |Div_Thresh| )
-        # If Pred is lower, loss is 0. If Pred is higher, loss is positive.
-        divergence_penalty = F.relu(divergence - max_div)
+        # Penalty: ReLU(|Div_Pred| - |Div_Threshold|)
+        # Only penalize if divergence is WORSE than the inputs
+        loss_physics = F.relu(div_pred - max_div_threshold)
 
-        # Option: Weight divergence higher at the boundary?
-        # For now, we apply it globally, but you could multiply by 'boundary' here.
-        loss_physics = torch.mean(divergence_penalty) # fixme why is this zero for the naive result?
-
-
-        # --- 4. SMOOTHNESS LOSS (Regularization) ---
-        # Since we lowered fidelity at the seam, we need to enforce smoothness there
-        # to prevent jagged artifacts.
-        # Calculate gradients of velocity
-        du = torch.abs(v_combined[:, :, :, :-1] - v_combined[:, :, :, 1:]) # Horizontal changes
-        dv = torch.abs(v_combined[:, :, :-1, :] - v_combined[:, :, 1:, :]) # Vertical changes
-
-        # Only penalize "jerky" movements at the boundary
-        # We need to align the mask to the gradient sizes (they lose 1 pixel)
-        # This is a simplified version; normally we crop the mask.
+        # --- 5. SMOOTHNESS LOSS ---
+        # Calculate gradients (using slicing to handle shapes)
+        # Pad the difference to match original size or ignore edges
+        du = torch.abs(predicted[:, :, :, :-1] - predicted[:, :, :, 1:])
+        dv = torch.abs(predicted[:, :, :-1, :] - predicted[:, :, 1:, :])
         loss_smooth = torch.mean(du) + torch.mean(dv)
 
-
         # --- TOTAL LOSS ---
-        return (self.w_fid * loss_fidelity), (self.w_phys * loss_physics), (self.w_smooth * loss_smooth)
+        weighted_fidelity = self.weights['fidelity'] * loss_fidelity
+        weighted_physics = self.weights['physics'] * loss_physics
+        weighted_smooth = self.weights['smooth'] * loss_smooth
 
-def get_loss(v_combined, v_known, v_inpainted, mask):
-    loss = PhysicsLoss()
-    known_div = get_mean_abs_div(v_known)
-    inpainted_div = get_mean_abs_div(v_inpainted)
-    div_thresh = max(known_div, inpainted_div)
-    v_naive = v_known * (1 - mask) + (v_inpainted * mask) #This step is the one where the recombination happens
-    return loss.forward(v_combined, v_naive, div_thresh, mask)
+        total_loss = weighted_fidelity + weighted_physics + weighted_smooth
 
+        return total_loss, {
+            'loss_fidelity': weighted_fidelity,
+            'loss_physics': weighted_physics,
+            'loss_smooth': weighted_smooth,
+            'metric_div_pred': div_pred,
+            'metric_div_thresh': max_div_threshold
+        }
 
-def get_mean_abs_div(vector_field):
-    vx = vector_field[0,0,:,:]
-    vy = vector_field[0,1,:,:]
-    div = compute_divergence(vx, vy)
-    abs_div = div.abs()
-    mean_abs_div = abs_div.mean()
-    return mean_abs_div
+# Usage Example:
+# criterion = PhysicsInformedLoss()
+# loss, stats = criterion(v_refined, v_known, v_generated, mask)
+# loss.backward()
