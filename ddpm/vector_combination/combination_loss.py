@@ -8,10 +8,13 @@ class PhysicsInformedLoss(nn.Module):
     def __init__(self, weight_fidelity=1.0, weight_physics=1.0, weight_smooth=0.1):
         """
         Physics-Informed Loss for Vector Field Inpainting.
+        
+        NEW APPROACH: Directly minimize divergence at boundary while preserving
+        values away from boundary.
 
         Args:
-            weight_fidelity (float): Weight for MSE loss against the naive stitch.
-            weight_physics (float): Weight for the divergence constraint.
+            weight_fidelity (float): Weight for preserving values AWAY from boundary.
+            weight_physics (float): Weight for minimizing divergence AT boundary.
             weight_smooth (float): Weight for smoothness regularization.
         """
         super().__init__()
@@ -25,43 +28,69 @@ class PhysicsInformedLoss(nn.Module):
         # 3x3 block of ones for 8-neighbor dilation
         self.register_buffer('dilate_kernel', torch.ones((1, 1, 3, 3)))
 
-    @staticmethod
-    def _compute_mean_abs_divergence(vector_field):
+    def _compute_divergence_map(self, vector_field):
         """
-        Computes the mean absolute divergence of a vector field.
+        Computes the divergence at each pixel of a vector field.
+        Returns a [H-1, W-1] map of divergence values.
         """
         # vector_field shape: [B, 2, H, W]
         vx = vector_field[0, 0, :, :]
         vy = vector_field[0, 1, :, :]
 
-        # compute_divergence is imported from helper_functions
+        # compute_divergence returns a divergence map
         div = compute_divergence(vx, vy)
-        return div.abs().mean()
+        return div
 
-    def _get_boundary_mask(self, mask):
+    def _get_boundary_mask(self, mask, width=2):
         """
         Creates a boundary mask (seam) where 0 meets 1.
+        Handles masks with shape [B, C, H, W] where C can be 1 or 2.
+        
+        Args:
+            mask: Binary mask [B, C, H, W]
+            width: How many pixels wide the boundary region should be
         """
         mask_float = mask.float()
+        
+        # If mask has 2 channels (broadcasted), just use one channel for boundary detection
+        if mask_float.shape[1] == 2:
+            mask_float = mask_float[:, 0:1, :, :]  # Use first channel only [B, 1, H, W]
 
-        # Dilate: padding=1 keeps size identical
-        dilated = F.conv2d(mask_float, self.dilate_kernel, padding=1)
-        dilated = torch.clamp(dilated, 0, 1)
+        # Multiple dilations/erosions for wider boundary
+        dilated = mask_float.clone()
+        eroded = mask_float.clone()
+        
+        for _ in range(width):
+            dilated = F.conv2d(dilated, self.dilate_kernel, padding=1)
+            dilated = torch.clamp(dilated, 0, 1)
+            
+            eroded = F.conv2d(1 - eroded, self.dilate_kernel, padding=1)
+            eroded = 1 - torch.clamp(eroded, 0, 1)
 
-        # Boundary is where dilation added a 1 that wasn't there before
-        boundary = dilated - mask_float
+        # Boundary is the transition zone
+        boundary = dilated - eroded
+        boundary = torch.clamp(boundary, 0, 1)
+        
+        # If original mask had 2 channels, broadcast boundary back to 2 channels
+        if mask.shape[1] == 2:
+            boundary = boundary.expand(-1, 2, -1, -1)
+        
         return boundary
 
     def forward(self, predicted, known, inpainted, mask):
         """
         Calculates the combined physics loss.
+        
+        LOSS DESIGN:
+        1. PRESERVATION: Keep values unchanged AWAY from boundary
+        2. BOUNDARY DIVERGENCE: Minimize |div| at boundary pixels
+        3. SMOOTHNESS: Penalize sharp gradients at boundary
 
         Args:
-            predicted (Tensor): The refined output from the model (Combined/Corrected Field).
-            known (Tensor): The ground truth known data.
-            inpainted (Tensor): The generated inpainted data (prior to refinement).
-            mask (Tensor): Binary mask. Based on recombination logic:
-                           1 = Inpainted Region (Hole), 0 = Known Data.
+            predicted (Tensor): The refined output from the model.
+            known (Tensor): The known data (outside mask).
+            inpainted (Tensor): The inpainted data (inside mask).
+            mask (Tensor): Binary mask. 1 = Inpainted Region, 0 = Known Data.
 
         Returns:
             total_loss (Tensor): The weighted sum of all losses.
@@ -69,55 +98,54 @@ class PhysicsInformedLoss(nn.Module):
         """
 
         # --- 1. RECONSTRUCT NAIVE FIELD ---
-        # Recreate the stitching logic previously in get_loss
         naive = known * (1 - mask) + (inpainted * mask)
 
-        # --- 2. CALCULATE DYNAMIC THRESHOLDS ---
-        # We detach these because they are targets/constraints, not parameters to optimize.
-        with torch.no_grad():
-            div_known = self._compute_mean_abs_divergence(known)
-            div_inp = self._compute_mean_abs_divergence(inpainted)
-            # The divergence should not exceed the worst part of the input components
-            max_div_threshold = torch.max(div_known, div_inp)
+        # --- 2. GET BOUNDARY MASK ---
+        boundary = self._get_boundary_mask(mask, width=2)
+        away_from_boundary = 1 - boundary
 
-        # --- 3. FIDELITY LOSS ---
-        # We define a weight map to relax constraints at the stitching seam
-        # boundary = self._get_boundary_mask(mask)
-        # W_fidelity = torch.ones_like(mask) - (boundary * 0.9)
+        # --- 3. PRESERVATION LOSS (keep values unchanged AWAY from boundary) ---
+        # Only penalize changes far from boundary - let network modify at boundary
+        loss_preserve = torch.mean(away_from_boundary * (predicted - naive) ** 2)
 
-        # Current implementation: Trust data equally everywhere
-        W_fidelity = torch.ones_like(mask)
+        # --- 4. BOUNDARY DIVERGENCE LOSS (minimize divergence AT boundary) ---
+        div_map = self._compute_divergence_map(predicted)
+        
+        # Get boundary mask at divergence resolution
+        boundary_single = boundary[:, 0:1, :, :]  # [B, 1, H, W]
+        boundary_div = boundary_single.squeeze()  # [H, W]
+        
+        # Ensure shapes match
+        H_div, W_div = div_map.shape
+        boundary_div = boundary_div[:H_div, :W_div]
+        
+        # Penalize divergence magnitude at boundary
+        boundary_div_values = torch.abs(div_map) * boundary_div
+        loss_boundary_div = boundary_div_values.sum() / (boundary_div.sum() + 1e-8)
 
-        loss_fidelity = torch.mean(W_fidelity * (predicted - naive) ** 2)
-
-        # --- 4. PHYSICS LOSS (Divergence Constraint) ---
-        div_pred = self._compute_mean_abs_divergence(predicted)
-
-        # Penalty: ReLU(|Div_Pred| - |Div_Threshold|)
-        # Only penalize if divergence is WORSE than the inputs
-        loss_physics = F.relu(div_pred - max_div_threshold)
-
-        # --- 5. SMOOTHNESS LOSS ---
-        # Calculate gradients (using slicing to handle shapes)
-        # Pad the difference to match original size or ignore edges
+        # --- 5. SMOOTHNESS LOSS (encourage smooth transition at boundary) ---
         du = torch.abs(predicted[:, :, :, :-1] - predicted[:, :, :, 1:])
         dv = torch.abs(predicted[:, :, :-1, :] - predicted[:, :, 1:, :])
-        loss_smooth = torch.mean(du) + torch.mean(dv)
+        
+        boundary_h = boundary[:, :, :, :-1]
+        boundary_v = boundary[:, :, :-1, :]
+        
+        loss_smooth = torch.mean(boundary_h * du) + torch.mean(boundary_v * dv)
 
         # --- TOTAL LOSS ---
-        weighted_fidelity = self.weights['fidelity'] * loss_fidelity
-        weighted_physics = self.weights['physics'] * loss_physics
+        weighted_preserve = self.weights['fidelity'] * loss_preserve
+        weighted_boundary_div = self.weights['physics'] * loss_boundary_div
         weighted_smooth = self.weights['smooth'] * loss_smooth
 
-        total_loss = weighted_fidelity + weighted_physics + weighted_smooth
+        total_loss = weighted_preserve + weighted_boundary_div + weighted_smooth
 
         return total_loss, {
-            'loss_fidelity': weighted_fidelity,
-            'loss_physics': weighted_physics,
+            'loss_preserve': weighted_preserve,
+            'loss_boundary_div': weighted_boundary_div,
             'loss_smooth': weighted_smooth,
-            'metric_div_pred': div_pred,
-            'metric_div_thresh': max_div_threshold
+            'metric_boundary_div': loss_boundary_div.detach()
         }
+
 
 # Usage Example:
 # criterion = PhysicsInformedLoss()

@@ -349,11 +349,23 @@ class ModelInpainter:
         self.compute_coverage_plot = True
 
     def load_models_from_yaml(self):
-        models = self.dd.get_attribute('model_paths')
-        print("adding models from data.yaml")
-        self.add_models(models)
+        # Try new noise-type based model selection first
+        model_by_noise = self.dd.get_attribute('model_by_noise_type')
+        noise_type = self.dd.get_attribute('noise_function')
+        
+        if model_by_noise and noise_type in model_by_noise:
+            model_path = model_by_noise[noise_type]
+            print(f"Auto-selecting model for {noise_type} noise: {model_path}")
+            self.add_model(model_path)
+        else:
+            # Fall back to legacy model_paths list
+            models = self.dd.get_attribute('model_paths')
+            print("adding models from data.yaml")
+            if models:
+                self.add_models(models)
+        
         if len(self.model_paths) == 0:
-            print("no models in model_paths attribute in data.yaml")
+            print("no models found - check model_by_noise_type or model_paths in data.yaml")
 
     def set_model_name(self, model_name):
         self.model_name = model_name

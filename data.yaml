@@ -55,11 +55,12 @@ use_comb_net: auto
               #yes
               #no
               #auto
-comb_training_steps: 40
-fidelity_weight: .01
-physics_weight: 2
-smooth_weight: 0
+comb_training_steps: 200  # Per-step fix (applied 100x, so can be slow)
+fidelity_weight: 0.1      # Allow changes to fix divergence
+physics_weight: 100.0     # STRONGLY minimize boundary divergence  
+smooth_weight: 1.0        # Smoothing at boundary
 
-
-model_paths:
-  - "../../models/div_free_model.pt"
+# Model paths by noise type - automatically selected based on noise_function
+model_by_noise_type:
+  gaussian: "ddpm/Trained_Models/weekend_ddpm_ocean_model.pt"
+  div_free: "ddpm/Trained_Models/div_free_model.pt"

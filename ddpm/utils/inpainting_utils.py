@@ -11,6 +11,9 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                                 resample_steps=1, channels=2, height=64, width=128, noise_strategy = dd.get_noise_strategy()):
     """
     Given a DDPM model, an input image, and a mask, generates in-painted samples.
+    
+    The boundary fix is applied at EVERY denoising step so the neural network
+    always sees clean, physically consistent inputs (no boundary discontinuities).
     """
     noised_images = [None] * (ddpm.n_steps + 1)
     device = dd.get_device()
@@ -70,16 +73,18 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                     inpainted, noise = denoise_one_step(x, noise_strat, t)
                     known = noised_images[t]
 
-                    naive = known * (1 - mask) + (inpainted * mask)
+                    # Apply boundary fix at EVERY step so the network sees clean inputs
+                    # This fixes the discontinuity before the next denoising step
                     combined = combine_fields(known, inpainted, mask)
 
                     if (i + 1) < resample_steps:
                         x = noise_one_step(combined, t, noise_strat)
+                    else:
+                        x = combined  # For next iteration
                 pbar.update(1)
 
-    result = input_img * (1 - mask) + combined * mask
-    #result = combined
-    return result
+    # Result is already boundary-fixed from the last iteration
+    return combined
 
 
 def calculate_mse(original_image, predicted_image, mask, normalize=False):

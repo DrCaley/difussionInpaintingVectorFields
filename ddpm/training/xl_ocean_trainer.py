@@ -226,10 +226,10 @@ class TrainOceanXL:
 
     def set_ddpm(self, ddpm: torch.nn.Module):
         """
-        Replaces the current DDPM model.
+        Replaces the current ddpm model.
 
         Args:
-            ddpm (torch.nn.Module): New DDPM model instance.
+            ddpm (torch.nn.Module): New ddpm model instance.
         """
         self.ddpm = ddpm
 
@@ -244,7 +244,7 @@ class TrainOceanXL:
 
     def training_loop(self, optim: torch.optim.Optimizer, loss_function: callable, ):
         """
-        Main training logic. Trains DDPM over epochs, logs results, evaluates with multi-threading,
+        Main training logic. Trains ddpm over epochs, logs results, evaluates with multi-threading,
         and saves the best model based on test loss.
 
         Args:
@@ -317,7 +317,7 @@ class TrainOceanXL:
 
                     epoch_loss += loss.item() * len(x0) / len(train_loader.dataset)
 
-                spinner = Halo("Evaluating DDPM...", spinner="dots")
+                spinner = Halo("Evaluating ddpm...", spinner="dots")
                 spinner.start()
                 ddpm.eval()
                 spinner.succeed()
@@ -407,7 +407,7 @@ class TrainOceanXL:
         """
         Sets up optimizer and kicks off training based on config mode.
         """
-        logging.info("🔧 Starting DDPM training...")
+        logging.info("🔧 Starting ddpm training...")
         logging.info(f"👾 Device: {self.device}")
         logging.info(f"📦 Batch size: {self.batch_size}")
         logging.info(f"🧠 Epochs: {self.n_epochs}")

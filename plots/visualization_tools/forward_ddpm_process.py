@@ -15,7 +15,7 @@ dd = DDInitializer()
 def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path="ddpm_vectorfield_1.gif",
                                 mag_path="avg_value_plot_1.png", var_path="variance_plot_1.png", every=1):
     """
-    Create a gif visualizing the DDPM forward process on vector fields.
+    Create a gif visualizing the ddpm forward process on vector fields.
     Also plots average magnitude and variance of the vectors over time.
 
     x0 shape: (1, 2, H, W)
@@ -55,7 +55,7 @@ def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path=
 
         # Visualization
         fig, axs = plt.subplots(1, 2, figsize=(2 * W / 10, H / 10))
-        fig.suptitle(f"DDPM Forward Noising - Step {t}")
+        fig.suptitle(f"ddpm Forward Noising - Step {t}")
 
         axs[0].quiver(X, Y, x0[..., 0], x0[..., 1], color='blue', scale=20)
         axs[0].set_title("Original x₀")
@@ -74,7 +74,7 @@ def make_ddpm_vector_field_gif(alpha_bars, x0_orginal, noise_strategy, gif_path=
 
     # Save gif
     imageio.mimsave(gif_path, frames, duration=0.2, loop=0)
-    print(f"Saved DDPM vector field forward noising GIF to {gif_path}")
+    print(f"Saved ddpm vector field forward noising GIF to {gif_path}")
 
     # Plot average magnitude
     plt.figure(figsize=(8, 4))
