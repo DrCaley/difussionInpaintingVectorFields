@@ -32,3 +32,8 @@ scripts/visualize_*.py
 
 # Training logs
 *.log
+
+# Virtual environment
+env/
+.DS_Store
+.rapid/
