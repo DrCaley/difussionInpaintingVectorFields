@@ -537,3 +537,165 @@ If comb_net returns naive stitch (no change):
 
 **Conclusion:** The theory is **partially confirmed**. Div-free does have worse boundary behavior, but the effect (1.48x) is moderate, not catastrophic. The real problem is likely the compound effect over 100 denoising steps - each step adds more boundary divergence that propagates.
 
+---
+
+### January 6, 2026 - CombNet Pretraining Investigation
+
+**Objective:** Understand and optimize the CombNet (boundary divergence fixer) which was causing 86+ minute inference times for div-free inpainting.
+
+**Root Cause of Slow Inference:**
+The `VectorCombinationUNet` (CombNet) was being trained **from scratch at every denoising step** during inference:
+- 200 training iterations per call
+- ~500 calls per inpainting (100 timesteps × 5 resample steps)
+- **100,000 total training iterations per inpainting!**
+
+**Solution Approach:** Pretrain CombNet once, reuse during inference.
+
+---
+
+### January 6, 2026 - Loss Function Improvements
+
+**Original Loss Function (`PhysicsInformedLoss`):**
+- `loss_preserve`: MSE away from boundary
+- `loss_boundary_div`: Divergence at boundary seam
+- `loss_smooth`: Gradient penalty at boundary
+
+**Problems Identified:**
+1. "Away from boundary" logic was overcomplicated
+2. No explicit protection for the known region
+
+**Updated Loss Function (4 terms):**
+
+| Term | Weight | Purpose |
+|------|--------|---------|
+| `loss_known` | 10.0 | Don't modify known region at all |
+| `loss_change` | 0.1 | Minimize total changes to field |
+| `loss_boundary_div` | 100.0 | Reduce divergence at seam |
+| `loss_smooth` | 1.0 | Smooth transitions at boundary |
+
+**Key Insight:** The loss is physics-based, not supervised. There's no "ground truth" - the network learns to satisfy constraints:
+> "Fix divergence at the boundary seam while making minimal changes, and don't touch the known region."
+
+---
+
+### January 6, 2026 - Fast Training Data Generation
+
+**Initial Approach (Failed):** Generate training data by running actual DDPM inference.
+- Problem: Each sample requires running 100 denoising steps
+- Estimated time: Hours to generate 25k samples
+
+**Key Insight from User:** "Don't we just need examples of two images merged together?"
+
+**Optimized Approach:**
+1. Generate two independent div-free noise fields (A and B)
+2. Apply multiple random masks to create many boundary examples
+3. Naive stitch: `A * (1-mask) + B * mask`
+
+**Final Configuration:**
+- 5,000 div-free field pairs
+- 8 different masks per pair
+- **40,000 total samples generated in ~3 minutes!**
+
+**Dataset Shape:**
+```
+known: torch.Size([40000, 2, 64, 128])
+inpainted: torch.Size([40000, 2, 64, 128])
+mask: torch.Size([40000, 2, 64, 128])
+naive: torch.Size([40000, 2, 64, 128])
+```
+
+---
+
+### January 6, 2026 - MPS (Apple Silicon GPU) Support
+
+**Issue:** Training was running on CPU (~70 min/epoch)
+
+**Fix in `data_prep/data_initializer.py`:**
+```python
+# Before: Only checked CUDA
+self.device = torch.device(f"cuda:{self.gpu}" if torch.cuda.is_available() else "cpu")
+
+# After: Check CUDA > MPS > CPU
+if torch.cuda.is_available():
+    self.device = torch.device(f"cuda:{self.gpu}")
+elif torch.backends.mps.is_available():
+    self.device = torch.device("mps")
+else:
+    self.device = torch.device("cpu")
+```
+
+**Performance Improvement:**
+
+| Device | Batch Size | Time per Epoch |
+|--------|-----------|----------------|
+| CPU | 16 | ~70 min |
+| **MPS** | 32 | **~8 min** |
+
+**Speedup: ~9x faster on Apple Silicon!**
+
+---
+
+### January 6, 2026 - CombNet Training (Overnight Run)
+
+**Training Started:** 100 epochs on MPS (~14 hours estimated)
+
+**Configuration:**
+- Epochs: 100
+- Batch size: 32
+- Learning rate: 1e-3 with cosine annealing
+- Samples: 40,000
+- Device: MPS (Apple Silicon)
+
+**Early Results (first 2 epochs on test run):**
+- Epoch 1 loss: 2.27
+- Epoch 2 loss: 1.20
+- Loss decreasing → good learning signal
+
+**Model Output:** `ddpm/Trained_Models/pretrained_combnet.pt`
+**Log File:** `combnet_training.log`
+
+**Tomorrow's Test:** 
+1. Check final training loss
+2. Run full inpainting with pretrained CombNet
+3. Compare to per-step training approach (should be ~100x faster with similar quality)
+
+---
+
+### January 6, 2026 - Overfitting Analysis
+
+**Question:** Should we worry about overfitting with CombNet pretraining?
+
+**Why Overfitting is LESS Likely:**
+1. **No ground truth to memorize** - Loss is physics-based (minimize divergence), not data-matching
+2. **Universal physics constraints** - Divergence-free is universal; if it works on training data, should generalize
+3. **Reasonable data/param ratio** - ~1M params with 40k samples
+
+**Potential Concerns:**
+1. Network might learn shortcuts specific to synthetic div-free noise
+2. Real DDPM outputs during inference might have different characteristics
+
+**Mitigation:**
+- Cosine LR scheduler reduces late-stage overfitting
+- Final test tomorrow will evaluate real generalization
+
+---
+
+## Scripts Created/Modified Today
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/generate_combnet_data.py` | Generate training data by merging div-free fields |
+| `scripts/pretrain_combnet.py` | Train CombNet on generated dataset |
+| `ddpm/vector_combination/combination_loss.py` | Added `loss_known` term, simplified to `loss_change` |
+| `ddpm/vector_combination/vector_combiner.py` | Added pretrained CombNet support with caching |
+| `data_prep/data_initializer.py` | Added MPS (Apple Silicon) GPU support |
+
+---
+
+## Next Steps (January 7, 2026)
+
+- [ ] Check CombNet training results (`tail -50 combnet_training.log`)
+- [ ] Test pretrained CombNet on real inpainting task
+- [ ] Compare inference time: pretrained vs per-step training
+- [ ] Compare quality metrics: MSE, angular error, divergence
+- [ ] If successful, update `run_comparison.py` to use pretrained CombNet

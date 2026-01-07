@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from ddpm.helper_functions.compute_divergence import compute_divergence
 
 class PhysicsInformedLoss(nn.Module):
-    def __init__(self, weight_fidelity=1.0, weight_physics=1.0, weight_smooth=0.1):
+    def __init__(self, weight_fidelity=1.0, weight_physics=1.0, weight_smooth=0.1, weight_known=10.0):
         """
         Physics-Informed Loss for Vector Field Inpainting.
         
@@ -16,12 +16,14 @@ class PhysicsInformedLoss(nn.Module):
             weight_fidelity (float): Weight for preserving values AWAY from boundary.
             weight_physics (float): Weight for minimizing divergence AT boundary.
             weight_smooth (float): Weight for smoothness regularization.
+            weight_known (float): Weight for keeping known region UNCHANGED.
         """
         super().__init__()
         self.weights = {
             'fidelity': weight_fidelity,
             'physics': weight_physics,
-            'smooth': weight_smooth
+            'smooth': weight_smooth,
+            'known': weight_known
         }
 
         # Register kernel as a buffer so it automatically moves to GPU with the model
@@ -82,9 +84,10 @@ class PhysicsInformedLoss(nn.Module):
         Calculates the combined physics loss.
         
         LOSS DESIGN:
-        1. PRESERVATION: Keep values unchanged AWAY from boundary
-        2. BOUNDARY DIVERGENCE: Minimize |div| at boundary pixels
-        3. SMOOTHNESS: Penalize sharp gradients at boundary
+        1. KNOWN FIDELITY: Don't change the known region at all
+        2. MINIMAL CHANGE: Minimize total changes to the field
+        3. BOUNDARY DIVERGENCE: Minimize |div| at boundary pixels
+        4. SMOOTHNESS: Penalize sharp gradients at boundary
 
         Args:
             predicted (Tensor): The refined output from the model.
@@ -102,13 +105,19 @@ class PhysicsInformedLoss(nn.Module):
 
         # --- 2. GET BOUNDARY MASK ---
         boundary = self._get_boundary_mask(mask, width=2)
-        away_from_boundary = 1 - boundary
+        
+        # Known region mask (where mask = 0)
+        known_region = (1 - mask)
 
-        # --- 3. PRESERVATION LOSS (keep values unchanged AWAY from boundary) ---
-        # Only penalize changes far from boundary - let network modify at boundary
-        loss_preserve = torch.mean(away_from_boundary * (predicted - naive) ** 2)
+        # --- 3. KNOWN REGION LOSS (keep known data UNCHANGED) ---
+        # This is critical: the known region is noised ground truth, don't modify it
+        loss_known = torch.mean(known_region * (predicted - known) ** 2)
 
-        # --- 4. BOUNDARY DIVERGENCE LOSS (minimize divergence AT boundary) ---
+        # --- 4. MINIMAL CHANGE LOSS (minimize total changes to the field) ---
+        # Penalize any deviation from the naive stitch
+        loss_change = torch.mean((predicted - naive) ** 2)
+
+        # --- 5. BOUNDARY DIVERGENCE LOSS (minimize divergence AT boundary) ---
         div_map = self._compute_divergence_map(predicted)
         
         # Get boundary mask at divergence resolution
@@ -123,7 +132,7 @@ class PhysicsInformedLoss(nn.Module):
         boundary_div_values = torch.abs(div_map) * boundary_div
         loss_boundary_div = boundary_div_values.sum() / (boundary_div.sum() + 1e-8)
 
-        # --- 5. SMOOTHNESS LOSS (encourage smooth transition at boundary) ---
+        # --- 6. SMOOTHNESS LOSS (encourage smooth transition at boundary) ---
         du = torch.abs(predicted[:, :, :, :-1] - predicted[:, :, :, 1:])
         dv = torch.abs(predicted[:, :, :-1, :] - predicted[:, :, 1:, :])
         
@@ -133,14 +142,16 @@ class PhysicsInformedLoss(nn.Module):
         loss_smooth = torch.mean(boundary_h * du) + torch.mean(boundary_v * dv)
 
         # --- TOTAL LOSS ---
-        weighted_preserve = self.weights['fidelity'] * loss_preserve
+        weighted_known = self.weights['known'] * loss_known
+        weighted_change = self.weights['fidelity'] * loss_change
         weighted_boundary_div = self.weights['physics'] * loss_boundary_div
         weighted_smooth = self.weights['smooth'] * loss_smooth
 
-        total_loss = weighted_preserve + weighted_boundary_div + weighted_smooth
+        total_loss = weighted_known + weighted_change + weighted_boundary_div + weighted_smooth
 
         return total_loss, {
-            'loss_preserve': weighted_preserve,
+            'loss_known': weighted_known,
+            'loss_change': weighted_change,
             'loss_boundary_div': weighted_boundary_div,
             'loss_smooth': weighted_smooth,
             'metric_boundary_div': loss_boundary_div.detach()
