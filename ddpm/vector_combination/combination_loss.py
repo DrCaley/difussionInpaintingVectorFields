@@ -112,6 +112,7 @@ class PhysicsInformedLoss(nn.Module):
         total_loss = weighted_fidelity + weighted_physics + weighted_smooth
 
         return total_loss, {
+            'total_loss': total_loss,
             'loss_fidelity': weighted_fidelity,
             'loss_physics': weighted_physics,
             'loss_smooth': weighted_smooth,

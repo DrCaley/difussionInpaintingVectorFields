@@ -57,7 +57,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         for t in range(ddpm.n_steps):
             noised_images[t + 1] = noise_one_step(noised_images[t], t, noise_strat)
 
-        doing_the_thing = True
+        doing_the_thing = False
 
         if doing_the_thing:
             x = noised_images[ddpm.n_steps] * (1 - mask) + (noise * mask)
@@ -70,8 +70,8 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                     inpainted, noise = denoise_one_step(x, noise_strat, t)
                     known = noised_images[t]
 
-                    naive = known * (1 - mask) + (inpainted * mask)
-                    combined = combine_fields(known, inpainted, mask)
+                    combined = combine_fields(known, inpainted, mask,
+                                              save_dir=f"../vector_combination/results/step_{idx}/resample_{i}")
 
                     if (i + 1) < resample_steps:
                         x = noise_one_step(combined, t, noise_strat)
