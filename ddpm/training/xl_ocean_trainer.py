@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import argparse
 import csv
 import sys
@@ -27,7 +29,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 
 class TrainOceanXL:
-    """
+    r"""
     This file is being used to train the best model of all time baybee.
     There's never been a model better than this one, we got the best epsilons,
     our loss function becomes our win function, truly remarkable stuff.

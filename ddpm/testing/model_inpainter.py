@@ -1,5 +1,7 @@
-import csv
-import sys
+import csv #csv file writing
+import sys #system path manipulation
+import random
+import shutil # clearing files in results folder
 
 import torch
 import logging
@@ -24,6 +26,11 @@ from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop, \
     calculate_percent_error
 
+def set_seed(seed: int = 42):
+    print("Setting random seed to {}".format(seed))
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 class ModelInpainter:
     def __init__(self, config_path = None, model_file = None):
@@ -48,6 +55,8 @@ class ModelInpainter:
         self.compute_coverage_plot = False
         self.save_pt_fields = self.dd.get_attribute("save_pt_fields")
         self.model_name = None
+        self.random_seed = self.dd.get_attribute("random_seed")
+        self.clear_all_previous_results = self.dd.get_attribute("clear_all_previous_results")
 
         logging.basicConfig(level=logging.INFO,
                             format='%(asctime)s - %(levelname)s - %(message)s',
@@ -212,23 +221,46 @@ class ModelInpainter:
                 input_image_original = torch.unsqueeze(input_image_original, 0)
                 land_mask = (input_image_original.abs() > 1e-5).float().to(device)
                 raw_mask = mask_generator.generate_mask(input_image.shape)
-                mask = raw_mask * land_mask
+                
+                mask = raw_mask * land_mask # regular mask
+                # mask = torch.zeros_like(land_mask) # trying mask with all 0s, no inpainting; knows everything
+                
                 num_lines = mask_generator.get_num_lines()
 
                 with torch.no_grad():
                     for resample in self.resamples:
                         for i in tqdm(range(n_samples), leave=False, desc="Samples", colour="#006666"):
-                            final_image_ddpm = inpaint_generate_new_images(
+                            final_image_ddpm, final_noisy_image = inpaint_generate_new_images(
                                 self.best_model, input_image, mask, n_samples=1,
                                 device=device, resample_steps=resample, noise_strategy=self.noise_strategy
                             )
 
                             standardizer = self.dd.get_standardizer()
                             final_image_ddpm = torch.unsqueeze(standardizer.unstandardize(torch.squeeze(final_image_ddpm, 0)).to(device), 0)
+                            final_noisy_image = torch.unsqueeze(standardizer.unstandardize(torch.squeeze(final_noisy_image, 0)).to(device), 0)
                             gp_field = gp_fill(input_image_original, mask)
 
                             input_image_original_cropped = top_left_crop(input_image_original, 44, 94).to(device)
+                            final_noisy_image_cropped = top_left_crop(final_noisy_image, 44, 94).to(device)
+                            
+                            if image_counter == 0 and resample == self.resamples[0] and i == 0:
+                                u = final_noisy_image_cropped[0, 0].detach().cpu().numpy()
+                                v = final_noisy_image_cropped[0, 1].detach().cpu().numpy()
+                                H, W = u.shape
+                                Y, X = np.mgrid[0:H, 0:W]
+                                plt.figure(figsize=(6, 6))
+                                ax = plt.gca()
+                                ax.quiver(X, Y, u, v)
+                                ax.set_title("Noisy field at t = T (final_noisy_image_cropped)")
+                                ax.set_ylim(0, H)
+                                ax.set_xlim(0, W)
+                                ax.set_aspect('equal', adjustable='box')
+                                plt.tight_layout()
+                                plt.savefig(self.results_path / "debug_final_noisy_image.png")
+                                plt.close()
+                            
                             final_image_ddpm_cropped = top_left_crop(final_image_ddpm, 44, 94).to(device)
+                            
                             mask_cropped = top_left_crop(mask, 44, 94).to(device)
                             gp_field_cropped = top_left_crop(gp_field, 44, 94).to(device)
 
@@ -247,6 +279,7 @@ class ModelInpainter:
                             torch.save(mask_cropped, self.results_path / f"mask{base_id}.pt")
                             torch.save(input_image_original_cropped, self.results_path / f"initial{base_id}.pt")
                             torch.save(gp_field_cropped, self.results_path / f"gp_field{base_id}.pt")
+                            # torch.save(final_noisy_image_cropped, self.results_path / f"final_noisy_image{base_id}.pt")
 
 
                             writer.writerow([self.model_name, image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mse_gp.item(), mask_percentage, avg_dist])
@@ -355,16 +388,39 @@ class ModelInpainter:
 
     def set_model_name(self, model_name):
         self.model_name = model_name
+        
+    def clear_all_results(self):
+        print("Clearing all files in results folder")
+        root = Path("./results")
+        if root.exists():
+            shutil.rmtree(root)
+        root.mkdir(exist_ok=True)
+        self.set_results_path("./results")
+        self.csv_file = self.results_path / "inpainting_xl_data.csv"
+        self.write_header()
+        
+    def measure_variability(self, n_runs = 10, base_seed = 0):
+        mse = []
+        #for (trial in range n_runs) {
+            # work in progress
+        #}
 
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
     print(mi.model_paths)
+    
+    if (mi.clear_all_previous_results): # clearing all files in results folder
+        mi.clear_all_results() 
+        
+    #set_seed(mi.random_seed)
 
-    for _ in range (1):
+    for _ in range (1): # adds a mask
         mi.add_mask(StraightLineMaskGenerator(1,1))
 
     mi.visualize_images()
     mi.find_coverage()
+    
+    # up to here, just loads model from trained_models/weekend_ddpm_ocean_model.pt
     mi.begin_inpainting()

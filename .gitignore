@@ -21,3 +21,5 @@ tested_models/
 *.png
 
 util.py
+
+notes.txt

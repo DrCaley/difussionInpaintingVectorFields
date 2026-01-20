@@ -1,7 +1,10 @@
+from matplotlib import colors, ticker
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+
+from tqdm import tqdm
 
 
 
@@ -39,7 +42,7 @@ def save_mse_heatmap(tensor1, tensor2, mask, save_path="mse_heatmap.png",
 
     valid_pixels = cropped_mask == 1
     avg_mse = cropped_mse[valid_pixels].mean() if np.any(valid_pixels) else float('nan')
-    print(f"Average MSE per pixel over masked area in crop: {avg_mse:.6f}")
+    tqdm.write(f"Average MSE per pixel over masked area in crop: {avg_mse:.6f}")
 
     masked_array = np.where(cropped_mask == 1, cropped_mse, np.nan)
 
@@ -56,7 +59,9 @@ def save_mse_heatmap(tensor1, tensor2, mask, save_path="mse_heatmap.png",
     plt.ylabel("Height")
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.close()
+    return avg_mse
 
+# Normalized magnitude error
 def save_magnitude_difference_heatmap(tensor1, tensor2, mask, avg_magnitude,
                                       save_path="magnitude_diff_heatmap.png",
                                       title="Normalized Magnitude Difference Heatmap",
@@ -98,7 +103,7 @@ def save_magnitude_difference_heatmap(tensor1, tensor2, mask, avg_magnitude,
     # Compute average magnitude difference in the crop
     valid_pixels = cropped_mask == 1
     avg_diff = cropped_diff[valid_pixels].mean() if np.any(valid_pixels) else float('nan')
-    print(f"Average normalized magnitude difference over masked area in crop: {avg_diff:.6f}")
+    tqdm.write(f"Average normalized magnitude difference over masked area in crop: {avg_diff:.6f}")
 
     # Mask invalid pixels with NaN for plotting
     masked_array = np.where(cropped_mask == 1, cropped_diff, np.nan)
@@ -116,11 +121,12 @@ def save_magnitude_difference_heatmap(tensor1, tensor2, mask, avg_magnitude,
     plt.ylabel("Height")
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.close()
+    return avg_diff
 
 
-
-def save_percent_heatmap(true, observed, mask, save_path="mse_heatmap.png",
-                     title="Masked Pixel-wise MSE Heatmap", mask_color="lightgray",
+# sum vertical and horizontal percent error?
+def save_percent_heatmap(observed, true, mask, save_path="mse_heatmap.png",
+                     title="Masked Pixel-wise MSE Heatmap", mask_color="lightgrey",
                      crop_shape=(44, 94), cmap_name="viridis"):
     save_path = ensure_save_path(save_path)
 
@@ -130,8 +136,9 @@ def save_percent_heatmap(true, observed, mask, save_path="mse_heatmap.png",
 
     single_mask = mask[:, 0:1, :, :]
 
-    percent_error = ( torch.abs( (observed - true) / true ) )
+    percent_error = torch.abs((observed - true) / (true + 1e-8)) * 100
     pixel_mse = percent_error.sum(dim=1, keepdim=True)
+
     masked_per = pixel_mse * single_mask
 
     masked_per_np = masked_per.squeeze().cpu().numpy()
@@ -143,7 +150,7 @@ def save_percent_heatmap(true, observed, mask, save_path="mse_heatmap.png",
 
     valid_pixels = cropped_mask == 1
     avg_per = cropped_per[valid_pixels].mean() if np.any(valid_pixels) else float('nan')
-    print(f"Average percent error per pixel over masked area in crop: {avg_per:.6f}")
+    tqdm.write(f"Average percent error per pixel over masked area in crop: {avg_per:.6f}")
 
     masked_array = np.where(cropped_mask == 1, cropped_per, np.nan)
 
@@ -151,7 +158,7 @@ def save_percent_heatmap(true, observed, mask, save_path="mse_heatmap.png",
     cmap = plt.get_cmap(cmap_name).copy()
     cmap.set_bad(color=mask_color)
 
-    plt.imshow(masked_array, cmap=cmap, interpolation='nearest')
+    plt.imshow(masked_array, cmap=cmap, interpolation='nearest', vmin=0, vmax=500)
     plt.gca().invert_yaxis()
     plt.colorbar(label="Pixel Percent Error")
     full_title = f"{title}\nAverage Percent Error: {avg_per:.6f}"
@@ -160,8 +167,9 @@ def save_percent_heatmap(true, observed, mask, save_path="mse_heatmap.png",
     plt.ylabel("Height")
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.close()
+    return avg_per
 
-
+# relative angular error
 def save_angular_error_heatmap(tensor1, tensor2, mask, save_path="angular_error_heatmap.png",
                                crop_shape=(44, 94), mask_color="lightgray", cmap_name="viridis",
                                title="Masked Angular Error Heatmap"):
@@ -196,7 +204,7 @@ def save_angular_error_heatmap(tensor1, tensor2, mask, save_path="angular_error_
 
     masked_angle = np.where(cropped_mask == 1, cropped_angle, np.nan)
     avg_angle_error = cropped_angle[cropped_mask == 1].mean() if np.any(cropped_mask == 1) else float('nan')
-    print(f"Average angular error (degrees) over masked crop: {avg_angle_error:.3f}")
+    tqdm.write(f"Average angular error (degrees) over masked crop: {avg_angle_error:.3f}")
 
     plt.figure(figsize=(8, 6))
     cmap = plt.get_cmap(cmap_name).copy()
@@ -211,8 +219,9 @@ def save_angular_error_heatmap(tensor1, tensor2, mask, save_path="angular_error_
     plt.ylabel("Height")
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.close()
+    return avg_angle_error
 
-
+# magnitude of error vectors scaled by real magnitude
 def save_scaled_error_vectors_scalar_field(tensor1, tensor2, mask, save_path="scaled_errors_scalar_field_heatmap.png",
                                             crop_shape=(44, 94), mask_color="lightgray", cmap_name="viridis",
                                             title="Masked Pixel-wise MSE Heatmap",):
@@ -239,7 +248,8 @@ def save_scaled_error_vectors_scalar_field(tensor1, tensor2, mask, save_path="sc
     real_magnitude = torch.sqrt(u_true ** 2 + v_true ** 2) # + 1e-8 # avoid divide-by-zero
 
     # Scale error magnitude by real magnitude
-    scaled_error_magnitude = error_magnitude / real_magnitude
+    scaled_error_magnitude = (error_magnitude / real_magnitude + 1e-8) * 100 #FIX
+    #scaled_error_magnitude = error_magnitude #FIX
 
     # Apply mask
     masked_scaled_error = scaled_error_magnitude * single_mask.squeeze(1)
@@ -259,14 +269,14 @@ def save_scaled_error_vectors_scalar_field(tensor1, tensor2, mask, save_path="sc
     # Compute average over valid pixels
     valid_pixels = cropped_mask == 1
     avg_scaled_error = cropped_error[valid_pixels].mean() if np.any(valid_pixels) else float('nan')
-    print(f"Average scaled error magnitude over masked crop: {avg_scaled_error:.6f}")
+    tqdm.write(f"Average scaled error magnitude over masked crop: {avg_scaled_error:.6f}")
 
     # Plot
     plt.figure(figsize=(8, 6))
     cmap = plt.get_cmap(cmap_name).copy()
     cmap.set_bad(color=mask_color)
 
-    plt.imshow(masked_array, cmap=cmap, interpolation='nearest')
+    plt.imshow(masked_array, cmap=cmap, interpolation='nearest', vmin=0, vmax=150)
     plt.gca().invert_yaxis()
     plt.colorbar(label="Scaled Error Magnitude")
     full_title = f"{title}\nAverage Scaled Error: {avg_scaled_error:.6f}"
@@ -275,3 +285,64 @@ def save_scaled_error_vectors_scalar_field(tensor1, tensor2, mask, save_path="sc
     plt.ylabel("Height")
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.close()
+    return avg_scaled_error
+
+
+# magnitude % error
+def save_magnitude_relative_difference_heatmap(tensor1, tensor2, mask, avg_magnitude, save_path="mag_relative_error_heatmap.png",
+                     title="magnitude relative error", mask_color="lightgrey",
+                     crop_shape=(44, 94), cmap_name="viridis"):
+    save_path = ensure_save_path(save_path)
+
+    assert tensor1.shape == tensor2.shape, "Tensors must be the same shape"
+    assert tensor1.shape[1] == 2, "Expected tensors with shape (1, 2, H, W)"
+    assert mask.shape == (1, 2, tensor1.shape[2], tensor1.shape[3]), "Mask must be shape (1, 2, H, W)"
+
+    single_mask = mask[:, 0:1, :, :]  # Only use first channel for mask
+
+    # Compute magnitudes for each vector in tensor1 and tensor2
+    mag1 = torch.sqrt(tensor1[:, 0, :, :] ** 2 + tensor1[:, 1, :, :] ** 2)
+    mag2 = torch.sqrt(tensor2[:, 0, :, :] ** 2 + tensor2[:, 1, :, :] ** 2)
+
+    relative_diff = ((torch.abs(mag1 - mag2)) / (torch.abs(mag2)) + 1e-8) * 100
+
+    # Apply the mask
+    relative_mag_diff = relative_diff * single_mask.squeeze(1)
+
+    # Convert to NumPy
+    relative_mag_diff_np = relative_mag_diff.squeeze().cpu().numpy()
+    mask_np = single_mask.squeeze().cpu().numpy()
+
+    # Crop the result
+    crop_h, crop_w = crop_shape
+    cropped_diff = relative_mag_diff_np[:crop_h, :crop_w]
+    cropped_mask = mask_np[:crop_h, :crop_w]
+
+    cropped_diff = np.flipud(cropped_diff)
+    cropped_mask = np.flipud(cropped_mask)
+
+    # Compute average magnitude difference in the crop
+    valid_pixels = cropped_mask == 1
+    avg_diff = cropped_diff[valid_pixels].mean() if np.any(valid_pixels) else float('nan')
+    tqdm.write(f"Average magnitude % error over masked area in crop: {avg_diff:.6f}")
+
+    # Mask invalid pixels with NaN for plotting
+    masked_array = np.where(cropped_mask == 1, cropped_diff, np.nan)
+
+    # Plot
+    plt.figure(figsize=(8, 6))
+    cmap = plt.get_cmap(cmap_name).copy()
+    cmap.set_bad(color=mask_color)
+
+    plt.imshow(masked_array, cmap=cmap, interpolation='nearest', vmin= 0, vmax=150)
+    cbar = plt.colorbar(label="Magnitude % Error")
+    cbar.locator = ticker.MaxNLocator(nbins=10)
+    cbar.update_ticks()
+    full_title = f"{title}\nAverage Magnitude % Error: {avg_diff:.6f}"
+    plt.title(full_title)
+    plt.xlabel("Width")
+    plt.ylabel("Height")
+    plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    plt.close()
+    return avg_diff
+        

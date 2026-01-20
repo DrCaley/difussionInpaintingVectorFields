@@ -47,7 +47,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
 
         input_img = input_image.clone().to(device)
         mask = mask.to(device)
-
+  
         noise = noise_strat(input_img, torch.tensor([ddpm.n_steps] , device=device))
 
         # Step-by-step forward noising
@@ -55,7 +55,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         for t in range(ddpm.n_steps):
             noised_images[t + 1] = noise_one_step(noised_images[t], t, noise_strat)
 
-        doing_the_thing = False
+        doing_the_thing = False # Usually false
 
         if doing_the_thing:
             x = noised_images[ddpm.n_steps] * (1 - mask) + (noise * mask)
@@ -67,10 +67,10 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
             for i in range(resample_steps):
                 x, noise = denoise_one_step(x, noise_strat, t)
-                x = noised_images[t] * (1 - mask) + (x * mask)
+                x = noised_images[t] * (1 - mask) + (x * mask) # remove snapping back to known areas
                 if (i + 1) < resample_steps:
                     x = noise_one_step(x, t, noise_strat)
-    return x
+    return x, masked_poisson_projection(noised_images[ddpm.n_steps], mask)
 
 def calculate_mse(original_image, predicted_image, mask, normalize=False):
     """
@@ -262,3 +262,4 @@ def masked_poisson_projection(vector_field, mask, num_iter=500, tol=1e-5):
     vy_proj = torch.where(mask[:, 1] == 0, vy, vy_proj)
 
     return torch.stack([vx_proj, vy_proj], dim=1)
+

@@ -45,7 +45,13 @@ class DDInitializer:
         self._instance._setup_tensors(root / pickle_path)
 
         self.gpu = self._config.get('gpu_to_use')
-        self.device = torch.device(f"cuda:{self.gpu}" if torch.cuda.is_available() else "cpu")
+        # self.device = torch.device(f"cuda:{self.gpu}" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            self.device = torch.device(f"cuda:{self.gpu}")
+        elif torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device("cpu")
         print("we are running on the:", self.device)
 
         self._setup_transforms()
