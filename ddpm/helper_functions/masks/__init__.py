@@ -9,7 +9,21 @@ globals_ns = globals()
 
 # Dynamically import all classes from other .py files
 module_dir = Path(__file__).parent
-mask_files = [f.stem for f in module_dir.glob("*.py") if f.name not in ("__init__.py", "base.py")]
+excluded_modules = {
+    "n_coverage_mask",
+    "random_mask",
+    "border_mask",
+    "robot_ocean_mask",
+    "squiggly_line",
+    "random_path",
+    "smile_mask",
+    "no_mask",
+    "better_robot_path",
+}
+mask_files = [
+    f.stem for f in module_dir.glob("*.py")
+    if f.name not in ("__init__.py", "base.py") and f.stem not in excluded_modules
+]
 
 for module_name in mask_files:
     try:

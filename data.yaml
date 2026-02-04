@@ -4,6 +4,11 @@ v_training_mean: -0.0323937796117541
 v_training_std: 0.08899177232117582
 mag_mean: 0.1446947511640557
 
+# Unified statistics for zscore_unified (preserves divergence-free property)
+# shared_mean = avg(u_mean, v_mean), shared_std = sqrt((u_std² + v_std²) / 2)
+shared_mean: -0.05084468695562498
+shared_std: 0.11479844598042026
+
 gpu_to_use: 0
 
 # === training ===
@@ -14,16 +19,23 @@ partial_conv_mode: False
 
 training_mode: True
 testSeed: 0
-epochs: 1
+epochs: 100
 batch_size: 100  #use ~80 for server
 lr: 0.001
 
-standardizer_type: zscore
-                  # zscore
+standardizer_type: auto
+                  # auto            - select based on noise_function
+                  # zscore          - independent z-score per component (breaks div-free!)
+                  # zscore_unified  - same std for both components (preserves div-free)
                   # maxmag
                   # units
 
-noise_function: div_free
+# Auto-selection mapping for standardizers based on noise type
+standardizer_by_noise:
+  gaussian: zscore
+  div_free: zscore_unified
+
+noise_function: gaussian
               # gaussian
               # div_free
               # div_gaussian
@@ -50,15 +62,43 @@ n_samples: 1
 resample_nums: [5]
 save_pt_fields: False
 
+# === GP baseline ===
+gp_lengthscale: 14.1
+gp_variance: 0.0103420345
+gp_noise: 0.00000001
+gp_kernel_type: rbf_legacy  # rbf | incompressible | rbf_legacy | incompressible_rbf
+gp_coord_system: pixels  # pixels | normalized
+gp_use_double: True
+gp_max_points: null  # Set to an integer to cap known points for faster GP
+gp_sample_posterior: False
+
+# === GP tuning (training set) ===
+gp_tuning_num_images: 10
+gp_tuning_lengthscales: [0.5, 1.0, 1.5, 2.0, 3.0]
+gp_tuning_variances: [0.5, 1.0, 2.0]
+gp_tuning_noises: [0.000001, 0.00001, 0.0001]
+gp_tuning_masks:
+  - straight_line
+  - robot_path
+
+# === autocorrelation analysis ===
+gp_autocorr_num_images: 10
+gp_autocorr_max_lag: 120
+
 # === div-free inpainting ===
-use_comb_net: auto
+use_comb_net: no
               #yes
               #no
               #auto
-comb_training_steps: 200  # Per-step fix (applied 100x, so can be slow)
-fidelity_weight: 0.1      # Allow changes to fix divergence
-physics_weight: 100.0     # STRONGLY minimize boundary divergence  
-smooth_weight: 1.0        # Smoothing at boundary
+comb_training_steps: 200  # Per-step training iterations (only used if no pretrained model)
+fidelity_weight: 1.0      # Preserve naive stitch values (relaxed at boundary)
+physics_weight: 1.0       # Divergence penalty (only for excess above threshold)
+smooth_weight: 0.0        # Boundary smoothing (disabled for now)
+divergence_threshold: 0.06  # Only penalize divergence above this (normal background level)
+
+# Pretrained CombNet path (set to null to disable and use per-step training)
+# Run 'python scripts/pretrain_combnet.py' to create this model
+pretrained_combnet_path: null  # Use Per-Step CombNet for testing
 
 # Model paths by noise type - automatically selected based on noise_function
 model_by_noise_type:

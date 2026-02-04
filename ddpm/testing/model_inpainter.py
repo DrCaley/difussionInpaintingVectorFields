@@ -213,25 +213,48 @@ class ModelInpainter:
                 input_image_original = self.dd.get_standardizer().unstandardize(torch.squeeze(input_image, 0)).to(device)
                 input_image_original = torch.unsqueeze(input_image_original, 0)
                 land_mask = (input_image_original.abs() > 1e-5).float().to(device)
-                raw_mask = mask_generator.generate_mask(input_image.shape)
-                mask = raw_mask * land_mask
+                    raw_mask = mask_generator.generate_mask(input_image.shape)
+                    missing_mask = raw_mask * land_mask
                 num_lines = mask_generator.get_num_lines()
+
+                gp_lengthscale = self.dd.get_attribute("gp_lengthscale") or 1.5
+                gp_variance = self.dd.get_attribute("gp_variance") or 1.0
+                gp_noise = self.dd.get_attribute("gp_noise") or 1e-5
+                gp_kernel_type = self.dd.get_attribute("gp_kernel_type") or "rbf"
+                gp_coord_system = self.dd.get_attribute("gp_coord_system") or "pixels"
+                gp_use_double = self.dd.get_attribute("gp_use_double")
+                gp_use_double = True if gp_use_double is None else gp_use_double
+                gp_max_points = self.dd.get_attribute("gp_max_points")
+                gp_sample_posterior = self.dd.get_attribute("gp_sample_posterior") or False
+                if gp_max_points is not None:
+                    gp_max_points = int(gp_max_points)
 
                 with torch.no_grad():
                     for resample in self.resamples:
                         for i in tqdm(range(n_samples), leave=False, desc="Samples", colour="#006666"):
                             final_image_ddpm = inpaint_generate_new_images(
-                                self.best_model, input_image, mask, n_samples=1,
+                                self.best_model, input_image, missing_mask, n_samples=1,
                                 device=device, resample_steps=resample, noise_strategy=self.noise_strategy
                             )
 
                             standardizer = self.dd.get_standardizer()
                             final_image_ddpm = torch.unsqueeze(standardizer.unstandardize(torch.squeeze(final_image_ddpm, 0)).to(device), 0)
-                            gp_field = gp_fill(input_image_original, mask)
+                            gp_field = gp_fill(
+                                input_image_original,
+                                missing_mask,
+                                lengthscale=gp_lengthscale,
+                                variance=gp_variance,
+                                noise=gp_noise,
+                                use_double=gp_use_double,
+                                max_points=gp_max_points,
+                                sample_posterior=gp_sample_posterior,
+                                kernel_type=gp_kernel_type,
+                                coord_system=gp_coord_system,
+                            )
 
                             input_image_original_cropped = top_left_crop(input_image_original, 44, 94).to(device)
                             final_image_ddpm_cropped = top_left_crop(final_image_ddpm, 44, 94).to(device)
-                            mask_cropped = top_left_crop(mask, 44, 94).to(device)
+                            mask_cropped = top_left_crop(missing_mask, 44, 94).to(device)
                             gp_field_cropped = top_left_crop(gp_field, 44, 94).to(device)
 
                             mse_ddpm = calculate_mse(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped, normalize=True)
@@ -240,7 +263,7 @@ class ModelInpainter:
                             per_ddpm = calculate_percent_error(input_image_original_cropped, final_image_ddpm_cropped, mask_cropped)
                             per_gp = calculate_percent_error(input_image_original_cropped, gp_field_cropped, mask_cropped)
 
-                            mask_percentage = self.compute_mask_percentage(mask)
+                            mask_percentage = self.compute_mask_percentage(missing_mask)
                             avg_dist = self.compute_avg_distance_to_seen(mask_cropped)
 
                             base_id = f"{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}"

@@ -28,6 +28,29 @@ class ZScoreStandardizer(Standardizer):
         v = tensor[1:2] * self.v_std + self.v_mean
         return torch.cat((u, v), dim=0)
 
+
+class UnifiedZScoreStandardizer(Standardizer):
+    """Z-score standardizer using same std for both components.
+
+    IMPORTANT: This preserves the divergence-free property of vector fields.
+
+    The standard ZScoreStandardizer uses different stds for u and v, which breaks
+    divergence-free fields because:
+        div_std = (1/std_u) * du/dx + (1/std_v) * dv/dy  !=  0
+
+    With unified std:
+        div_std = (1/std) * (du/dx + dv/dy) = (1/std) * 0 = 0  (preserved!)
+    """
+    def __init__(self, shared_mean, shared_std):
+        self.mean = shared_mean
+        self.std = shared_std
+
+    def __call__(self, tensor):
+        return (tensor - self.mean) / self.std
+
+    def unstandardize(self, tensor):
+        return tensor * self.std + self.mean
+
 class MaxMagnitudeStandardizer(Standardizer):
     def __init__(self):
         self.last_max_mag = None  # Store the last magnitude used
@@ -72,6 +95,7 @@ class UnitVectorNormalizer(Standardizer):
 # === Registry ===
 STANDARDIZER_REGISTRY = {
     "zscore": ZScoreStandardizer,
+    "zscore_unified": UnifiedZScoreStandardizer,
     "maxmag": MaxMagnitudeStandardizer,
     "units": UnitVectorNormalizer,
 }

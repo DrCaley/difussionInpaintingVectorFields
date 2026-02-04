@@ -172,6 +172,12 @@ class DDInitializer:
             self.standardizer = standardizer
         else:
             std_type = self._config.get('standardizer_type')
+
+            if std_type == "auto":
+                noise_type = self._config.get("noise_function", "gaussian")
+                mapping = self._config.get("standardizer_by_noise", {})
+                std_type = mapping.get(noise_type, "zscore")
+
             std_class = STANDARDIZER_REGISTRY.get(std_type)
 
             if std_class is None:

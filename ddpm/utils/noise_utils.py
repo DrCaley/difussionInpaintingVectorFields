@@ -42,6 +42,8 @@ class DivergenceFreeNoise(NoiseStrategy):
     ) -> torch.Tensor:
         assert shape[1] == 2, "Divergence-free noise expects 2 channels"
         batch, _, H, W = shape
+        # TODO: Fix this - t should be used, not hardcoded to 50
+        # Reverted temporarily to match model training behavior
         return gaussian_each_step_divergence_free_noise(shape=shape, t=torch.tensor([50]), device=device)
 
     def get_gaussian_scaling(self):

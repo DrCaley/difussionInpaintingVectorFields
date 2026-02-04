@@ -5,95 +5,86 @@ import torch.nn.functional as F
 from ddpm.helper_functions.compute_divergence import compute_divergence
 
 class PhysicsInformedLoss(nn.Module):
-    def __init__(self, weight_fidelity=1.0, weight_physics=1.0, weight_smooth=0.1, weight_known=10.0):
+    def __init__(self, weight_fidelity=1.0, weight_physics=1.0, weight_smooth=0.0, 
+                 divergence_threshold=0.06):
         """
         Physics-Informed Loss for Vector Field Inpainting.
-        
-        NEW APPROACH: Directly minimize divergence at boundary while preserving
-        values away from boundary.
 
         Args:
-            weight_fidelity (float): Weight for preserving values AWAY from boundary.
-            weight_physics (float): Weight for minimizing divergence AT boundary.
+            weight_fidelity (float): Weight for MSE loss against the naive stitch.
+            weight_physics (float): Weight for the divergence constraint.
             weight_smooth (float): Weight for smoothness regularization.
-            weight_known (float): Weight for keeping known region UNCHANGED.
+            divergence_threshold (float): Only penalize divergence above this threshold.
+                                         Default 0.06 is typical for div-free fields.
         """
         super().__init__()
         self.weights = {
             'fidelity': weight_fidelity,
             'physics': weight_physics,
-            'smooth': weight_smooth,
-            'known': weight_known
+            'smooth': weight_smooth
         }
+        self.divergence_threshold = divergence_threshold
 
         # Register kernel as a buffer so it automatically moves to GPU with the model
         # 3x3 block of ones for 8-neighbor dilation
         self.register_buffer('dilate_kernel', torch.ones((1, 1, 3, 3)))
 
-    def _compute_divergence_map(self, vector_field):
+    @staticmethod
+    def _compute_divergence_field(vector_field):
         """
-        Computes the divergence at each pixel of a vector field.
-        Returns a [H-1, W-1] map of divergence values.
+        Computes the divergence field (not mean) for threshold-based penalty.
+        """
+        # vector_field shape: [B, 2, H, W]
+        vx = vector_field[0, 0, :, :]
+        vy = vector_field[0, 1, :, :]
+        div = compute_divergence(vx, vy)
+        return div
+
+    @staticmethod
+    def _compute_mean_abs_divergence(vector_field):
+        """
+        Computes the mean absolute divergence of a vector field.
         """
         # vector_field shape: [B, 2, H, W]
         vx = vector_field[0, 0, :, :]
         vy = vector_field[0, 1, :, :]
 
-        # compute_divergence returns a divergence map
+        # compute_divergence is imported from helper_functions
         div = compute_divergence(vx, vy)
-        return div
+        return div.abs().mean()
 
-    def _get_boundary_mask(self, mask, width=2):
+    def _get_boundary_mask(self, mask):
         """
         Creates a boundary mask (seam) where 0 meets 1.
-        Handles masks with shape [B, C, H, W] where C can be 1 or 2.
-        
-        Args:
-            mask: Binary mask [B, C, H, W]
-            width: How many pixels wide the boundary region should be
         """
-        mask_float = mask.float()
-        
-        # If mask has 2 channels (broadcasted), just use one channel for boundary detection
-        if mask_float.shape[1] == 2:
-            mask_float = mask_float[:, 0:1, :, :]  # Use first channel only [B, 1, H, W]
+        # Use only first channel for boundary computation
+        if mask.shape[1] > 1:
+            mask_single = mask[:, 0:1, :, :]
+        else:
+            mask_single = mask
+        mask_float = mask_single.float()
 
-        # Multiple dilations/erosions for wider boundary
-        dilated = mask_float.clone()
-        eroded = mask_float.clone()
-        
-        for _ in range(width):
-            dilated = F.conv2d(dilated, self.dilate_kernel, padding=1)
-            dilated = torch.clamp(dilated, 0, 1)
-            
-            eroded = F.conv2d(1 - eroded, self.dilate_kernel, padding=1)
-            eroded = 1 - torch.clamp(eroded, 0, 1)
+        # Ensure kernel is on same device as mask
+        kernel = self.dilate_kernel.to(mask.device)
 
-        # Boundary is the transition zone
-        boundary = dilated - eroded
-        boundary = torch.clamp(boundary, 0, 1)
-        
-        # If original mask had 2 channels, broadcast boundary back to 2 channels
-        if mask.shape[1] == 2:
-            boundary = boundary.expand(-1, 2, -1, -1)
-        
+        # Dilate: padding=1 keeps size identical
+        dilated = F.conv2d(mask_float, kernel, padding=1)
+        dilated = torch.clamp(dilated, 0, 1)
+
+        # Boundary is where dilation added a 1 that wasn't there before
+        boundary = dilated - mask_float
         return boundary
 
     def forward(self, predicted, known, inpainted, mask):
         """
         Calculates the combined physics loss.
-        
-        LOSS DESIGN:
-        1. KNOWN FIDELITY: Don't change the known region at all
-        2. MINIMAL CHANGE: Minimize total changes to the field
-        3. BOUNDARY DIVERGENCE: Minimize |div| at boundary pixels
-        4. SMOOTHNESS: Penalize sharp gradients at boundary
 
         Args:
-            predicted (Tensor): The refined output from the model.
-            known (Tensor): The known data (outside mask).
-            inpainted (Tensor): The inpainted data (inside mask).
-            mask (Tensor): Binary mask. 1 = Inpainted Region, 0 = Known Data.
+            predicted (Tensor): The refined output from the model (Combined/Corrected Field).
+            known (Tensor): The ground truth known data.
+            inpainted (Tensor): The generated inpainted data (prior to refinement).
+            mask (Tensor): Binary mask. Based on recombination logic:
+                           1 = Inpainted Region (Hole), 0 = Known Data.
 
         Returns:
             total_loss (Tensor): The weighted sum of all losses.
@@ -101,62 +92,84 @@ class PhysicsInformedLoss(nn.Module):
         """
 
         # --- 1. RECONSTRUCT NAIVE FIELD ---
+        # Recreate the stitching logic previously in get_loss
         naive = known * (1 - mask) + (inpainted * mask)
 
-        # --- 2. GET BOUNDARY MASK ---
-        boundary = self._get_boundary_mask(mask, width=2)
-        
-        # Known region mask (where mask = 0)
-        known_region = (1 - mask)
+        # --- 2. CALCULATE DYNAMIC THRESHOLDS ---
+        # We detach these because they are targets/constraints, not parameters to optimize.
+        with torch.no_grad():
+            div_known = self._compute_mean_abs_divergence(known)
+            div_inp = self._compute_mean_abs_divergence(inpainted)
+            # The divergence should not exceed the worst part of the input components
+            max_div_threshold = torch.max(div_known, div_inp)
 
-        # --- 3. KNOWN REGION LOSS (keep known data UNCHANGED) ---
-        # This is critical: the known region is noised ground truth, don't modify it
-        loss_known = torch.mean(known_region * (predicted - known) ** 2)
+        # --- 3. FIDELITY LOSS ---
+        # Only compute fidelity in the INPAINTED region (mask=1)
+        # The known region (mask=0) contains true values that shouldn't be modified
+        # and the network is constrained to not modify them anyway.
+        # Relax fidelity at the boundary where we need freedom to fix divergence
+        boundary = self._get_boundary_mask(mask)
+        # Expand boundary to match prediction channels if needed
+        if boundary.shape[1] == 1 and mask.shape[1] == 2:
+            boundary = boundary.expand(-1, 2, -1, -1)
+        W_fidelity = mask - (boundary * 0.9)  # Only in inpainted region, less strict at boundary
+        W_fidelity = torch.clamp(W_fidelity, 0, 1)  # Ensure non-negative weights
 
-        # --- 4. MINIMAL CHANGE LOSS (minimize total changes to the field) ---
-        # Penalize any deviation from the naive stitch
-        loss_change = torch.mean((predicted - naive) ** 2)
+        # Compute fidelity only where W_fidelity > 0 (inpainted region)
+        fidelity_diff = W_fidelity * (predicted - naive) ** 2
+        # Normalize by the inpainted area to avoid dependence on mask size
+        inpainted_area = mask.sum() + 1e-8
+        loss_fidelity = fidelity_diff.sum() / inpainted_area
 
-        # --- 5. BOUNDARY DIVERGENCE LOSS (minimize divergence AT boundary) ---
-        div_map = self._compute_divergence_map(predicted)
+        # --- 4. PHYSICS LOSS (Threshold-based Divergence Penalty) ---
+        # Only penalize divergence ABOVE the threshold (normal background level)
+        # This prevents the network from just moving divergence around
+        div_field = self._compute_divergence_field(predicted)
+        abs_div = div_field.abs()
         
-        # Get boundary mask at divergence resolution
-        boundary_single = boundary[:, 0:1, :, :]  # [B, 1, H, W]
-        boundary_div = boundary_single.squeeze()  # [H, W]
+        # ReLU-style penalty: only penalize divergence above threshold
+        excess_div = F.relu(abs_div - self.divergence_threshold)
         
-        # Ensure shapes match
-        H_div, W_div = div_map.shape
-        boundary_div = boundary_div[:H_div, :W_div]
+        # Mean of excess divergence (this is what we want to minimize)
+        loss_physics = excess_div.mean()
         
-        # Penalize divergence magnitude at boundary
-        boundary_div_values = torch.abs(div_map) * boundary_div
-        loss_boundary_div = boundary_div_values.sum() / (boundary_div.sum() + 1e-8)
+        # Also track the full divergence for metrics
+        div_pred = abs_div.mean()
 
-        # --- 6. SMOOTHNESS LOSS (encourage smooth transition at boundary) ---
+        # --- 5. SMOOTHNESS LOSS (BOUNDARY-ONLY) ---
+        # Only apply smoothness at the boundary, not globally
+        # This prevents crushing values everywhere while still smoothing the seam
         du = torch.abs(predicted[:, :, :, :-1] - predicted[:, :, :, 1:])
         dv = torch.abs(predicted[:, :, :-1, :] - predicted[:, :, 1:, :])
-        
-        boundary_h = boundary[:, :, :, :-1]
-        boundary_v = boundary[:, :, :-1, :]
-        
-        loss_smooth = torch.mean(boundary_h * du) + torch.mean(boundary_v * dv)
+
+        # Create boundary weights for smoothness (dilate boundary for wider effect)
+        boundary_smooth = self._get_boundary_mask(mask)
+        # Dilate boundary mask to cover a few pixels around seam
+        kernel = self.dilate_kernel.to(mask.device)
+        boundary_smooth = F.conv2d(boundary_smooth.float(), kernel, padding=1)
+        boundary_smooth = torch.clamp(boundary_smooth, 0, 1)
+        if boundary_smooth.shape[1] == 1:
+            boundary_smooth = boundary_smooth.expand(-1, 2, -1, -1)
+
+        # Apply smoothness only at boundary region
+        du_weighted = du * boundary_smooth[:, :, :, :-1]
+        dv_weighted = dv * boundary_smooth[:, :, :-1, :]
+        loss_smooth = torch.mean(du_weighted) + torch.mean(dv_weighted)
 
         # --- TOTAL LOSS ---
-        weighted_known = self.weights['known'] * loss_known
-        weighted_change = self.weights['fidelity'] * loss_change
-        weighted_boundary_div = self.weights['physics'] * loss_boundary_div
+        weighted_fidelity = self.weights['fidelity'] * loss_fidelity
+        weighted_physics = self.weights['physics'] * loss_physics
         weighted_smooth = self.weights['smooth'] * loss_smooth
 
-        total_loss = weighted_known + weighted_change + weighted_boundary_div + weighted_smooth
+        total_loss = weighted_fidelity + weighted_physics + weighted_smooth
 
         return total_loss, {
-            'loss_known': weighted_known,
-            'loss_change': weighted_change,
-            'loss_boundary_div': weighted_boundary_div,
+            'loss_fidelity': weighted_fidelity,
+            'loss_physics': weighted_physics,
             'loss_smooth': weighted_smooth,
-            'metric_boundary_div': loss_boundary_div.detach()
+            'metric_div_pred': div_pred,
+            'metric_div_thresh': max_div_threshold
         }
-
 
 # Usage Example:
 # criterion = PhysicsInformedLoss()

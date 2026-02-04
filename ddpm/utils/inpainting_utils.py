@@ -80,11 +80,12 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                     if (i + 1) < resample_steps:
                         x = noise_one_step(combined, t, noise_strat)
                     else:
-                        x = combined  # For next iteration
+                        x = combined  # Pass combined to next timestep
                 pbar.update(1)
 
-    # Result is already boundary-fixed from the last iteration
-    return combined
+    # Force known region to be original input (CombNet may have modified it)
+    result = input_img * (1 - mask) + combined * mask
+    return result
 
 
 def calculate_mse(original_image, predicted_image, mask, normalize=False):

@@ -131,6 +131,16 @@ class VectorCombinationUNet(nn.Module):
 
         # Extract the original velocity from input (Channels 0 and 1)
         original_velocity = combined_input[:, :2, :, :]
+        
+        # Extract mask from input (Channels 2 and 3)
+        # mask=1 means inpainted region, mask=0 means known region
+        mask = combined_input[:, 2:4, :, :]
+        
+        # CRITICAL: Only apply correction in the INPAINTED region (mask=1)
+        # The KNOWN region (mask=0) contains true values and must be preserved exactly
+        masked_correction = correction_field * mask
 
-        # Final Physics Constraint: V_final = V_original + Correction
-        return original_velocity + correction_field
+        # Final: V_final = V_original + masked_correction
+        # Known region: output = original (correction is zeroed by mask)
+        # Inpainted region: output = original + correction
+        return original_velocity + masked_correction

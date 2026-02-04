@@ -6,6 +6,240 @@
 
 ## Journal Entries
 
+### February 4, 2026 - GP Baseline Configuration + gp_fill Cleanup
+
+**Objective:** Make the GP baseline configurable and reduce redundant computation.
+
+**Changes:**
+- Added GP parameters to `data.yaml`: `gp_lengthscale`, `gp_variance`, `gp_noise`, `gp_use_double`, `gp_max_points`, `gp_sample_posterior`.
+- Wired these parameters into `ModelInpainter` so `gp_fill()` uses config values.
+- Updated `gp_fill()` to support optional subsampling of known points (`max_points`) and optional posterior sampling (`sample_posterior`).
+
+**Notes:**
+- Default behavior remains mean-only predictions (no stochastic sampling), matching previous output while reducing unnecessary work.
+- `gp_max_points` can be set to speed up GP on large masks without changing defaults.
+
+### February 4, 2026 - GP Tuning Run Blocked by MPS float64
+
+**Objective:** Run GP parameter tuning on the training set.
+
+**Issue:** GP tuning failed on Apple MPS with:
+```
+TypeError: Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64.
+```
+
+**Fix:** Updated `gp_fill()` to automatically disable `use_double` when tensor device is `mps`.
+
+**Status:** Ready to re-run GP tuning after the fix.
+
+### February 4, 2026 - GP Tuning Blocked by MPS Cholesky Solve
+
+**Issue:** MPS lacks `torch.cholesky_solve`, causing GP baseline to fail.
+
+**Fix:** Updated `gp_fill()` to run on CPU when the input tensor is on `mps`, then move results back to the original device.
+
+**Status:** GP tuning should run on CPU fallback for Cholesky.
+
+---
+
+### February 4, 2026 - Gaussian Inpainting Image Generation (No CombNet)
+
+**Objective:** Generate a DDPM inpainted vector field image using Gaussian noise without CombNet.
+
+**Config Changes:**
+- `noise_function: gaussian`
+- `use_comb_net: no`
+
+**Run:** `python -m ddpm.Testing.model_inpainter`
+
+**Outputs:**
+- DDPM prediction image: `results/weekend_ddpm_ocean_model/pt_visualizer_images/pt_predictions/ddpm82_StraightLineMaskGenerator_resample5_num_lines_1_vector_field.png`
+- Reference images (same folder): `initial...`, `mask...`, `gp_field...`
+
+**Notes:** Gaussian DDPM completed successfully on MPS. Metrics were logged to `results/inpainting_model_test_log.txt` and `results/inpainting_xl_data.csv`.
+
+---
+
+### February 4, 2026 - Gaussian Inpainting Re-Run (zscore Standardization)
+
+**Objective:** Re-run Gaussian DDPM inpainting after switching `standardizer_type` back to `zscore`.
+
+**Config Change:** `standardizer_type: zscore`
+
+**Run:** `python -m ddpm.Testing.model_inpainter`
+
+**Output:** Updated image at `results/weekend_ddpm_ocean_model/pt_visualizer_images/pt_predictions/ddpm82_StraightLineMaskGenerator_resample5_num_lines_1_vector_field.png` (file overwritten).
+
+---
+
+### February 4, 2026 - Auto Standardizer Selection by Noise Type
+
+**Objective:** Ensure Gaussian uses legacy `zscore` while divergence-free uses `zscore_unified` automatically.
+
+**Changes:**
+- `data.yaml`: set `standardizer_type: auto` and added `standardizer_by_noise` mapping
+- `DDInitializer._setup_transforms`: resolve `auto` via `noise_function` with fallback to `zscore`
+
+### February 4, 2026 - GP Parameter Tuning (Training Set)
+
+**Objective:** Tune GP baseline hyperparameters using training set samples.
+
+**Setup:**
+- Script: `scripts/tune_gp_params.py`
+- Masks: `straight_line`, `coverage`
+- Images: 10
+- Evaluated grid over lengthscale, variance, noise (see `gp_tuning_*` in `data.yaml`)
+
+**Results (best per mask):**
+- Coverage mask: lengthscale=1.0, variance=0.5, noise=1e-4 → mean MSE **0.062063**
+- Straight line mask: lengthscale=3.0, variance=1.0, noise=1e-5 → mean MSE **0.068309**
+
+**Artifacts:**
+- Results saved to `results/gp_tuning_results.csv`
+
+**Decision:** Use a single GP parameter set for all masks based on best overall tuning result.
+- `gp_lengthscale: 1.0`, `gp_variance: 0.5`, `gp_noise: 1e-4`
+
+### February 4, 2026 - GP Preview Visualization
+
+**Objective:** Visualize GP fill output with tuned parameters.
+
+**Script:** `scripts/render_gp_example.py`
+
+**Output:**
+- `results/gp_preview/initial_sample_*.png`
+- `results/gp_preview/gp_fill_sample_*.png`
+- `results/gp_preview/mask_sample_*.png`
+
+### February 4, 2026 - Mask Gallery Preview
+
+**Objective:** Render example images for all available mask generators.
+
+**Script:** `scripts/render_mask_gallery.py`
+
+**Output:**
+- `results/mask_gallery/*.png`
+
+### February 4, 2026 - BetterRobotPath Batch Render
+
+**Objective:** Generate 10 distinct BetterRobotPath masks.
+
+**Script:** `scripts/render_better_robot_paths.py`
+
+**Output:**
+- `results/mask_gallery/better_robot_paths/better_robot_path_1.png` … `better_robot_path_10.png`
+
+### February 4, 2026 - Mask Options Pruned
+
+**Objective:** Remove unwanted mask options from the registry and galleries.
+
+**Removed from options:** coverage, random, border, robot_ocean_path, squiggly_line, random_path, robot_path, smile, no_mask.
+
+**Change:** Excluded these modules from dynamic mask registry and updated mask gallery/tuning scripts accordingly.
+
+### February 4, 2026 - Robot Path Rename
+
+**Objective:** Rename BetterRobotPath to RobotPath.
+
+**Change:** The primary mask implementation now lives in `ddpm/helper_functions/masks/robot_path.py` with class `RobotPathGenerator`. A deprecated alias remains in `better_robot_path.py`, and the registry now exposes `robot_path` only.
+
+### February 4, 2026 - Incompressible GP Kernel
+
+**Objective:** Use an incompressible (divergence-free) GP kernel instead of RBF for baseline.
+
+**Change:** Added `incompressible_kernel()` and `kernel_type` option to `gp_fill()`; set `gp_kernel_type: incompressible` in `data.yaml` and wired through callers.
+
+**Preview:** Re-ran `scripts/render_gp_example.py` using `RobotPathGenerator` mask.
+
+### February 4, 2026 - Autocorrelation Length Scales (Training Set)
+
+**Objective:** Estimate spatial autocorrelation length scales to inform GP lengthscale choice.
+
+**Script:** `scripts/compute_autocorr_lengthscales.py`
+
+**Config:** `gp_autocorr_num_images=10`, `gp_autocorr_max_lag=40`
+
+**Results (e-folding, in pixels):**
+- u_x: not reached by lag 40 (corr ≈ 0.46 at lag 40)
+- u_y: ~11.65
+- v_x: ~14.08
+- v_y: not reached by lag 40 (corr ≈ 0.64 at lag 40)
+
+**Artifact:** `results/autocorr_lengthscales.json`
+
+### February 4, 2026 - GP Preview (Updated Lengthscale)
+
+**Objective:** Re-render GP preview with updated `gp_lengthscale` from `data.yaml`.
+
+**Script:** `scripts/render_gp_example.py`
+
+**Output:**
+- `results/gp_preview/initial_sample_0.png`
+- `results/gp_preview/gp_fill_sample_0.png`
+- `results/gp_preview/mask_sample_0.png`
+
+### February 4, 2026 - GP Variance Estimate (Training Set)
+
+**Objective:** Estimate GP variance from training dataset values.
+
+**Script:** `scripts/compute_gp_variance.py`
+
+**Results (10 images):**
+- u_var: 0.0093212118
+- v_var: 0.0060506510
+- combined_var: 0.0103420345
+
+**Action:** Set `gp_variance` to 0.0103420345 in `data.yaml`.
+
+### February 4, 2026 - GP Preview (Variance Updated)
+
+**Objective:** Re-render GP preview after variance update.
+
+**Script:** `scripts/render_gp_example.py`
+
+**Output:**
+- `results/gp_preview/initial_sample_0.png`
+- `results/gp_preview/gp_fill_sample_0.png`
+- `results/gp_preview/mask_sample_0.png`
+
+### February 4, 2026 - Mask Convention Fix
+
+**Issue:** `StraightLineMaskGenerator` and `RobotPathGenerator` produced masks with 0 in missing regions, but GP/inpainting expects 1 = missing.
+
+**Fix:** Updated both generators to mark missing regions with 1 to match GP/inpainting mask convention.
+
+### February 4, 2026 - Mask Normalization Update
+
+**Issue:** Mask generators (e.g., straight line, robot path) were expected to produce 1=known, 0=missing, which made recent changes invert visuals.
+
+**Fix:** Reverted straight line + robot path generators to their original outputs and added a normalization step at use-time that inverts masks when mean > 0.5, ensuring GP/inpainting always sees 1=missing.
+
+### February 4, 2026 - GP Mask Convention Clarified (Final)
+
+**Issue:** Mask values were being interpreted inconsistently.
+
+**Fix:** Treat generator outputs as 1=missing (0=known) in GP/inpainting paths via `missing_mask = raw_mask * land_mask`.
+
+**Check:** RobotPath mask currently yields ~84% missing on the cropped region.
+
+### February 4, 2026 - GP Land Mask Exclusion
+
+**Issue:** GP was training on land pixels (zeros), which can create noisy, non-smooth fills.
+
+**Fix:** `gp_fill()` now excludes land pixels using a `valid_mask` derived from the input tensor (nonzero magnitude). Only valid ocean pixels are used for known/unknown indices.
+
+### February 4, 2026 - GP Coordinate System Fix
+
+**Issue:** GP lengthscales are in pixel units, but coordinates were normalized to [0,1], leading to ill-conditioned kernels and noisy outputs.
+
+**Fix:** Added `gp_coord_system` (pixels|normalized). Default set to `pixels`, and all GP callers pass it through to `gp_fill()`.
+
+### February 4, 2026 - GP Kernel Aligned to Reference
+
+**Objective:** Match GP behavior to provided reference implementation.
+
+**Change:** Added `rbf_legacy` and `incompressible_rbf` kernels (legacy distance + kernel_noise^2). Set `gp_kernel_type: incompressible_rbf` in `data.yaml`.
+
 ### January 5, 2026 - Gaussian vs Divergence-Free Noise Inpainting Comparison
 
 **Objective:** Test inpainting performance using Gaussian noise with the weekend model.
@@ -694,8 +928,223 @@ else:
 
 ## Next Steps (January 7, 2026)
 
-- [ ] Check CombNet training results (`tail -50 combnet_training.log`)
-- [ ] Test pretrained CombNet on real inpainting task
-- [ ] Compare inference time: pretrained vs per-step training
-- [ ] Compare quality metrics: MSE, angular error, divergence
+- [x] Check CombNet training results (`tail -50 combnet_training.log`)
+- [x] Test pretrained CombNet on real inpainting task
+- [x] Compare inference time: pretrained vs per-step training
+- [x] Compare quality metrics: MSE, angular error, divergence
 - [ ] If successful, update `run_comparison.py` to use pretrained CombNet
+
+---
+
+### January 8, 2026 - CombNet Comparison: Pretrained vs Per-Step Training
+
+**Objective:** Compare the pretrained CombNet (fast) against the old per-step training approach (slow) for reducing boundary divergence in div-free inpainting.
+
+**Test Setup:**
+- Model: `div_free_model.pt` with divergence-free noise
+- Mask: `StraightLineMaskGenerator(1)` - 44.8% coverage
+- Timesteps tested: 80, 60, 40, 20, 5
+- Device: MPS (Apple Silicon)
+
+**Results - Boundary Divergence at Each Timestep:**
+
+| Timestep | Naive Stitch | Pretrained CombNet | Per-Step Training |
+|----------|--------------|-------------------|-------------------|
+| t=80 | 0.7949 | 0.4412 | 0.3390 |
+| t=60 | 0.9418 | 0.6116 | 0.4545 |
+| t=40 | 0.8513 | 0.6187 | 0.4783 |
+| t=20 | 0.9017 | 0.6215 | 0.5622 |
+| t=5  | 0.9163 | 0.6428 | 0.6033 |
+| **Avg** | **0.8812** | **0.5872** | **0.4875** |
+
+**Results - Boundary/Away Divergence Ratio:**
+
+| Method | Avg Ratio | Interpretation |
+|--------|-----------|----------------|
+| Div-Free Naive Stitch | 2.97x | High boundary divergence relative to field |
+| Div-Free + Pretrained CombNet | 2.39x | Moderate improvement |
+| Div-Free + Per-Step Training | 1.65x | Best boundary reduction |
+| Gaussian Naive Stitch | 1.95x | Baseline for comparison |
+
+**Results - Speed Comparison:**
+
+| Method | Time per Step | Notes |
+|--------|---------------|-------|
+| Pretrained CombNet | ~0.003s | Single forward pass (after initial load) |
+| Per-Step Training | ~2.2s | 200 training iterations per step |
+
+**Speed Ratio:** Per-step training is **~730x slower** than pretrained CombNet.
+
+**Key Findings:**
+
+1. **Both CombNet approaches reduce boundary divergence:**
+   - Pretrained: 35.7% reduction (0.8812 → 0.5872)
+   - Per-Step: 46.6% reduction (0.8812 → 0.4875)
+
+2. **Per-step training is slightly better quality** (~11% more divergence reduction) but **drastically slower** (730x).
+
+3. **Pretrained CombNet achieves most of the benefit:**
+   - Gets 77% of the per-step training's divergence reduction
+   - At 0.14% of the computational cost
+
+4. **Per-step training converges better at early timesteps:**
+   - At t=80: Per-step is 23% better than pretrained
+   - At t=5: Per-step is only 6% better than pretrained
+
+**Recommendation:**
+
+Use **pretrained CombNet** for production. The 11% quality trade-off is worth the 730x speedup. For a full inpainting run (100 timesteps × 5 resample steps = 500 calls):
+- Pretrained: ~1.5 seconds total
+- Per-Step: ~18 minutes total
+
+**Configuration:**
+```yaml
+# data.yaml - Use pretrained for speed
+pretrained_combnet_path: "ddpm/Trained_Models/pretrained_combnet.pt"
+
+# Set to null for better quality (but much slower)
+# pretrained_combnet_path: null
+```
+
+---
+
+### January 8, 2026 - CRITICAL BUG: Z-Score Standardization Breaks Divergence-Free Property
+
+**Discovery:** While investigating why divergence values seemed high (~0.35 for standardized data vs ~0.04 for original), we discovered a fundamental flaw in the z-score standardization approach.
+
+**The Problem:**
+
+The `ZScoreStandardizer` uses **different standard deviations** for u and v components:
+- `u_training_std: 0.136` → scaling factor 1/0.136 = **7.4x**
+- `v_training_std: 0.089` → scaling factor 1/0.089 = **11.2x**
+
+This **breaks the divergence-free property**:
+
+```
+Original:     div = ∂u/∂x + ∂v/∂y = 0  (divergence-free)
+
+After z-score with different stds:
+              div_std = (1/std_u) * ∂u/∂x + (1/std_v) * ∂v/∂y
+                      = 7.4 * ∂u/∂x + 11.2 * ∂v/∂y
+
+If ∂u/∂x = -∂v/∂y (div-free condition):
+              div_std = 7.4 * ∂u/∂x - 11.2 * ∂u/∂x
+                      = -3.8 * ∂u/∂x  ≠ 0  (BROKEN!)
+```
+
+**Why This Matters:**
+1. Ocean velocity fields are approximately divergence-free (conservation of mass)
+2. The div-free DDPM model explicitly assumes divergence-free noise
+3. Standardization with different stds creates artificial divergence
+4. This artificial divergence propagates through the entire pipeline
+
+**Measured Impact:**
+| Data State | Mean |divergence| |
+|------------|----------------------|
+| Original ocean data | 0.044 |
+| After z-score (different stds) | 0.35-0.38 |
+| **Increase** | **~8x artificial divergence!** |
+
+**The Fix:**
+
+Created new `UnifiedZScoreStandardizer` that uses **same std for both components**:
+
+```python
+class UnifiedZScoreStandardizer(Standardizer):
+    """Uses same std for both u and v - preserves divergence-free property."""
+    def __init__(self, shared_mean, shared_std):
+        self.mean = shared_mean
+        self.std = shared_std
+
+    def __call__(self, tensor):
+        return (tensor - self.mean) / self.std
+```
+
+With unified std:
+```
+div_std = (1/std) * ∂u/∂x + (1/std) * ∂v/∂y
+        = (1/std) * (∂u/∂x + ∂v/∂y)
+        = (1/std) * 0 = 0  ✓ (PRESERVED!)
+```
+
+**New Configuration (data.yaml):**
+```yaml
+# Unified statistics for zscore_unified
+shared_mean: -0.0508  # avg(u_mean, v_mean)
+shared_std: 0.1148    # sqrt((u_std² + v_std²) / 2)
+
+standardizer_type: zscore_unified  # preserves div-free
+```
+
+**Files Modified:**
+- `ddpm/helper_functions/standardize_data.py` - Added `UnifiedZScoreStandardizer`
+- `data.yaml` - Added `shared_mean`, `shared_std`, and `zscore_unified` option
+
+**Impact on Existing Models:**
+- Existing models trained with `zscore` will still work (backwards compatible)
+- New models for div-free inpainting should use `zscore_unified`
+- Models need to be **retrained** with unified standardizer to benefit
+
+**Next Steps:**
+- [ ] Test that new standardizer preserves divergence
+- [ ] Retrain div-free model with `zscore_unified`
+- [ ] Retrain CombNet with unified standardized data
+- [ ] Compare inpainting quality
+
+---
+
+### January 8, 2026 - Per-Step CombNet: Div-Free vs Gaussian Comparison
+
+**Objective:** Compare Per-Step CombNet effectiveness on Div-Free vs Gaussian DDPM models before retraining with unified standardizer.
+
+**Terminology:**
+- **Per-Step CombNet**: Trains a VectorCombinationUNet at each denoising step (~200 iterations, ~2.1s/step)
+- **Naive Stitch**: Simple masking: `known * (1-mask) + denoised * mask`
+
+**Note:** Both models were trained with the broken `zscore` standardizer (different u/v stds), so absolute divergence values are inflated ~8x. Relative comparisons remain valid.
+
+**Results - Naive Stitch (baseline):**
+
+| Model | div_boundary (avg) | div_away (avg) | ratio |
+|-------|-------------------|----------------|-------|
+| Div-Free | 0.8812 | 0.2996 | 2.93x |
+| Gaussian | 0.9271 | 0.4945 | 1.95x |
+
+**Results - With Per-Step CombNet:**
+
+| Model | div_boundary (avg) | div_away (avg) | ratio |
+|-------|-------------------|----------------|-------|
+| Div-Free | 0.4874 | 0.2932 | 1.65x |
+| Gaussian | 0.5190 | 0.4566 | 1.20x |
+
+**Boundary Divergence Reduction:**
+
+| Model | Naive | Per-Step CombNet | Reduction |
+|-------|-------|------------------|-----------|
+| Div-Free | 0.8878 | 0.4874 | **45.1%** |
+| Gaussian | 0.9271 | 0.5190 | **44.0%** |
+
+**Key Findings:**
+
+1. **Both models benefit equally** from Per-Step CombNet (~44-45% boundary divergence reduction)
+
+2. **Gaussian achieves better final ratio** (1.20x vs 1.65x) - boundary divergence closer to field average
+
+3. **At early timesteps (t=80), Gaussian + CombNet achieves ratio < 1.0** (0.81x) - boundary divergence actually lower than field average!
+
+4. **Div-Free model has lower overall divergence** but higher boundary/away ratio
+
+5. **Speed:** ~2.1s per step for Per-Step CombNet (vs ~0.003s for Pretrained CombNet)
+
+**Interpretation:**
+
+The Div-Free model produces fields with lower overall divergence but the boundary stitching problem is more pronounced (2.93x ratio). The Gaussian model has higher baseline divergence but better boundary behavior after CombNet correction.
+
+This suggests the divergence-free constraint helps maintain physical consistency in the field interior, but boundary stitching remains a distinct challenge that Per-Step CombNet addresses effectively for both models.
+
+**Next Steps:**
+- Retrain both models with `zscore_unified` standardizer
+- Re-run comparison with properly standardized data
+- Compare Pretrained vs Per-Step CombNet on new models
+
+---

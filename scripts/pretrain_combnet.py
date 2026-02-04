@@ -17,10 +17,37 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 import numpy as np
+import yaml
 
-from data_prep.data_initializer import DDInitializer
 from ddpm.vector_combination.combiner_unet import VectorCombinationUNet
 from ddpm.vector_combination.combination_loss import PhysicsInformedLoss
+
+
+def get_device():
+    """Get the best available device (CUDA > MPS > CPU)."""
+    if torch.cuda.is_available():
+        return torch.device("cuda:0")
+    elif torch.backends.mps.is_available():
+        return torch.device("mps")
+    else:
+        return torch.device("cpu")
+
+
+def load_config():
+    """Load configuration from data.yaml."""
+    config_path = BASE_DIR / "data.yaml"
+    if not config_path.exists():
+        # Return defaults if no config file
+        return {
+            'fidelity_weight': 0.01,
+            'physics_weight': 2.0,
+            'smooth_weight': 0.0,
+        }
+
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+    return config
 
 
 def load_dataset(data_path=None):
@@ -46,7 +73,9 @@ def pretrain_combnet(
     batch_size=8,
     lr=1e-3,
     data_path=None,
-    save_path=None
+    save_path=None,
+    resume=False,
+    fresh_start=False
 ):
     """
     Pretrain the CombNet on pre-generated realistic samples.
@@ -54,10 +83,10 @@ def pretrain_combnet(
     print("=" * 60)
     print("PRETRAINING COMBNET")
     print("=" * 60)
-    
-    # Setup
-    dd = DDInitializer()
-    device = dd.get_device()
+
+    # Setup device and config
+    device = get_device()
+    config = load_config()
     
     if save_path is None:
         save_path = BASE_DIR / "ddpm" / "Trained_Models" / "pretrained_combnet.pt"
@@ -81,13 +110,38 @@ def pretrain_combnet(
     # Create model
     model = VectorCombinationUNet(n_channels=4, n_classes=2).to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    # Use eta_min to prevent LR from going too low
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-4)
+    
+    # Resume from checkpoint if requested
+    start_epoch = 0
+    if (resume or fresh_start) and save_path.exists():
+        print(f"Loading checkpoint from {save_path}...")
+        checkpoint = torch.load(save_path, weights_only=False)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        
+        if fresh_start:
+            # Fresh start: keep weights but reset optimizer and scheduler
+            print("  Fresh start: keeping model weights, resetting optimizer and scheduler")
+            print(f"  Starting fresh with LR={lr}, will decay to eta_min=1e-4")
+        else:
+            # Full resume: restore optimizer state and advance scheduler
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_epoch = checkpoint['epoch'] + 1
+            best_loss = checkpoint['loss']
+            train_losses = checkpoint.get('train_losses', [])
+            # Advance scheduler to correct position
+            for _ in range(start_epoch):
+                scheduler.step()
+            print(f"  Resuming from epoch {start_epoch + 1}, best loss = {best_loss:.6f}")
     
     # Loss function
+    divergence_threshold = config.get('divergence_threshold', 0.06)
     loss_fn = PhysicsInformedLoss(
-        weight_fidelity=dd.get_attribute("fidelity_weight"),
-        weight_physics=dd.get_attribute("physics_weight"),
-        weight_smooth=dd.get_attribute("smooth_weight")
+        weight_fidelity=config.get('fidelity_weight', 1.0),
+        weight_physics=config.get('physics_weight', 1.0),
+        weight_smooth=config.get('smooth_weight', 0.0),
+        divergence_threshold=divergence_threshold
     ).to(device)
     
     print(f"Training on device: {device}")
@@ -95,12 +149,14 @@ def pretrain_combnet(
     print(f"Batch size: {batch_size}")
     print(f"Samples: {len(tensor_dataset)}")
     print(f"Loss weights - fidelity: {loss_fn.weights['fidelity']}, physics: {loss_fn.weights['physics']}, smooth: {loss_fn.weights['smooth']}")
+    print(f"Divergence threshold: {divergence_threshold}")
     print()
     
-    best_loss = float('inf')
-    train_losses = []
+    if not resume or not save_path.exists():
+        best_loss = float('inf')
+        train_losses = []
     
-    for epoch in range(epochs):
+    for epoch in range(start_epoch, epochs):
         model.train()
         epoch_losses = []
         
@@ -114,7 +170,7 @@ def pretrain_combnet(
             optimizer.zero_grad()
             
             # Forward pass (process each sample individually for loss calculation)
-            batch_loss = 0
+            batch_loss = 0.0  # Use float, not tensor
             for i in range(batch_inputs.shape[0]):
                 prediction = model(batch_inputs[i:i+1])
                 loss, stats = loss_fn(
@@ -123,16 +179,17 @@ def pretrain_combnet(
                     batch_inpainted[i:i+1], 
                     batch_mask[i:i+1]
                 )
-                batch_loss = batch_loss + loss
+                # Backward immediately for each sample to free graph memory
+                loss.backward()
+                batch_loss += loss.item()  # Store scalar, not tensor
             
             batch_loss = batch_loss / batch_inputs.shape[0]
             
-            # Backward pass
-            batch_loss.backward()
+            # Step optimizer after all samples processed
             optimizer.step()
             
-            epoch_losses.append(batch_loss.item())
-            pbar.set_postfix(loss=f"{batch_loss.item():.4f}")
+            epoch_losses.append(batch_loss)
+            pbar.set_postfix(loss=f"{batch_loss:.4f}")
         
         # Epoch summary
         avg_loss = np.mean(epoch_losses)
@@ -175,10 +232,18 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=20)
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--data', type=str, default=None, help='Path to training data (default: results/combnet_training_data.pt)')
+    parser.add_argument('--resume', action='store_true', help='Resume from checkpoint')
+    parser.add_argument('--fresh_start', action='store_true', help='Load weights from checkpoint but reset optimizer/scheduler')
     args = parser.parse_args()
+    
+    data_path = Path(args.data) if args.data else None
     
     pretrain_combnet(
         epochs=args.epochs,
         batch_size=args.batch_size,
-        lr=args.lr
+        lr=args.lr,
+        data_path=data_path,
+        resume=args.resume,
+        fresh_start=args.fresh_start
     )
