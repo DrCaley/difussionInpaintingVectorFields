@@ -213,8 +213,8 @@ class ModelInpainter:
                 input_image_original = self.dd.get_standardizer().unstandardize(torch.squeeze(input_image, 0)).to(device)
                 input_image_original = torch.unsqueeze(input_image_original, 0)
                 land_mask = (input_image_original.abs() > 1e-5).float().to(device)
-                    raw_mask = mask_generator.generate_mask(input_image.shape)
-                    missing_mask = raw_mask * land_mask
+                raw_mask = mask_generator.generate_mask(input_image.shape)
+                missing_mask = raw_mask * land_mask
                 num_lines = mask_generator.get_num_lines()
 
                 gp_lengthscale = self.dd.get_attribute("gp_lengthscale") or 1.5
