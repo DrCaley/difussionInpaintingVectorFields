@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 class MaskGenerator(ABC):
+    # Mask convention: 1.0 = missing (to inpaint), 0.0 = known.
     @abstractmethod
     def __init__(self):
         pass

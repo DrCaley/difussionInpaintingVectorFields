@@ -53,6 +53,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         input_img = input_image.clone().to(device)
         mask = mask.to(device)
 
+        # Mask convention: 1.0 = missing (to inpaint), 0.0 = known.
         noise = noise_strat(input_img, torch.tensor([ddpm.n_steps], device=device))
 
         # Step-by-step forward noising
@@ -71,14 +72,14 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
             for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
                 for i in range(resample_steps):
                     inpainted, noise = denoise_one_step(x, noise_strat, t)
-                    known = noised_images[t]
+                    known = noised_images[t - 1] if t > 0 else noised_images[0]
 
                     # Apply boundary fix at EVERY step so the network sees clean inputs
                     # This fixes the discontinuity before the next denoising step
                     combined = combine_fields(known, inpainted, mask)
 
-                    if (i + 1) < resample_steps:
-                        x = noise_one_step(combined, t, noise_strat)
+                    if (i + 1) < resample_steps and t > 0:
+                        x = noise_one_step(combined, t - 1, noise_strat)
                     else:
                         x = combined  # Pass combined to next timestep
                 pbar.update(1)

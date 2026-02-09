@@ -92,8 +92,14 @@ class ModelInpainter:
         self.max_beta = checkpoint.get('max_beta', self.dd.get_attribute("max_beta"))
 
         self.noise_strategy = checkpoint.get('noise_strategy', self.dd.get_noise_strategy())
-        self.standardizer_strategy = checkpoint.get('standardizer_strategy', self.dd.get_standardizer())
+        self.standardizer_strategy = checkpoint.get('standardizer_strategy')
+        if self.standardizer_strategy is None:
+            self.standardizer_strategy = checkpoint.get('standardizer_type')
+        if self.standardizer_strategy is None:
+            self.standardizer_strategy = self.dd.get_standardizer()
 
+        # Keep DDInitializer in sync with checkpoint settings for inference.
+        self.dd.noise_strategy = self.noise_strategy
         self.dd.reinitialize(self.min_beta, self.max_beta, self.n_steps, self.standardizer_strategy)
 
     def _load_checkpoint(self):

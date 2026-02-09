@@ -119,6 +119,7 @@ class ManualMaskDrawer(MaskGenerator):
 
         flipped_mask = torch.flip(self.tensor_mask, dims=[-2])
 
+        # Mask convention: 1.0 = missing (to inpaint), 0.0 = known.
         padded_mask = torch.nn.functional.pad(flipped_mask,
                                               (0, pad_W, 0, pad_H),
                                               mode='constant', value=0)
