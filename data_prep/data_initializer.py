@@ -40,7 +40,6 @@ class DDInitializer:
         root = Path(__file__).resolve().parent.parent
         self.config_name = config_path.stem
         self.full_boundaries_path = root / boundaries_path
-
         self._instance._setup_yaml_file(root / config_path)
         self._instance._setup_tensors(root / pickle_path)
 
@@ -140,11 +139,15 @@ class DDInitializer:
 
     def _set_random_seed(self):
         seed = self._config.get('testSeed')
-        if seed != -1:
-            random.seed(seed)
-            np.random.seed(seed)
-            torch.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
+        if seed == -1:
+            seed = random.randint(0, 2**32 - 1)
+        
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        
+        self.seed = seed
 
     def _setup_transforms(self, standardizer: Standardizer = None):
         if standardizer is not None:

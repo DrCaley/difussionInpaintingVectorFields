@@ -50,6 +50,7 @@ class ModelInpainter:
         self.visualizer = False
         self.compute_coverage_plot = False
         self.save_pt_fields = self.dd.get_attribute("save_pt_fields")
+        self.seed = self.dd.seed
         self.model_name = None
 
         logging.basicConfig(level=logging.INFO,
@@ -198,6 +199,7 @@ class ModelInpainter:
 
     def _inpaint_testing(self, mask_generator: MaskGenerator, image_counter: int, file: csv.writer):
         writer = csv.writer(file)
+
         num_images_to_process = self.dd.get_attribute('num_images_to_process')
         n_samples = self.dd.get_attribute('n_samples')
         loader = self.val_loader
@@ -294,12 +296,13 @@ class ModelInpainter:
                             total_images += 1
 
                             # Write image metrics to CSV
+                            
                             csv_row = [
-                                self.model_name, image_counter, mask_generator, num_lines, resample
+                                self.model_name, image_counter, mask_generator, num_lines, resample, self.seed
                             ]
 
                             for k, v in metrics.items():
-                                csv_row.append(float(v))
+                                csv_row.append(round(float(v), 6))
 
                             writer.writerow(csv_row)
 
@@ -324,6 +327,7 @@ class ModelInpainter:
             
             with open(summary_path, "w") as f:
                 f.write(f"Model: {self.model_name}\n")
+                f.write(f"Mask: {mask_generator}\n")
                 f.write(f"Images processed: {total_images}\n\n")
                 f.write("AVERAGED METRICS:\n")
 
