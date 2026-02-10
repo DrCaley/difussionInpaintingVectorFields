@@ -40,7 +40,7 @@ plt.xticks(xtick_positions, xtick_labels, rotation=45)
 
 plt.xlabel('Mask Percentage')
 plt.ylabel('MSE')
-plt.title('MSE Comparison: DDPM vs GP by Mask Percentage')
+plt.title('MSE Comparison: ddpm vs GP by Mask Percentage')
 plt.legend(loc='upper right')
 plt.tight_layout()
 plt.savefig('mse_mask_comparison_errorbar.png', dpi=300)

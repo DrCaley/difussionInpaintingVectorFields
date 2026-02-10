@@ -1,7 +1,9 @@
 import torch
 import torch.nn.functional as f
+from tqdm import tqdm
 
 from data_prep.data_initializer import DDInitializer
+from ddpm.vector_combination.vector_combiner import combine_fields
 
 dd = DDInitializer()
 
@@ -9,6 +11,9 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                                 resample_steps=1, channels=2, height=64, width=128, noise_strategy = dd.get_noise_strategy()):
     """
     Given a DDPM model, an input image, and a mask, generates in-painted samples.
+    
+    The boundary fix is applied at EVERY denoising step so the neural network
+    always sees clean, physically consistent inputs (no boundary discontinuities).
     """
     noised_images = [None] * (ddpm.n_steps + 1)
     device = dd.get_device()
@@ -48,29 +53,40 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         input_img = input_image.clone().to(device)
         mask = mask.to(device)
 
-        noise = noise_strat(input_img, torch.tensor([ddpm.n_steps] , device=device))
+        noise = noise_strat(input_img, torch.tensor([ddpm.n_steps], device=device))
 
         # Step-by-step forward noising
         noised_images[0] = input_img
         for t in range(ddpm.n_steps):
             noised_images[t + 1] = noise_one_step(noised_images[t], t, noise_strat)
 
-        doing_the_thing = False
+        doing_the_thing = True
 
         if doing_the_thing:
             x = noised_images[ddpm.n_steps] * (1 - mask) + (noise * mask)
         else:
             x = masked_poisson_projection(noised_images[ddpm.n_steps], mask)
 
+        with tqdm(total=ddpm.n_steps, desc="Denoising") as pbar:
+            for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
+                for i in range(resample_steps):
+                    inpainted, noise = denoise_one_step(x, noise_strat, t)
+                    known = noised_images[t]
 
+                    # Apply boundary fix at EVERY step so the network sees clean inputs
+                    # This fixes the discontinuity before the next denoising step
+                    combined = combine_fields(known, inpainted, mask)
 
-        for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
-            for i in range(resample_steps):
-                x, noise = denoise_one_step(x, noise_strat, t)
-                x = noised_images[t] * (1 - mask) + (x * mask)
-                if (i + 1) < resample_steps:
-                    x = noise_one_step(x, t, noise_strat)
-    return x
+                    if (i + 1) < resample_steps:
+                        x = noise_one_step(combined, t, noise_strat)
+                    else:
+                        x = combined  # Pass combined to next timestep
+                pbar.update(1)
+
+    # Force known region to be original input (CombNet may have modified it)
+    result = input_img * (1 - mask) + combined * mask
+    return result
+
 
 def calculate_mse(original_image, predicted_image, mask, normalize=False):
     """
@@ -103,6 +119,7 @@ def calculate_mse(original_image, predicted_image, mask, normalize=False):
 
     return total_error / num_valid_pixels
 
+
 def calculate_percent_error(original_image, predicted_image, mask):
     """
     Calculates masked percent error between original and predicted image.
@@ -129,6 +146,7 @@ def calculate_percent_error(original_image, predicted_image, mask):
         return torch.tensor(float('nan'))
 
     return total_error / num_valid_pixels
+
 
 def normalize_pair(original_img, predicted_img, mask):
     """
@@ -163,6 +181,7 @@ def normalize_pair(original_img, predicted_img, mask):
 
     return norm_original, norm_predicted
 
+
 def top_left_crop(tensor, crop_h, crop_w):
     """
     Crop the top-left corner of a tensor of shape (1, 2, H, W).
@@ -177,17 +196,11 @@ def top_left_crop(tensor, crop_h, crop_w):
     """
     return tensor[:, :, :crop_h, :crop_w]
 
+
 def avg_pixel_value(original_image, predicted_image, mask):
     avg_pixel_value = torch.sum(torch.abs(original_image * mask)) / mask.sum()
     avg_diff = torch.sum(torch.abs((predicted_image * mask) - (original_image * mask))) / mask.sum()
     return avg_diff * (100 / avg_pixel_value)
-
-
-import torch
-import torch.nn.functional as F
-
-import torch
-import torch.nn.functional as F
 
 
 def masked_poisson_projection(vector_field, mask, num_iter=500, tol=1e-5):

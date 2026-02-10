@@ -44,12 +44,19 @@ class DDInitializer:
         self._instance._setup_tensors(root / pickle_path)
 
         self.gpu = self._config.get('gpu_to_use')
-        self.device = torch.device(f"cuda:{self.gpu}" if torch.cuda.is_available() else "cpu")
+        # Check for GPU: CUDA (NVIDIA) > MPS (Apple Silicon) > CPU
+        if torch.cuda.is_available():
+            self.device = torch.device(f"cuda:{self.gpu}")
+        elif torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device("cpu")
         print("we are running on the:", self.device)
 
         self._setup_transforms()
         self._set_random_seed()
         self._setup_noise_strategy()
+        self._setup_vector_combination()
         self._setup_loss_strategy()
         self._setup_alphas()
         self._setup_datasets(self.full_boundaries_path)
@@ -121,6 +128,21 @@ class DDInitializer:
     def get_noise_strategy(self) -> NoiseStrategy:
         return self.noise_strategy
 
+    def _setup_vector_combination(self):
+        comb_net_instruction = self._config.get("use_comb_net", "auto")
+        match comb_net_instruction:
+            case "auto":
+                self.use_comb_net = self._config.get("noise_function") == "div_free"
+            case "yes" | True:
+                self.use_comb_net = True
+            case "no" | False:
+                self.use_comb_net = False
+            case _:
+                raise ValueError(f"Unknown combination net instruction: {comb_net_instruction}")
+
+    def get_use_comb_net(self) -> bool:
+        return self.use_comb_net
+
     def _setup_loss_strategy(self):
         loss_type = self._config.get("loss_function", "mse")
         w1 = self._config.get("w1", 1.0)
@@ -154,6 +176,12 @@ class DDInitializer:
             self.standardizer = standardizer
         else:
             std_type = self._config.get('standardizer_type')
+
+            if std_type == "auto":
+                noise_type = self._config.get("noise_function", "gaussian")
+                mapping = self._config.get("standardizer_by_noise", {})
+                std_type = mapping.get(noise_type, "zscore")
+
             std_class = STANDARDIZER_REGISTRY.get(std_type)
 
             if std_class is None:

@@ -54,7 +54,118 @@ def rbf_kernel(X1, X2, lengthscale=1.0, variance=1.0):
     dist_sq = torch.cdist(X1, X2).pow(2)
     return variance * torch.exp(-0.5 * dist_sq / lengthscale**2)
 
-def gp_fill(tensor, mask, lengthscale=1.5, variance=1.0, noise=1e-6, use_double=True):
+
+def rbf_kernel_legacy(X1, X2, lengthscale=1.0, kernel_noise=1.0):
+    """
+    Legacy RBF kernel matching reference implementation.
+    Uses dist (not squared) with gamma = 1 / lengthscale^2 and kernel_noise^2.
+    """
+    gamma = 1.0 / (lengthscale ** 2)
+    dist = torch.linalg.norm(X1[:, None, :] - X2[None, :, :], dim=2)
+    return (kernel_noise ** 2) * torch.exp(-0.5 * gamma * dist)
+
+
+def incompressible_kernel(X1, X2, lengthscale=1.0, variance=1.0):
+    """
+    Divergence-free (incompressible) kernel for 2D vector fields.
+    Returns a block matrix of shape (2*N1, 2*N2).
+    """
+    if X1.shape[-1] != 2 or X2.shape[-1] != 2:
+        raise ValueError("incompressible_kernel expects 2D coordinates.")
+
+    dx = X1[:, None, 0] - X2[None, :, 0]
+    dy = X1[:, None, 1] - X2[None, :, 1]
+    r2 = dx.pow(2) + dy.pow(2)
+
+    l2 = lengthscale ** 2
+    l4 = l2 ** 2
+
+    base = variance * torch.exp(-0.5 * r2 / l2)
+    a = (r2 / l4) - (1.0 / l2)
+    b = 1.0 / l4
+
+    k_xx = base * (a - b * dx.pow(2))
+    k_xy = base * (-b * dx * dy)
+    k_yy = base * (a - b * dy.pow(2))
+
+    n1 = X1.shape[0]
+    n2 = X2.shape[0]
+    K = torch.zeros((2 * n1, 2 * n2), dtype=base.dtype, device=base.device)
+
+    K[:n1, :n2] = k_xx
+    K[:n1, n2:] = k_xy
+    K[n1:, :n2] = k_xy
+    K[n1:, n2:] = k_yy
+
+    return K
+
+
+def incompressible_rbf_kernel(X1, X2, lengthscale=1.0, kernel_noise=1.0):
+    """
+    Incompressible kernel matching reference implementation.
+    """
+    if X1.shape[-1] != 2 or X2.shape[-1] != 2:
+        raise ValueError("incompressible_rbf_kernel expects 2D coordinates.")
+
+    gamma = 1.0 / (lengthscale ** 2)
+    dx = X1[:, None, 0] - X2[None, :, 0]
+    dy = X1[:, None, 1] - X2[None, :, 1]
+    dist = torch.linalg.norm(X1[:, None, :] - X2[None, :, :], dim=2)
+    kse = (kernel_noise ** 2) * torch.exp(-0.5 * gamma * dist)
+
+    dxx = -(gamma ** 2) * dx * dx * kse
+    dxy = -(gamma ** 2) * dx * dy * kse
+    dyy = -(gamma ** 2) * dy * dy * kse
+
+    n1 = X1.shape[0]
+    n2 = X2.shape[0]
+    K = torch.zeros((2 * n1, 2 * n2), dtype=kse.dtype, device=kse.device)
+    K[::2, ::2] = dxx
+    K[1::2, ::2] = dxy
+    K[::2, 1::2] = dxy
+    K[1::2, 1::2] = dyy
+    return K
+
+def gp_fill(
+    tensor,
+    mask,
+    lengthscale=1.5,
+    variance=1.0,
+    noise=1e-5,
+    use_double=True,
+    max_points=None,
+    sample_posterior=False,
+    kernel_type="rbf",
+    coord_system="pixels",
+):
+    """
+    Fills in missing values (mask == 1) in a tensor using Gaussian Process regression.
+
+    Args:
+        tensor: Tensor of shape (1, 2, H, W)
+        mask: Binary mask of shape (1, 2, H, W), 0 = known, 1 = unknown
+        lengthscale: GP kernel lengthscale (in pixels if coord_system="pixels")
+        variance: GP kernel variance
+        noise: small base noise added to kernel diagonal
+        use_double: whether to cast tensors to float64 for better numerical stability
+        max_points: optional cap on number of known points (subsampled if exceeded)
+        sample_posterior: if True, sample from GP posterior instead of using mean
+        kernel_type: "rbf", "incompressible", "rbf_legacy", "incompressible_rbf"
+        coord_system: "pixels" or "normalized" (0-1)
+
+    Returns:
+        Tensor with missing values filled in.
+    """
+    orig_device = tensor.device
+    if orig_device.type == "mps":
+        tensor = tensor.to("cpu")
+        mask = mask.to("cpu")
+        if use_double:
+            use_double = True
+
+    if tensor.device.type == "mps" and use_double:
+        use_double = False
+
     dtype = torch.float64 if use_double else tensor.dtype
     device = tensor.device
 
@@ -64,41 +175,152 @@ def gp_fill(tensor, mask, lengthscale=1.5, variance=1.0, noise=1e-6, use_double=
     _, C, H, W = tensor.shape
     filled = tensor.clone()
 
-    # Normalize factor
-    norm_factor = torch.tensor([H, W], dtype=dtype, device=device)
+    valid_mask_2d = (tensor[0].abs().sum(dim=0) > 1e-5)
 
-    for c in range(C):
-        channel_data = tensor[0, c]
-        channel_mask = mask[0, c]
+    kernel_type = kernel_type.lower()
 
-        known_idx = (channel_mask == 0).nonzero()
-        unknown_idx = (channel_mask == 1).nonzero()
+    coord_system = coord_system.lower()
+    use_normalized = coord_system == "normalized"
 
-        if known_idx.numel() == 0 or unknown_idx.numel() == 0:
-            continue
+    if kernel_type in ("incompressible", "incompressible_rbf"):
+        if C != 2:
+            raise ValueError("incompressible kernel requires 2-channel vector field.")
 
-        known_xy = known_idx.float() / norm_factor
-        unknown_xy = unknown_idx.float() / norm_factor
+        channel_mask = mask[0, 0]
+        known_indices = ((channel_mask == 0) & valid_mask_2d).nonzero(as_tuple=False)
+        unknown_indices = ((channel_mask == 1) & valid_mask_2d).nonzero(as_tuple=False)
 
-        y = channel_data[known_idx[:, 0], known_idx[:, 1]]
+        if known_indices.numel() != 0 and unknown_indices.numel() != 0:
+            if use_normalized:
+                norm_factor = torch.tensor([H, W], dtype=dtype, device=device)
+                known_coords = known_indices.to(dtype) / norm_factor
+                unknown_coords = unknown_indices.to(dtype) / norm_factor
+            else:
+                known_coords = known_indices.to(dtype)
+                unknown_coords = unknown_indices.to(dtype)
 
-        K = rbf_kernel(known_xy, known_xy, lengthscale, variance)
-        K_s = rbf_kernel(unknown_xy, known_xy, lengthscale, variance)
-        K_ss = rbf_kernel(unknown_xy, unknown_xy, lengthscale, variance)
+            if max_points is not None and known_indices.shape[0] > max_points:
+                perm = torch.randperm(known_indices.shape[0], device=device)
+                selected = perm[:max_points]
+                known_indices = known_indices[selected]
+                known_coords = known_coords[selected]
 
-        # Cholesky solve
-        jitter = max(noise, 1e-6)
-        for _ in range(5):
-            try:
-                L = torch.linalg.cholesky(K + jitter * torch.eye(K.shape[0], device=device, dtype=dtype))
-                break
-            except RuntimeError:
-                jitter *= 10
+            known_u = tensor[0, 0][known_indices[:, 0], known_indices[:, 1]]
+            known_v = tensor[0, 1][known_indices[:, 0], known_indices[:, 1]]
+            known_values = torch.cat([known_u, known_v], dim=0)
 
-        alpha = torch.cholesky_solve(y.unsqueeze(-1), L)
-        pred_mean = (K_s @ alpha).squeeze()
+            if kernel_type == "incompressible_rbf":
+                K = incompressible_rbf_kernel(known_coords, known_coords, lengthscale, variance)
+                K_s = incompressible_rbf_kernel(unknown_coords, known_coords, lengthscale, variance)
+            else:
+                K = incompressible_kernel(known_coords, known_coords, lengthscale, variance)
+                K_s = incompressible_kernel(unknown_coords, known_coords, lengthscale, variance)
 
-        # Fill in one batched operation
-        filled[0, c][unknown_idx[:,0], unknown_idx[:,1]] = pred_mean
+            jitter = max(noise, 1e-6)
+            max_tries = 10
+            for _ in range(max_tries):
+                try:
+                    K_sym = 0.5 * (K + K.T)
+                    L = torch.linalg.cholesky(K_sym + jitter * torch.eye(K.shape[0], device=device, dtype=dtype))
+                    break
+                except RuntimeError:
+                    jitter *= 10
+            else:
+                raise RuntimeError("Cholesky decomposition failed after increasing jitter.")
 
-    return filled.to(torch.float32)
+            v = torch.cholesky_solve(known_values.unsqueeze(-1), L)
+            pred_mean = K_s @ v
+
+            if sample_posterior:
+                if kernel_type == "incompressible_rbf":
+                    K_ss = incompressible_rbf_kernel(unknown_coords, unknown_coords, lengthscale, variance)
+                else:
+                    K_ss = incompressible_kernel(unknown_coords, unknown_coords, lengthscale, variance)
+                cov_post = K_ss - K_s @ torch.cholesky_solve(K_s.T, L)
+                cov_post += noise * torch.eye(cov_post.shape[0], device=device, dtype=dtype)
+                dist = torch.distributions.MultivariateNormal(pred_mean.squeeze(), covariance_matrix=cov_post)
+                pred_values = dist.sample()
+            else:
+                pred_values = pred_mean.squeeze(-1)
+
+            if pred_values.ndim == 0:
+                pred_values = pred_values.unsqueeze(0)
+
+            n_unknown = unknown_indices.shape[0]
+            pred_u = pred_values[:n_unknown]
+            pred_v = pred_values[n_unknown:]
+
+            for idx, val in zip(unknown_indices, pred_u):
+                filled[0, 0, idx[0], idx[1]] = val.item()
+            for idx, val in zip(unknown_indices, pred_v):
+                filled[0, 1, idx[0], idx[1]] = val.item()
+    else:
+        for c in range(C):
+            channel_data = tensor[0, c]
+            channel_mask = mask[0, c]
+
+            known_indices = ((channel_mask == 0) & valid_mask_2d).nonzero(as_tuple=False)
+            unknown_indices = ((channel_mask == 1) & valid_mask_2d).nonzero(as_tuple=False)
+
+            if known_indices.numel() == 0 or unknown_indices.numel() == 0:
+                continue  # nothing to fill
+
+            if use_normalized:
+                norm_factor = torch.tensor([H, W], dtype=dtype, device=device)
+                known_coords = known_indices.to(dtype) / norm_factor
+                unknown_coords = unknown_indices.to(dtype) / norm_factor
+            else:
+                known_coords = known_indices.to(dtype)
+                unknown_coords = unknown_indices.to(dtype)
+
+            if max_points is not None and known_indices.shape[0] > max_points:
+                perm = torch.randperm(known_indices.shape[0], device=device)
+                selected = perm[:max_points]
+                known_indices = known_indices[selected]
+                known_coords = known_coords[selected]
+
+            known_values = channel_data[known_indices[:, 0], known_indices[:, 1]]
+
+            # Compute covariance matrices
+            if kernel_type == "rbf_legacy":
+                K = rbf_kernel_legacy(known_coords, known_coords, lengthscale, variance)
+                K_s = rbf_kernel_legacy(unknown_coords, known_coords, lengthscale, variance)
+            else:
+                K = rbf_kernel(known_coords, known_coords, lengthscale, variance)
+                K_s = rbf_kernel(unknown_coords, known_coords, lengthscale, variance)
+
+            # Add noise (jitter) robustly
+            jitter = max(noise, 1e-6)
+            max_tries = 10
+            for _ in range(max_tries):
+                try:
+                    K_sym = 0.5 * (K + K.T)
+                    L = torch.linalg.cholesky(K_sym + jitter * torch.eye(K.shape[0], device=device, dtype=dtype))
+                    break
+                except RuntimeError:
+                    jitter *= 10
+            else:
+                raise RuntimeError("Cholesky decomposition failed after increasing jitter.")
+
+            v = torch.cholesky_solve(known_values.unsqueeze(-1), L)
+            pred_mean = K_s @ v
+
+            if sample_posterior:
+                if kernel_type == "rbf_legacy":
+                    K_ss = rbf_kernel_legacy(unknown_coords, unknown_coords, lengthscale, variance)
+                else:
+                    K_ss = rbf_kernel(unknown_coords, unknown_coords, lengthscale, variance)
+                cov_post = K_ss - K_s @ torch.cholesky_solve(K_s.T, L)
+                cov_post += noise * torch.eye(cov_post.shape[0], device=device, dtype=dtype)
+                dist = torch.distributions.MultivariateNormal(pred_mean.squeeze(), covariance_matrix=cov_post)
+                pred_values = dist.sample()
+            else:
+                pred_values = pred_mean.squeeze(-1)
+
+            if pred_values.ndim == 0:
+                pred_values = pred_values.unsqueeze(0)
+
+            for idx, val in zip(unknown_indices, pred_values):
+                filled[0, c, idx[0], idx[1]] = val.item()
+
+    return filled.to(torch.float32).to(orig_device)  # Return to original device

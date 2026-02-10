@@ -46,11 +46,11 @@ class OceanImageDataset(Dataset):
             used_timesteps = total_timesteps
 
         if max_size is not None:
-            if max_size > total_timesteps:
-                print(f"Warning: Requested max_size {max_size} exceeds available timesteps {total_timesteps}. Using all data.")
-                max_size = total_timesteps
+            if max_size > used_timesteps:
+                print(f"Warning: Requested max_size {max_size} exceeds available timesteps {used_timesteps}. Using all data.")
+                max_size = used_timesteps
         else:
-            max_size = total_timesteps
+            max_size = used_timesteps
 
         self.raw_tensor = data_tensor[..., :used_timesteps]  # restrict to selected portion
         self.tensor_labels = list(range(max_size))
