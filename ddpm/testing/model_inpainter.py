@@ -12,11 +12,10 @@ from scipy.ndimage import distance_transform_edt
 from pathlib import Path
 import random
 
-from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator
-
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent.parent))
 
+from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator
 from ddpm.helper_functions.masks import MaskGenerator
 from ddpm.helper_functions.masks import *
 from data_prep.data_initializer import DDInitializer
@@ -339,7 +338,7 @@ class ModelInpainter:
 
                             del final_image_ddpm, input_image_original_cropped, mask_cropped, gp_field
 
-                    del input_image, input_image_original, land_mask, mask
+                    del input_image, input_image_original, land_mask, missing_mask
                     torch.cuda.empty_cache()
 
                 image_counter += 1
