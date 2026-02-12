@@ -15,6 +15,7 @@ import random
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent.parent))
 
+from ddpm.helper_functions.masks.robot_path import RobotPathGenerator
 from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator
 from ddpm.helper_functions.masks import MaskGenerator
 from ddpm.helper_functions.masks import *
@@ -460,6 +461,7 @@ if __name__ == '__main__':
 
     for _ in range (1):
         mi.add_mask(StraightLineMaskGenerator(1,1))
+        #mi.add_mask(RobotPathGenerator())
 
     mi.visualize_images()
     mi.find_coverage()

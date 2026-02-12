@@ -119,15 +119,19 @@ class PTVisualizer():
                 max_dim = 8
                 figsize = (max_dim, max_dim * H / W) if W > H else (max_dim * W / H, max_dim)
 
+                magnitude = torch.sqrt(u**2 + v**2)
+
                 plt.figure(figsize=figsize)
                 plt.quiver(
                     x,
                     y,
                     u.cpu(),
                     v.cpu(),
+                    magnitude,
+                    cmap="viridis",
                     scale=1.0 / vector_scale,
-                    width=0.002,
-                    headwidth=2,
+                    width=0.003,
+                    headwidth=2.5,
                     headlength=2,
                     headaxislength=2,
                     alpha=0.9,
