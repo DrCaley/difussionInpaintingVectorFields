@@ -1,6 +1,5 @@
-import matplotlib
+from matplotlib.colors import ListedColormap
 from tqdm import tqdm
-matplotlib.use('Agg')
 
 import torch
 import matplotlib.pyplot as plt
@@ -59,13 +58,32 @@ class PTVisualizer():
             return t
 
         if tensor.ndim == 2:
-            tensor = crop(tensor)
-            arr = np.flipud(tensor.cpu().numpy())
-            plt.imshow(arr, cmap='gray')
+            tensor_cropped = crop(tensor)
+            mask_arr = tensor_cropped.cpu().numpy()
+            initial = self.data.get("initial", None)
+
+            # get land mask
+            initial_cropped = crop(initial)  # [1, 2, H, W]
+            mag_standardized = initial_cropped[0].norm(dim=0)
+            land_mask = (mag_standardized <= 1e-4).float().cpu().numpy()
+
+            # combine masks
+            combined_mask = np.zeros_like(mask_arr, dtype=np.int8)
+            combined_mask[mask_arr == 1] = 1
+            combined_mask[land_mask == 1] = 2
+
+            cmap = ListedColormap([
+                'black',    # 0 = unmasked
+                'white',    # 1 = masked
+                'green'     # 2 = land
+            ])
+
+            plt.imshow(np.flipud(combined_mask), cmap=cmap, vmin=0, vmax=2)
             plt.title(title)
-            plt.colorbar()
             plt.savefig(os.path.join(save_dir, f"{title}.png"))
             plt.close()
+
+
 
         elif tensor.ndim == 3:
             if tensor.shape[0] == 2 and self.polar:
