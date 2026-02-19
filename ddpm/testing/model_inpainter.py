@@ -15,6 +15,7 @@ import random
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent.parent))
 
+from ddpm.helper_functions.masks.percentage_gaussian_mask import GaussianNoisePercentageMaskGenerator
 from ddpm.helper_functions.masks.robot_path import RobotPathGenerator
 from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator
 from ddpm.helper_functions.masks import MaskGenerator
@@ -460,6 +461,7 @@ if __name__ == '__main__':
     print(mi.model_paths)
 
     for _ in range (1):
+        #mi.add_mask(GaussianNoisePercentageMaskGenerator(0.999))
         mi.add_mask(StraightLineMaskGenerator(1,1))
         #mi.add_mask(RobotPathGenerator())
 

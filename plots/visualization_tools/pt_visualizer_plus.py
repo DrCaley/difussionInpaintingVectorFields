@@ -65,7 +65,7 @@ class PTVisualizer():
             # get land mask
             initial_cropped = crop(initial)  # [1, 2, H, W]
             mag_standardized = initial_cropped[0].norm(dim=0)
-            land_mask = (mag_standardized <= 1e-4).float().cpu().numpy()
+            land_mask = (mag_standardized <= 1e-5).float().cpu().numpy()
 
             # combine masks
             combined_mask = np.zeros_like(mask_arr, dtype=np.int8)
@@ -128,7 +128,7 @@ class PTVisualizer():
                 u, v = tensor[0], tensor[1]
                 H, W = u.shape
                 x, y = np.meshgrid(np.arange(W), np.arange(H))
-                step = 2
+                step = 3
                 x = x[::step, ::step]
                 y = y[::step, ::step]
                 u = u[::step, ::step]
@@ -136,10 +136,23 @@ class PTVisualizer():
 
                 max_dim = 8
                 figsize = (max_dim, max_dim * H / W) if W > H else (max_dim * W / H, max_dim)
-
                 magnitude = torch.sqrt(u**2 + v**2)
+                
 
+                initial = self.data.get("initial", None)
+
+                # get land mask
+                initial_cropped = crop(initial)  # [1, 2, H, W]
+                mag_standardized = initial_cropped[0].norm(dim=0)
+                land_mask = (mag_standardized <= 1e-5).float().cpu().numpy()
+
+                # --- Plot ---
                 plt.figure(figsize=figsize)
+
+                # Draw land as green background FIRST (behind quiver arrows)
+                land_rgba = np.zeros((H, W, 4))  # RGBA
+                land_rgba[..., 1] = 0.5           # green channel
+                land_rgba[..., 3] = land_mask      # alpha = 1 only where land
                 plt.quiver(
                     x,
                     y,
@@ -148,14 +161,17 @@ class PTVisualizer():
                     magnitude,
                     cmap="viridis",
                     scale=1.0 / vector_scale,
-                    width=0.003,
-                    headwidth=2.5,
+                    width=0.004,
+                    headwidth=4,
                     headlength=2,
                     headaxislength=2,
                     alpha=0.9,
+                    zorder=0,  # draw first
                 )
+                plt.imshow(land_rgba, origin='upper', extent=[-0.5, W - 0.5, H - 0.5, -0.5])
                 plt.title(title + " (Vector Field)")
                 plt.gca().set_aspect('equal', adjustable='box')
+                plt.gca().invert_yaxis()
                 plt.savefig(os.path.join(save_dir, f"{title}_vector_field.png"))
                 plt.close()
             else:
@@ -167,7 +183,7 @@ class PTVisualizer():
                     plt.colorbar()
                     plt.savefig(os.path.join(save_dir, f"{title}_channel_{i}.png"))
                     plt.close()
-
+        
         elif tensor.ndim == 4:
             print(f"Tensor has shape {tensor.shape}, saving first item in batch.")
             self.visualize_tensor(
@@ -190,18 +206,28 @@ class PTVisualizer():
     def visualize(self):
         self.data = {}
         save_dir = self.prediction_path
+
+        # First pass: load all tensors
+        for prefix in self.prefixes:
+            file_path = os.path.join(self.base_path, self.build_filename(prefix))
+            try:
+                tensor = torch.load(file_path, map_location='cpu', weights_only=False)
+                self.data[prefix] = tensor
+            except Exception as e:
+                print(f"Failed to load {prefix}: {e}")
+
+        # Second pass: visualize all tensors
         for prefix in self.prefixes:
             file_path = os.path.join(self.base_path, self.build_filename(prefix))
             title = self.build_filename(prefix).replace('.pt', '')
             try:
+                tensor = self.data[prefix]
                 if prefix == 'mask':
-                    tensor = torch.load(file_path, map_location='cpu', weights_only=False)
                     self.visualize_tensor(tensor[0, 0], title, save_dir=save_dir)
                 else:
-                    tensor = self.load_and_visualize_pt(file_path, title=title, save_dir=save_dir, vector_scale=self.vector_scale)
-                self.data[prefix] = tensor
+                    self.visualize_tensor(tensor, title=title, save_dir=save_dir, vector_scale=self.vector_scale)
             except Exception as e:
-                print(f"Failed to load or visualize {title}: {e}")
+                print(f"Failed to visualize {title}: {e}")
 
     def calc(self):
         metrics = {}
