@@ -1,0 +1,15 @@
+# Vanilla RePaint with Gaussian noise — attention-enhanced UNet
+# Same as repaint_gaussian but using MyUNet_Attn which adds:
+#   - Residual blocks (skip connections within each block)
+#   - Multi-head self-attention at 16×32 and 8×16 resolutions
+#   - GroupNorm + AdaGN time conditioning
+# Tests whether long-range spatial awareness improves RePaint inpainting.
+
+model_name: repaint_gaussian_attn_eps_t250
+noise_function: gaussian
+unet_type: standard_attn
+prediction_target: eps
+mask_xt: false
+batch_size: 16
+lr: 0.0003
+max_grad_norm: 1.0

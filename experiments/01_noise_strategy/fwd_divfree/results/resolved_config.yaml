@@ -1,0 +1,42 @@
+u_training_mean: -0.06929559429949586
+u_training_std: 0.1358005549716049
+v_training_mean: -0.0323937796117541
+v_training_std: 0.08899177232117582
+mag_mean: 0.1446947511640557
+shared_mean: -0.05084468695562498
+shared_std: 0.11479844598042026
+gpu_to_use: 0
+unet_type: film
+mask_xt: true
+prediction_target: x0
+p_uncond: 0.0
+retrain_mode: false
+model_to_retrain: null
+reset_best: false
+partial_conv_mode: false
+training_mode: true
+testSeed: 42
+epochs: 1000
+batch_size: 80
+lr: 0.001
+standardizer_type: auto
+standardizer_by_noise:
+  gaussian: zscore
+  div_free: zscore_unified
+  spectral_div_free: zscore_unified
+  forward_diff_div_free: zscore_unified
+noise_function: forward_diff_div_free
+noise_steps: 250
+min_beta: 0.0004
+max_beta: 0.08
+enable_divergence_projection: auto
+projection_by_noise:
+  gaussian: false
+  div_free: true
+  spectral_div_free: true
+  forward_diff_div_free: true
+loss_function: mse
+w1: 0.6
+w2: 0.4
+num_workers: 0
+model_name: fwd_diff_divfree_x0pred_film_t250

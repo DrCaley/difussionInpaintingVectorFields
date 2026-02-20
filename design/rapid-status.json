@@ -36,6 +36,10 @@
     {
       "date": "2026-01-05",
       "content": "Problem clarification: Research project to predict ocean currents from sparse in-situ measurements. Treated as inpainting problem - given small sampling of point measurements, reconstruct the full 2D velocity vector field using DDPM."
+    },
+    {
+      "date": "2026-02-19",
+      "content": "Beta schedule fix: corrected base_inpaint.yaml from min_beta=0.0004/max_beta=0.08 to 0.0001/0.02. Old schedule destroyed all signal by t=166 (alpha_bar < 0.01), causing 2-7x magnitude blow-up in generated samples. RePaint+CG experiment retraining with corrected schedule."
     }
   ]
 }

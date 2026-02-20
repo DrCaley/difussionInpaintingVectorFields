@@ -12,6 +12,8 @@ from pathlib import Path
 
 from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator
 
+from ddpm.utils.noise_utils import get_noise_type_name
+
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent.parent))
 
@@ -100,10 +102,17 @@ class ModelInpainter:
 
         # Keep DDInitializer in sync with checkpoint settings for inference.
         self.dd.noise_strategy = self.noise_strategy
+        self.dd._config['noise_function'] = get_noise_type_name(self.noise_strategy)
         self.dd.reinitialize(self.min_beta, self.max_beta, self.n_steps, self.standardizer_strategy)
 
     def _load_checkpoint(self):
-        self.best_model = GaussianDDPM(MyUNet(self.n_steps), n_steps=self.n_steps, device=self.dd.get_device())
+        self.best_model = GaussianDDPM(
+            MyUNet(self.n_steps),
+            n_steps=self.n_steps,
+            min_beta=self.min_beta,
+            max_beta=self.max_beta,
+            device=self.dd.get_device(),
+        )
         try:
             logging.info("Loading model")
             try:
@@ -303,7 +312,7 @@ class ModelInpainter:
 
                             del final_image_ddpm, input_image_original_cropped, mask_cropped, gp_field
 
-                    del input_image, input_image_original, land_mask, mask
+                    del input_image, input_image_original, land_mask, raw_mask, missing_mask
                     torch.cuda.empty_cache()
 
                 image_counter += 1

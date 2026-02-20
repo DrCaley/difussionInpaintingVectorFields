@@ -1,0 +1,5 @@
+# Forward-diff div-free noise — overrides only what differs from base template
+# Run: PYTHONPATH=. python experiments/run_experiment.py experiments/01_noise_strategy/fwd_divfree/config.yaml
+
+model_name: fwd_diff_divfree_x0pred_film_t250
+noise_function: forward_diff_div_free
