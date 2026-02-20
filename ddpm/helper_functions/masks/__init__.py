@@ -19,6 +19,9 @@ excluded_modules = {
     "smile_mask",
     "no_mask",
     "better_robot_path",
+    "straight_line_path",
+    "straigth_line",
+    "robot_path",
 }
 mask_files = [
     f.stem for f in module_dir.glob("*.py")
@@ -32,6 +35,7 @@ for module_name in mask_files:
             if inspect.isclass(obj) and issubclass(obj, MaskGenerator) and obj is not MaskGenerator:
                 globals_ns[name] = obj
                 __all__.append(name)
-    except ImportError:
-        # Skip modules that can't be imported (e.g., mask_drawer requires tkinter)
+    except (ImportError, Exception):
+        # Skip modules that can't be imported (e.g., mask_drawer requires tkinter,
+        # or modules needing DDInitializer when pickle data isn't available)
         pass
