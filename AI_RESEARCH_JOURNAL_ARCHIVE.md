@@ -1304,3 +1304,30 @@ The fwd-diff schedule was **4× more aggressive**. By t=166, ᾱ < 0.01 — all 
 Training with corrected beta schedule in progress. Will re-run inference after convergence.
 
 ---
+
+### February 20, 2026 — Architecture Context Notes (CRITICAL)
+
+**Purpose:** Prevent confusion about which network/algorithm is under discussion.
+
+#### Active Experimental Configurations
+
+| Experiment | UNet type | Channels | Conditioning | Inpainting | Noise |
+|------------|-----------|----------|--------------|------------|-------|
+| `01_noise_strategy/fwd_divfree` | `standard` (2ch) | 2 in, 2 out | NONE | RePaint | `forward_diff_div_free` |
+| `01_noise_strategy/fwd_divfree_equalized` | `standard` (2ch) | 2 in, 2 out | NONE | RePaint | `fwd_diff_eq_divfree` |
+| `02_inpaint_algorithm/repaint_cg` | `standard` (2ch) | 2 in, 2 out | NONE | RePaint + CG proj | `forward_diff_div_free` |
+| `02_inpaint_algorithm/repaint_gaussian_attn` | `standard_attn` (2ch) | 2 in, 2 out | NONE | RePaint | `gaussian` |
+
+#### Key Rules — Know Which Architecture You're Discussing
+
+1. **`standard` / `standard_attn` UNets are UNCONDITIONAL** — 2 channels only (u, v). No mask channel, no known_values channels, no `mask_xt`. The model sees only x_t.
+2. **`film` / `concat` UNets are CONDITIONED** — 5 channels: [x_t(2ch), mask(1ch), known_values(2ch)]. These use `mask_xt`, `known_values`, and FiLM/concatenation conditioning.
+3. **RePaint does NOT use conditioning** — it's an unconditional algorithm. The model never sees the mask. Known region is pasted in via copy-paste at each step.
+4. **mask_aware_inpaint / CFG inpaint use conditioned models** — these pass mask+known_values as extra input channels.
+5. **`mask_xt` is ONLY relevant to conditioned models** — it replaces x_t in the known region with Gaussian noise to prevent information leakage. Unconditional models don't have this concept.
+
+#### Current Focus (Feb 20, 2026)
+
+Working on div-free noise for the **unconditional RePaint pipeline** (`standard` 2ch UNet). The spectral gap analysis applies to noise generation only — all projections have flat transfer functions. The equalized noise fix propagates correctly through all noise injection sites in `repaint_standard()` because they all use the same `noise_strategy` object.
+
+---

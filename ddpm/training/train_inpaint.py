@@ -14,6 +14,7 @@ Usage:
 
 import argparse
 import csv
+import shutil
 import sys
 import logging
 import random
@@ -156,6 +157,9 @@ class TrainInpaint:
         self.latest_checkpoint = self.output_dir / f"{model_base}_{self.timestamp}.pt"
         self.best_weights = self.output_dir / f"{model_base}_best_weights.pt"
 
+        # Drive backup (auto-detected on Colab, or set drive_backup_dir in config)
+        self.drive_backup_dir = self._setup_drive_backup(dd)
+
         # Save config
         self._save_config()
 
@@ -163,11 +167,49 @@ class TrainInpaint:
         self.retrain_mode = dd.get_attribute("retrain_mode")
         self.model_to_retrain = dd.get_attribute("model_to_retrain")
 
+    def _setup_drive_backup(self, dd):
+        """Set up Google Drive backup directory for Colab resilience.
+
+        If running on Colab with Drive mounted, automatically backs up
+        checkpoints to Drive after every save so they survive runtime
+        disconnects.  Can also be set explicitly via config key
+        ``drive_backup_dir``.
+        """
+        explicit = dd.get_attribute("drive_backup_dir")
+        if explicit:
+            backup = Path(explicit)
+        else:
+            # Auto-detect Colab with mounted Drive
+            drive_root = Path("/content/drive/MyDrive")
+            if drive_root.exists():
+                model_name = dd.get_attribute("model_name") or "unknown"
+                backup = drive_root / "Ocean Inpainting" / "training_results" / model_name
+            else:
+                return None  # not on Colab / no Drive mounted
+
+        backup.mkdir(parents=True, exist_ok=True)
+        logging.info(f"Drive backup enabled → {backup}")
+        return backup
+
+    def _backup_to_drive(self, *paths):
+        """Copy files to Drive backup dir (no-op if not on Colab)."""
+        if self.drive_backup_dir is None:
+            return
+        for p in paths:
+            p = Path(p)
+            if p.exists():
+                dst = self.drive_backup_dir / p.name
+                try:
+                    shutil.copy2(p, dst)
+                except Exception:
+                    logging.warning(f"Drive backup failed for {p.name}")
+
     def _save_config(self):
         import yaml
         config_path = self.output_dir / "config_used.yaml"
         with config_path.open("w") as f:
             yaml.dump(self.dd.get_full_config(), f)
+        self._backup_to_drive(config_path)
         logging.info(f"Saved config to {config_path}")
 
     def evaluate(self, loader, fixed_seed=None):
@@ -401,9 +443,13 @@ class TrainInpaint:
                     best_epoch = epoch
                     torch.save(self.ddpm.state_dict(), self.best_weights)
                     torch.save(checkpoint, self.best_checkpoint)
+                    self._backup_to_drive(
+                        self.best_weights, self.best_checkpoint, self.csv_file
+                    )
                     log_str += "\033[32m  --> BEST\033[0m"
                 else:
                     torch.save(checkpoint, self.latest_checkpoint)
+                    self._backup_to_drive(self.latest_checkpoint, self.csv_file)
 
                 log_str += f"  (best={best_test_loss:.7f} @ epoch {best_epoch + 1})"
                 tqdm.write(log_str)
@@ -412,6 +458,7 @@ class TrainInpaint:
             logging.error(get_death_message())
         finally:
             self._plot(epoch_losses, train_losses, test_losses)
+            self._backup_to_drive(self.plot_file, self.csv_file)
 
     def _plot(self, epoch_losses, train_losses, test_losses):
         try:
