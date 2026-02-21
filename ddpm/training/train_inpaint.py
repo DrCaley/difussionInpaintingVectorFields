@@ -27,7 +27,8 @@ from pathlib import Path
 
 matplotlib.use("Agg")
 from matplotlib import pyplot as plt
-from torch.optim import Adam
+from torch.optim import Adam, AdamW
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -42,6 +43,7 @@ from ddpm.neural_networks.unets.unet_film import MyUNet_FiLM
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 from ddpm.neural_networks.unets.unet_xl_attn import MyUNet_Attn
 from ddpm.helper_functions.death_messages import get_death_message
+from ddpm.helper_functions.ema import EMA
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -87,6 +89,20 @@ class TrainInpaint:
         # Gradient clipping (max L2 norm); 0 = disabled
         self.max_grad_norm = float(dd.get_attribute("max_grad_norm") or 0)
 
+        # Weight decay for AdamW (0 = plain Adam)
+        self.weight_decay = float(dd.get_attribute("weight_decay") or 0)
+
+        # Learning rate schedule
+        self.lr_schedule = dd.get_attribute("lr_schedule") or "constant"  # constant | cosine
+        self.warmup_epochs = int(dd.get_attribute("warmup_epochs") or 0)
+
+        # EMA (Exponential Moving Average of model weights)
+        self.use_ema = bool(dd.get_attribute("use_ema") or False)
+        self.ema_decay = float(dd.get_attribute("ema_decay") or 0.9999)
+
+        # Data augmentation (velocity-field-aware flips)
+        self.augment = bool(dd.get_attribute("augment") or False)
+
         # UNet type: "concat" (Palette-style) or "film" (FiLM conditioning)
         self.unet_type = dd.get_attribute("unet_type") or "concat"
 
@@ -124,7 +140,11 @@ class TrainInpaint:
 
         # Wrap datasets with inpainting conditioning
         self.train_loader = DataLoader(
-            OceanInpaintDataset(dd.get_training_data(), standardizer=self.standardizer),
+            OceanInpaintDataset(
+                dd.get_training_data(),
+                standardizer=self.standardizer,
+                augment=self.augment,
+            ),
             batch_size=self.batch_size,
             shuffle=True,
         )
@@ -233,8 +253,6 @@ class TrainInpaint:
         try:
             with torch.no_grad():
                 for i, (x0, t, noise, mask, known) in enumerate(loader):
-                    if i > 20:
-                        break
                     x0 = x0.to(self.device)
                     t = t.to(self.device)
                     noise = noise.to(self.device)
@@ -289,9 +307,18 @@ class TrainInpaint:
         logging.info(f"CFG p_uncond: {self.p_uncond}")
         logging.info(f"Mask x_t (known region): {self.mask_xt}")
         logging.info(f"Prediction target: {self.prediction_target}")
+        logging.info(f"LR schedule: {self.lr_schedule}, warmup: {self.warmup_epochs} epochs")
+        logging.info(f"Weight decay: {self.weight_decay}")
+        logging.info(f"EMA: {self.use_ema} (decay={self.ema_decay})")
+        logging.info(f"Augmentation: {self.augment}")
         logging.info(f"Output dir: {self.output_dir}")
 
-        optimizer = Adam(self.ddpm.parameters(), lr=self.lr)
+        # Optimizer: AdamW if weight_decay > 0, else plain Adam
+        if self.weight_decay > 0:
+            optimizer = AdamW(self.ddpm.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+            logging.info(f"Using AdamW (weight_decay={self.weight_decay})")
+        else:
+            optimizer = Adam(self.ddpm.parameters(), lr=self.lr)
 
         start_epoch = 0
         best_test_loss = float("inf")
@@ -314,6 +341,56 @@ class TrainInpaint:
                     best_test_loss = float("inf")
                     logging.info("Reset best_test_loss (loss metric changed)")
                 logging.info(f"Resumed from epoch {start_epoch}")
+
+        # LR scheduler (built after optimizer restore so state is correct)
+        scheduler = None
+        if self.lr_schedule == "cosine":
+            total_epochs = self.n_epochs
+            if self.warmup_epochs > 0:
+                warmup_sched = LinearLR(
+                    optimizer,
+                    start_factor=1e-3,
+                    end_factor=1.0,
+                    total_iters=self.warmup_epochs,
+                )
+                cosine_sched = CosineAnnealingLR(
+                    optimizer,
+                    T_max=total_epochs - self.warmup_epochs,
+                    eta_min=self.lr * 0.01,  # min LR = 1% of peak
+                )
+                scheduler = SequentialLR(
+                    optimizer,
+                    schedulers=[warmup_sched, cosine_sched],
+                    milestones=[self.warmup_epochs],
+                )
+            else:
+                scheduler = CosineAnnealingLR(
+                    optimizer,
+                    T_max=total_epochs,
+                    eta_min=self.lr * 0.01,
+                )
+            # Fast-forward scheduler if resuming (suppress benign warning)
+            import warnings
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", "Detected call of `lr_scheduler.step\\(\\)` before")
+                for _ in range(start_epoch):
+                    scheduler.step()
+            logging.info(f"Cosine LR schedule: peak={self.lr}, warmup={self.warmup_epochs}, "
+                         f"min={self.lr * 0.01:.6f}")
+
+        # EMA
+        ema = None
+        if self.use_ema:
+            ema = EMA(self.ddpm, decay=self.ema_decay)
+            # Restore EMA state if resuming
+            if self.retrain_mode and self.model_to_retrain:
+                path = Path(self.model_to_retrain)
+                if path.exists():
+                    ema_ckpt = torch.load(path, map_location=self.device, weights_only=False)
+                    if "ema_state" in ema_ckpt:
+                        ema.load_state_dict(ema_ckpt["ema_state"])
+                        logging.info("Restored EMA state from checkpoint")
+            logging.info(f"EMA enabled (decay={self.ema_decay})")
 
         # CSV header
         with self.csv_file.open("w", newline="") as f:
@@ -395,12 +472,24 @@ class TrainInpaint:
                         )
                     optimizer.step()
 
+                    # Update EMA after each optimizer step
+                    if ema is not None:
+                        ema.update()
+
                     epoch_loss += loss.item() * n / len(self.train_loader.dataset)
 
-                # Evaluate
+                # Step LR scheduler (once per epoch)
+                if scheduler is not None:
+                    scheduler.step()
+
+                # Evaluate (use EMA weights if available)
+                if ema is not None:
+                    ema.apply()
                 self.ddpm.eval()
                 avg_train_loss = self.evaluate(self.train_loader)
                 avg_test_loss = self.evaluate(self.test_loader, fixed_seed=12345)
+                if ema is not None:
+                    ema.restore()
 
                 epoch_losses.append(epoch_loss)
                 train_losses.append(avg_train_loss)
@@ -414,6 +503,9 @@ class TrainInpaint:
                     pass
 
                 self.ddpm.train()
+
+                # Get current LR for logging
+                current_lr = optimizer.param_groups[0]['lr']
 
                 checkpoint = {
                     "epoch": epoch,
@@ -432,10 +524,13 @@ class TrainInpaint:
                     "unet_type": self.unet_type,
                     "prediction_target": self.prediction_target,
                 }
+                if ema is not None:
+                    checkpoint["ema_state"] = ema.state_dict()
 
                 log_str = (
                     f"\nEpoch {epoch + 1}: epoch_loss={epoch_loss:.7f}, "
-                    f"train={avg_train_loss:.7f}, test={avg_test_loss:.7f}"
+                    f"train={avg_train_loss:.7f}, test={avg_test_loss:.7f}, "
+                    f"lr={current_lr:.6f}"
                 )
 
                 if avg_test_loss < best_test_loss:

@@ -5,9 +5,10 @@ tuples for mask-aware training.
 
 Each __getitem__ call:
   1. Gets (x0, t, noise) from the base dataset
-  2. Generates a random training mask
-  3. Computes known_values = x0 * (1 - mask)  (standardised space)
-  4. Returns (x0, t, noise, mask_single, known_values)
+  2. Optionally applies velocity-field-aware augmentation
+  3. Generates a random training mask
+  4. Computes known_values = x0 * (1 - mask)  (standardised space)
+  5. Returns (x0, t, noise, mask_single, known_values)
 
 The training loop concatenates [x_t, mask, known_values] → 5 channels
 before passing to the inpainting UNet.
@@ -17,8 +18,16 @@ The original ocean mask is dropped by resize (3→2 channels).
 Land pixels are zero-padded regions (rows 44-63, cols 94-127)
 which become the standardizer's negative mean after standardization.
 We detect land by unstandardizing and checking magnitude.
+
+Augmentation (controlled by ``augment`` flag):
+  - Horizontal flip: flip spatial cols, negate u (x-velocity)
+  - Vertical flip: flip spatial rows, negate v (y-velocity)
+  Both preserve divergence-free property: ∇·v = ∂u/∂x + ∂v/∂y.
+  Applied with 50% probability each (4 possible combinations).
+  Noise is re-generated after augmentation to match the flipped field.
 """
 
+import random
 import torch
 from torch.utils.data import Dataset
 
@@ -28,14 +37,16 @@ from ddpm.helper_functions.masks.training_masks import generate_training_mask
 class OceanInpaintDataset(Dataset):
     """Wraps an OceanImageDataset to add mask conditioning for training."""
 
-    def __init__(self, base_dataset, standardizer=None):
+    def __init__(self, base_dataset, standardizer=None, augment=False):
         """
         Args:
             base_dataset: OceanImageDataset instance (returns (x0, t, noise))
             standardizer: used to unstandardize for land-mask detection
+            augment: if True, apply random velocity-field flips
         """
         self.base = base_dataset
         self.standardizer = standardizer
+        self.augment = augment
         # Pre-compute a static land mask from the first sample
         # (land pixels are the same across all time steps)
         self._land_mask = None
@@ -62,6 +73,29 @@ class OceanInpaintDataset(Dataset):
         x0, t, noise = self.base[idx]
         # x0 is (2, 64, 128) — standardised [u, v]
         c, h, w = x0.shape
+
+        # ── Velocity-field augmentation ──────────────────────────
+        # Flips that preserve ∇·v = 0:
+        #   H-flip: x → -x, so u → -u (negate channel 0, flip dim=-1)
+        #   V-flip: y → -y, so v → -v (negate channel 1, flip dim=-2)
+        # Noise must match the augmented field, so we re-generate it
+        # after flipping (the noise strategy may depend on x0 shape).
+        if self.augment:
+            flip_h = random.random() < 0.5
+            flip_v = random.random() < 0.5
+            if flip_h or flip_v:
+                if flip_h:
+                    x0 = x0.flip(-1)         # flip cols
+                    x0[0] = -x0[0]           # negate u
+                    noise = noise.flip(-1)
+                    noise[0] = -noise[0]
+                if flip_v:
+                    x0 = x0.flip(-2)         # flip rows
+                    x0[1] = -x0[1]           # negate v
+                    noise = noise.flip(-2)
+                    noise[1] = -noise[1]
+                # Invalidate cached land mask since spatial layout changed
+                self._land_mask = None
 
         # Detect land mask from the data
         land_mask = self._get_land_mask(x0)  # (1, H, W)

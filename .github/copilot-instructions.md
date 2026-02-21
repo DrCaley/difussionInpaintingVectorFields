@@ -165,6 +165,22 @@ Two reference documents describe every paper-based technique and our variants:
 | | FFT Helmholtz | Standard | `spectral_project_div_free()` |
 | | Jacobi Poisson | Standard | `project_div_free_2d()` |
 
+## Inference / Evaluation Scripts
+
+**Always separate computation from visualization.** Inference scripts must:
+
+1. **Save all results as a `.pt` file first** — tensors for every method
+   (inpainted fields, ground truth, masks, metrics dict). Use
+   `torch.save()` immediately after the inference loop finishes.
+2. **Generate plots from the saved `.pt` file** — either in a second pass
+   within the same script (load the `.pt`, then plot) or in a separate
+   plotting script.
+
+This ensures expensive GPU/MPS inference is never wasted if plotting fails,
+and lets us re-render figures without re-running inference. Keep
+`--n-samples 1` as the default for quick testing; use higher counts only
+when explicitly requested.
+
 ## Running Tests
 
 ```bash

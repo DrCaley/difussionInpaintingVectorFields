@@ -13,3 +13,16 @@ mask_xt: false
 batch_size: 16
 lr: 0.0003
 max_grad_norm: 1.0
+
+# ── Training improvements ────────────────────────────────────────
+weight_decay: 0.0001      # AdamW regularization
+lr_schedule: cosine       # cosine annealing with warmup
+warmup_epochs: 10         # linear warmup from lr*0.001 → lr
+use_ema: true             # exponential moving average of weights
+ema_decay: 0.9999         # standard DDPM EMA decay
+augment: false            # disabled — site-specific ocean data shouldn't be flipped
+
+# Resume from epoch-124 checkpoint (best test=0.009574 @ ep94)
+retrain_mode: true
+model_to_retrain: experiments/02_inpaint_algorithm/repaint_gaussian_attn/results/inpaint_gaussian_t250_Feb20_2037.pt
+reset_best: true          # reset best since eval now uses full test set

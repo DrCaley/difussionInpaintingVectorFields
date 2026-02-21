@@ -938,6 +938,155 @@ def repaint_standard(
     return x
 
 
+def repaint_coherent_divfree(
+    ddpm,
+    input_image,
+    mask,
+    n_samples=1,
+    device=None,
+    channels=2,
+    height=64,
+    width=128,
+    noise_strategy=None,
+    prediction_target="x0",
+    resample_steps=5,
+    mode="marginal",
+    x0_clip=5.0,
+):
+    """Coherent div-free RePaint — avoids boundary divergence from pasting.
+
+    Standard RePaint generates **independent** noise for (a) the reverse-step
+    stochastic term and (b) the known-region forward noising.  With div-free
+    noise these come from *unrelated* streamfunctions, so the paste creates
+    divergence spikes at the known/unknown boundary — every step, compounding
+    over 250 timesteps.
+
+    Two modes are available:
+
+    **mode="marginal"** (x₀-renoising, *exactly* div-free noise)
+        Predict x̂₀ from x_t, clip it, form a composite
+        ``x₀_composite = x₀·M_known + x̂₀·M_missing``, then re-noise:
+            ``x_{t-1} = √ᾱ_{t-1} · x₀_composite + √(1−ᾱ_{t-1}) · ε``
+        Because a *single* ε (one streamfunction) multiplies a *single*
+        scalar across the entire domain, the noise is EXACTLY div-free.
+        The only boundary discontinuity is in the signal (x₀ vs x̂₀).
+        Trade-off: replaces the DDPM posterior with the noisier marginal.
+
+    **mode="shared_psi"** (shared noise, DDPM posterior, *approximately* div-free)
+        Keep the standard DDPM posterior mean/variance for the unknown region
+        but use the SAME noise sample ε for both the posterior stochastic
+        term and the known-region forward noising.  The noise coefficients
+        differ (σ_t vs √(1−ᾱ_{t-1})), so there's a *scale* discontinuity
+        at the boundary, but the underlying streamfunction is coherent.
+        Divergence violation ∝ |σ_t − √(1−ᾱ_{t-1})| · |∇ε|_boundary,
+        MUCH smaller than with independent noise.
+
+    Args:
+        mode: ``"marginal"`` or ``"shared_psi"``.
+        x0_clip: Clip predicted x̂₀ to ``[-x0_clip, x0_clip]`` (stabilises
+            the marginal mode at high t where ᾱ_t → 0). Set 0 to disable.
+        Other args: same as ``repaint_standard``.
+
+    Returns:
+        (1, 2, H, W) inpainted result in standardised space.
+    """
+    assert mode in ("marginal", "shared_psi"), f"Unknown mode: {mode}"
+
+    if noise_strategy is None:
+        noise_strategy = dd.get_noise_strategy()
+    if device is None:
+        device = dd.get_device()
+
+    input_img = input_image.clone().to(device)
+    mask_dev = mask.to(device)
+    known_mask = 1.0 - mask_dev  # 1 where known
+
+    # Start from pure noise
+    x = noise_strategy(
+        torch.zeros(n_samples, channels, height, width, device=device),
+        torch.tensor([ddpm.n_steps - 1], device=device),
+    )
+
+    ddpm.eval()
+    with torch.no_grad():
+        for t in tqdm(range(ddpm.n_steps - 1, -1, -1), desc="CoherentRePaint"):
+            n_resample = resample_steps if t > 0 else 1
+
+            for r in range(n_resample):
+                alpha_t = ddpm.alphas[t].to(device)
+                alpha_bar_t = ddpm.alpha_bars[t].to(device)
+                beta_t = ddpm.betas[t].to(device)
+
+                time_tensor = torch.full(
+                    (n_samples, 1), t, device=device, dtype=torch.long
+                )
+
+                # --- Predict x̂₀ from x_t ---
+                net_out = ddpm.backward(x, time_tensor)
+
+                if prediction_target == "x0":
+                    x0_pred = net_out
+                else:  # eps
+                    x0_pred = (
+                        x - (1 - alpha_bar_t).sqrt() * net_out
+                    ) / alpha_bar_t.sqrt().clamp(min=1e-8)
+
+                # Clip x₀ to prevent blowup at high t where ᾱ_t → 0
+                if x0_clip > 0:
+                    x0_pred = x0_pred.clamp(-x0_clip, x0_clip)
+
+                if t > 0:
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+
+                    # ONE coherent noise sample for the entire domain
+                    eps = noise_strategy(
+                        torch.zeros_like(x),
+                        torch.tensor([t - 1], device=device),
+                    )
+
+                    if mode == "marginal":
+                        # ----- x₀-renoising: exactly div-free noise -----
+                        x0_composite = input_img * known_mask + x0_pred * mask_dev
+                        x = (alpha_bar_prev.sqrt() * x0_composite
+                             + (1 - alpha_bar_prev).sqrt() * eps)
+
+                    else:  # shared_psi
+                        # ----- DDPM posterior with shared noise -----
+                        # Posterior mean (no random noise yet)
+                        coeff_x0 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t)
+                        coeff_xt = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t)
+                        mu = coeff_x0 * x0_pred + coeff_xt * x
+
+                        # Posterior variance
+                        beta_tilde = ((1 - alpha_bar_prev) / (1 - alpha_bar_t)) * beta_t
+                        sigma_t = beta_tilde.sqrt()
+
+                        # Unknown: posterior mean + σ_t · ε
+                        x_denoised = mu + sigma_t * eps
+
+                        # Known: forward-noise with √(1−ᾱ_{t-1}) · ε (same ε!)
+                        x_known = (alpha_bar_prev.sqrt() * input_img
+                                   + (1 - alpha_bar_prev).sqrt() * eps)
+
+                        # Paste — same ψ, different scales at boundary
+                        x = x_known * known_mask + x_denoised * mask_dev
+                else:
+                    # t=0: clean paste
+                    x = input_img * known_mask + x0_pred * mask_dev
+
+                # --- Resample: re-noise x_{t-1} → x_t for next iteration ---
+                if r < n_resample - 1 and t > 0:
+                    noise_back = noise_strategy(
+                        torch.zeros_like(x),
+                        torch.tensor([t], device=device),
+                    )
+                    # q(x_t | x_{t-1}) — linear combo of div-free fields → div-free
+                    x = (alpha_t.sqrt() * x
+                         + (1 - alpha_t).sqrt() * noise_back)
+
+    return x
+
+
 def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
                                 resample_steps=1, channels=2, height=64, width=128,
                                 noise_strategy=dd.get_noise_strategy(), return_debug=False):

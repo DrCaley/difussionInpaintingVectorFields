@@ -33,6 +33,12 @@ epochs: 1000
 batch_size: 80
 lr: 0.001
 max_grad_norm: 0       # 0 = disabled; typical value: 1.0
+weight_decay: 0        # 0 = plain Adam; >0 = AdamW
+lr_schedule: constant  # constant | cosine
+warmup_epochs: 0       # linear warmup epochs for cosine schedule
+use_ema: false         # Exponential Moving Average of model weights
+ema_decay: 0.9999      # EMA decay rate (only used if use_ema: true)
+augment: false         # velocity-field-aware flip augmentation
 
 # ── Standardizer (auto-resolved from noise_function) ─────────────
 standardizer_type: auto
