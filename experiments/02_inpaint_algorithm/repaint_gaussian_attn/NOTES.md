@@ -116,9 +116,53 @@ with the local checkpoint (lower test loss) is the natural next step.
 
 ---
 
+## 2026-02-21 — Training improvements & restart
+
+### Diagnosis
+
+Model plateaued at epoch ~57 (best test loss 0.009294). Investigation showed
+this is an **Adam optimizer plateau**, not overfitting (test loss < train loss
+throughout). The optimizer's momentum estimates settle into a trajectory that
+can't escape the current basin.
+
+### Four improvements added
+
+All are domain-agnostic optimizer/evaluation techniques:
+
+1. **Cosine LR schedule with warmup** — 10-epoch linear warmup from
+   `lr×0.001` → `lr`, then cosine decay to 0. Helps escape plateaus by
+   varying the learning rate.
+2. **AdamW with weight decay** (`weight_decay: 0.0001`) — mild L2
+   regularization, decoupled from gradient updates.
+3. **EMA** (`ema_decay: 0.9999`) — exponential moving average of model
+   weights. Checkpoint saves the EMA weights for inference.
+4. **Full test-set evaluation** — removed the old 20-batch cap on eval loop;
+   all 1,965 test samples are now used every epoch.
+
+### Augmentation decision
+
+Velocity-field augmentation (H-flip negating u, V-flip negating v) was
+initially implemented but **disabled** after analysis. The model learns
+site-specific ocean current patterns at Ram's Head, St. John. Flipping the
+field creates non-physical patterns (wrong coastline geometry, reversed
+prevailing currents, wrong bathymetry influence). The augmentation
+infrastructure remains in code (`augment: false` in config) for potential
+future use with synthetic/multi-site datasets.
+
+### Run 3 (Feb21): resumed from epoch 126 with improvements
+
+- Config: `augment: false`, `weight_decay: 0.0001`, `lr_schedule: cosine`,
+  `warmup_epochs: 10`, `use_ema: true`, `ema_decay: 0.9999`, `reset_best: true`
+- Resuming from checkpoint `inpaint_gaussian_t250_Feb20_2037.pt` (epoch 124,
+  best test 0.009294 pre-improvements)
+- Two epochs (125–126) ran briefly with `augment: true` before the fix;
+  training was killed and restarted with `augment: false`
+- Training in progress
+
+---
+
 ## Status
 
-**Converged locally** at test loss 0.0093 (epoch 57 of 86+8=94). Inference
-done with Colab checkpoint (test loss 0.0127), showing DDPM competitive with
-GP but averaging 29% higher MSE. **To do:** re-run inference with local
-checkpoint for fair comparison.
+**Training in progress** with all 4 improvements (cosine LR, AdamW, EMA, full
+eval). Previous best test loss was 0.009294 at epoch 57. Goal: break the
+plateau and improve denoising quality for downstream inpainting.
