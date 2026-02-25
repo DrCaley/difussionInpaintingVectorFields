@@ -7,37 +7,163 @@ from ddpm.vector_combination.vector_combiner import combine_fields
 
 dd = DDInitializer()
 
-def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
-                                resample_steps=1, channels=2, height=64, width=128, noise_strategy = dd.get_noise_strategy()):
-    """
-    Given a DDPM model, an input image, and a mask, generates in-painted samples.
-    """
-    noised_images = [None] * (ddpm.n_steps + 1)
-    device = dd.get_device()
 
-    def denoise_one_step(noisy_img, noise_strat, t):
-        time_tensor = torch.full((n_samples, 1), t, device=device, dtype=torch.long)
+# def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
+#                                 resample_steps=1, channels=2, height=64, width=128, noise_strategy = dd.get_noise_strategy()):
+#     """
+#     Given a DDPM model, an input image, and a mask, generates in-painted samples.
+#     """
+#     noised_images = [None] * (ddpm.n_steps + 1)
+#     device = dd.get_device()
+#
+#     def denoise_one_step(noisy_img, noise_strat, t):
+#         time_tensor = torch.full((n_samples, 1), t, device=device, dtype=torch.long)
+#         epsilon_theta = ddpm.backward(noisy_img, time_tensor)
+#
+#         alpha_t = ddpm.alphas[t].to(device)
+#         alpha_t_bar = ddpm.alpha_bars[t].to(device)
+#
+#         if noise_strat.get_gaussian_scaling():
+#             less_noised_img = (1 / alpha_t.sqrt()) * (
+#                     noisy_img - ((1 - alpha_t) / (1 - alpha_t_bar).sqrt()) * epsilon_theta
+#             )
+#         else:
+#             less_noised_img = (1 / alpha_t.sqrt()) * (noisy_img - epsilon_theta)
+#
+#         tensor_size = torch.zeros(n_samples, channels, height, width, device=device)
+#
+#         if t > 0:
+#             z = noise_strat(tensor_size, torch.tensor([t], device=device))
+#             beta_t = ddpm.betas[t].to(device)
+#             sigma_t = beta_t.sqrt()
+#             less_noised_img = less_noised_img + sigma_t * z
+#
+#         return less_noised_img, noise
+#
+#     def noise_one_step(unnoised_img, t, noise_strat):
+#         epsilon = noise_strat(unnoised_img, None)
+#         noised_img = ddpm(unnoised_img, t, epsilon, one_step=True)
+#         return noised_img
+#
+#     with torch.no_grad():
+#         noise_strat = noise_strategy
+#
+#         input_img = input_image.clone().to(device)
+#         mask = mask.to(device)
+#
+#         noise = noise_strat(input_img, torch.tensor([ddpm.n_steps], device=device))
+#
+#         # Step-by-step forward noising
+#         noised_images[0] = input_img
+#         for t in range(ddpm.n_steps):
+#             noised_images[t + 1] = noise_one_step(noised_images[t], t, noise_strat)
+#
+#         doing_the_thing = False
+#
+#         if doing_the_thing:
+#             x = noised_images[ddpm.n_steps] * (1 - mask) + (noise * mask)
+#         else:
+#             x = masked_poisson_projection(noised_images[ddpm.n_steps], mask)
+#
+#         with tqdm(total=ddpm.n_steps, desc="Denoising") as pbar:
+#             for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
+#                 for i in range(resample_steps):
+#                     inpainted, noise = denoise_one_step(x, noise_strat, t)
+#                     known = noised_images[t]
+#
+#                     combined = combine_fields(known, inpainted, mask,
+#                                               save_dir=f"../vector_combination/results/step_{idx}/resample_{i}")
+#
+#                     if (i + 1) < resample_steps:
+#                         x = noise_one_step(combined, t, noise_strat)
+#                 pbar.update(1)
+#
+#     result = input_img * (1 - mask) + combined * mask
+#     #result = combined
+#     return result
+
+def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
+                                resample_steps=1, channels=2, height=64, width=128,
+                                noise_strategy=None, gamma=0.05, lambda_phys=0.001):
+    """
+    Given a DDPM model, an input image, and a mask, generates in-painted samples
+    using Tweedie Guidance (Direct Data Consistency + Zero Divergence).
+    """
+    if noise_strategy is None:
+        noise_strategy = dd.get_noise_strategy()
+
+    noised_images = [None] * (ddpm.n_steps + 1)
+    device = dd.get_device() if device is None else device
+
+
+    def tweedie_denoise_one_step(noisy_img, noise_strat, t, ground_truth, mask):
+        """
+        Nested function: Replaces standard denoise_one_step.
+        Uses Tweedie Guidance to steer x0_hat toward the known data and zero divergence.
+        """
+        # 1. Predict Noise (No Gradients)
+        time_tensor = torch.full((noisy_img.shape[0], 1), t, device=device, dtype=torch.long)
         epsilon_theta = ddpm.backward(noisy_img, time_tensor)
 
         alpha_t = ddpm.alphas[t].to(device)
         alpha_t_bar = ddpm.alpha_bars[t].to(device)
 
+        # 2. Calculate the Tweedie Prediction (x0_hat)
+        x0_hat = (noisy_img - (1 - alpha_t_bar).sqrt() * epsilon_theta) / alpha_t_bar.sqrt()
+
+        # --- ENABLE GRADIENTS FOR OPTIMIZATION ---
+        with torch.enable_grad():
+            # 3. Prepare for Optimization
+            x0_hat = x0_hat.detach().requires_grad_(True)
+
+            # 4. Compute Losses
+            # Fidelity Loss (Note: your mask is 1 for inpaint, 0 for known)
+            known_region_mask = (mask == 0).float()
+            L_data = torch.nn.functional.mse_loss(
+                x0_hat * known_region_mask,
+                ground_truth * known_region_mask,
+                reduction='sum'
+            ) / known_region_mask.sum().clamp(min=1.0)
+
+            # Physics Loss (Divergence via Central Difference)
+            vx, vy = x0_hat[:, 0], x0_hat[:, 1]
+            dvx_dx = torch.zeros_like(vx)
+            dvy_dy = torch.zeros_like(vy)
+
+            dvx_dx[:, 1:-1, :] = (vx[:, 2:, :] - vx[:, :-2, :]) / 2.0
+            dvy_dy[:, :, 1:-1] = (vy[:, :, 2:] - vy[:, :, :-2]) / 2.0
+
+            div = dvx_dx + dvy_dy
+            L_divergence = (div ** 2).mean()
+
+            # Total Loss
+            L_total = L_data + (lambda_phys * L_divergence)
+
+            # 5. Compute the Gradient
+            grad = torch.autograd.grad(L_total, x0_hat)[0]
+
+        # --- DISABLE GRADIENTS AGAIN FOR THE UPDATE ---
+        # 6. Apply the Gradient Update (The "Nudge")
+        current_gamma = gamma * (1 - alpha_t_bar).item()
+        x0_hat_updated = x0_hat.detach() - (current_gamma * grad)
+
+        # 7. Proceed to t-1 (Standard DDPM Step)
+        epsilon_updated = (noisy_img - alpha_t_bar.sqrt() * x0_hat_updated) / (1 - alpha_t_bar).sqrt()
+
         if noise_strat.get_gaussian_scaling():
             less_noised_img = (1 / alpha_t.sqrt()) * (
-                    noisy_img - ((1 - alpha_t) / (1 - alpha_t_bar).sqrt()) * epsilon_theta
+                    noisy_img - ((1 - alpha_t) / (1 - alpha_t_bar).sqrt()) * epsilon_updated
             )
         else:
-            less_noised_img = (1 / alpha_t.sqrt()) * (noisy_img - epsilon_theta)
-
-        tensor_size = torch.zeros(n_samples, channels, height, width, device=device)
+            less_noised_img = (1 / alpha_t.sqrt()) * (noisy_img - epsilon_updated)
 
         if t > 0:
-            z = noise_strat(tensor_size, torch.tensor([t], device=device))
+            z = noise_strat(torch.zeros_like(noisy_img), torch.tensor([t], device=device))
             beta_t = ddpm.betas[t].to(device)
             sigma_t = beta_t.sqrt()
             less_noised_img = less_noised_img + sigma_t * z
 
-        return less_noised_img, noise
+        return less_noised_img, epsilon_updated
 
     def noise_one_step(unnoised_img, t, noise_strat):
         epsilon = noise_strat(unnoised_img, None)
@@ -46,40 +172,43 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
 
     with torch.no_grad():
         noise_strat = noise_strategy
-
         input_img = input_image.clone().to(device)
         mask = mask.to(device)
+        known_region_mask = (mask == 0).float()
 
-        noise = noise_strat(input_img, torch.tensor([ddpm.n_steps], device=device))
+        # 1. Generate Div-Free Noise for the known regions
+        base_noise_known = noise_strat(torch.zeros_like(input_img), None)
+        x_T_known = ddpm(input_img, torch.tensor([ddpm.n_steps-1], device=device), base_noise_known)
 
-        # Step-by-step forward noising
-        noised_images[0] = input_img
-        for t in range(ddpm.n_steps):
-            noised_images[t + 1] = noise_one_step(noised_images[t], t, noise_strat)
+        # 2. Generate pure Div-Free Noise for the hole
+        x_T_hole = noise_strat(torch.zeros_like(input_img), None)
 
-        doing_the_thing = False
+        # 3. Combine them (this creates boundary divergence)
+        x = (x_T_known * known_region_mask) + (x_T_hole * (1 - known_region_mask))
 
-        if doing_the_thing:
-            x = noised_images[ddpm.n_steps] * (1 - mask) + (noise * mask)
-        else:
-            x = masked_poisson_projection(noised_images[ddpm.n_steps], mask)
+        # 4. FIX THE BOUNDARY DIVERGENCE!
+        # Pass the spliced field and the mask into your projection function
+        x = masked_poisson_projection(x, mask)
 
-        with tqdm(total=ddpm.n_steps, desc="Denoising") as pbar:
-            for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
-                for i in range(resample_steps):
-                    inpainted, noise = denoise_one_step(x, noise_strat, t)
-                    known = noised_images[t]
+        for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
+            for i in range(resample_steps):
 
-                    combined = combine_fields(known, inpainted, mask,
-                                              save_dir=f"../vector_combination/results/step_{idx}/resample_{i}")
+                # 1. Take a Tweedie Guided Step (replacing denoise_one_step & combine_fields)
+                inpainted, _ = tweedie_denoise_one_step(x, noise_strat, t, ground_truth=input_img, mask=mask)
 
-                    if (i + 1) < resample_steps:
-                        x = noise_one_step(combined, t, noise_strat)
-                pbar.update(1)
+                # 2. Resampling logic (RePaint trick)
+                if (i + 1) < resample_steps:
+                    x = noise_one_step(inpainted, t, noise_strat)
+                else:
+                    x = inpainted  # Crucial: Update x for the next timestep t-1
 
-    result = input_img * (1 - mask) + combined * mask
-    #result = combined
+
+    # For the final output, enforce the ground truth on the known regions one last time
+    # to guarantee exact pixel matches outside the mask.
+    result = x
+
     return result
+
 
 
 def calculate_mse(original_image, predicted_image, mask, normalize=False):
@@ -200,9 +329,10 @@ def avg_pixel_value(original_image, predicted_image, mask):
 def masked_poisson_projection(vector_field, mask, num_iter=500, tol=1e-5):
     """
     Performs divergence-free projection of a 2D vector field with masked inpainting regions.
+    Assumes swapped channels: Channel 0 is Vy (Y-velocity), Channel 1 is Vx (X-velocity).
 
     Args:
-        vector_field: (N, 2, H, W) torch tensor (vx, vy)
+        vector_field: (N, 2, H, W) torch tensor (vy, vx)
         mask:         (N, 2, H, W) binary tensor, 1 = region to inpaint
         num_iter:     max Jacobi iterations
         tol:          early stopping tolerance on residual (L2 norm)
@@ -213,24 +343,19 @@ def masked_poisson_projection(vector_field, mask, num_iter=500, tol=1e-5):
     N, _, H, W = vector_field.shape
     device = vector_field.device
 
-    vx, vy = vector_field[:, 0], vector_field[:, 1]
+    # NOTE: Assuming Ch 0 is Vy and Ch 1 is Vx based on previous divergence math
+    vx, vy = vector_field[:, 0], vector_field[:, 1] # vx is Vy, vy is Vx
 
-    # Compute divergence: ∂vx/∂x + ∂vy/∂y (forward diff)
+    # Compute divergence: ∂Vy/∂y + ∂Vx/∂x (forward diff)
     div = torch.zeros(N, H, W, device=device)
-    div[:, :, :-1] += vx[:, :, 1:] - vx[:, :, :-1]
-    div[:, :-1, :] += vy[:, 1:, :] - vy[:, :-1, :]
+    div[:, :-1, :] += vx[:, 1:, :] - vx[:, :-1, :] # Ch 0 (Vy) along Y (dim 1)
+    div[:, :, :-1] += vy[:, :, 1:] - vy[:, :, :-1] # Ch 1 (Vx) along X (dim 2)
 
     # Initialize scalar potential φ
     phi = torch.zeros(N, H, W, device=device)
 
-    # Combine mask across components: (N, H, W)
-    M = torch.maximum(mask[:, 0], mask[:, 1])  # 1 where inpaint, 0 where known
-    known = (1 - M)
-
-    # Jacobi solver
+    # Jacobi solver (Now solves globally to prevent boundary shockwaves)
     for i in range(num_iter):
-        phi_new = phi.clone()
-
         # Sum of neighbors (up, down, left, right)
         neighbor_sum = torch.zeros_like(phi)
 
@@ -239,32 +364,31 @@ def masked_poisson_projection(vector_field, mask, num_iter=500, tol=1e-5):
         neighbor_sum[:, :, 1:] += phi[:, :, :-1]    # left
         neighbor_sum[:, :, :-1] += phi[:, :, 1:]    # right
 
-        # Jacobi update
+        # Jacobi update applied globally
         phi_new = (div + neighbor_sum) / 4.0
 
-        # Only update masked/inpaint regions
-        updated_phi = torch.where(M == 1, phi_new, phi)
-
         # Residual for early stopping
-        residual = torch.norm(updated_phi - phi, dim=(1, 2)).mean()
+        residual = torch.norm(phi_new - phi, dim=(1, 2)).mean()
 
-        phi = updated_phi
+        phi = phi_new
 
         if residual < tol:
             break
 
     # Compute gradient of φ (forward diff)
-    dphix = torch.zeros_like(vx)
-    dphiy = torch.zeros_like(vy)
+    dphix = torch.zeros_like(vy) # X-gradient matches Vx shape
+    dphiy = torch.zeros_like(vx) # Y-gradient matches Vy shape
 
-    dphix[:, :, :-1] = phi[:, :, 1:] - phi[:, :, :-1]
-    dphiy[:, :-1, :] = phi[:, 1:, :] - phi[:, :-1, :]
+    dphix[:, :, :-1] = phi[:, :, 1:] - phi[:, :, :-1] # Derivative along X
+    dphiy[:, :-1, :] = phi[:, 1:, :] - phi[:, :-1, :] # Derivative along Y
 
     # Subtract gradient to get divergence-free field
-    vx_proj = vx - dphix
-    vy_proj = vy - dphiy
+    # FIX: Subtract Y-gradient from Vy (Ch 0) and X-gradient from Vx (Ch 1)
+    vx_proj = vx - dphiy
+    vy_proj = vy - dphix
 
     # Restore known values (preserve unmasked regions per channel)
+    # The global solver touched everything, so we enforce the hard constraint here
     vx_proj = torch.where(mask[:, 0] == 0, vx, vx_proj)
     vy_proj = torch.where(mask[:, 1] == 0, vy, vy_proj)
 

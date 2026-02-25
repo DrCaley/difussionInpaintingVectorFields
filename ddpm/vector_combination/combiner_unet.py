@@ -73,9 +73,10 @@ class VectorCombinationUNet(nn.Module):
 
         # --- ZERO INITIALIZATION ---
         # Forces model to start by predicting "Zero Correction" (Identity mapping)
-        with torch.no_grad():
-            self.outc.weight.fill_(0)
-            self.outc.bias.fill_(0)
+        # with torch.no_grad():
+        #     self.outc.weight.fill_(0)
+        #     self.outc.bias.fill_(0)
+        # TEMP - FIXME
 
     def forward(self, combined_input):
         """

@@ -5,20 +5,18 @@ import torch.nn.functional as F
 from ddpm.helper_functions.compute_divergence import compute_divergence
 
 class PhysicsInformedLoss(nn.Module):
-    def __init__(self, weight_fidelity=1.0, weight_physics=1.0, weight_smooth=0.1):
+    def __init__(self, weight_fidelity=1.0, weight_physics=1.0):
         """
         Physics-Informed Loss for Vector Field Inpainting.
 
         Args:
             weight_fidelity (float): Weight for MSE loss against the naive stitch.
             weight_physics (float): Weight for the divergence constraint.
-            weight_smooth (float): Weight for smoothness regularization.
         """
         super().__init__()
         self.weights = {
             'fidelity': weight_fidelity,
             'physics': weight_physics,
-            'smooth': weight_smooth
         }
 
         # Register kernel as a buffer so it automatically moves to GPU with the model
@@ -37,20 +35,6 @@ class PhysicsInformedLoss(nn.Module):
         # compute_divergence is imported from helper_functions
         div = compute_divergence(vx, vy)
         return div.abs().mean()
-
-    def _get_boundary_mask(self, mask):
-        """
-        Creates a boundary mask (seam) where 0 meets 1.
-        """
-        mask_float = mask.float()
-
-        # Dilate: padding=1 keeps size identical
-        dilated = F.conv2d(mask_float, self.dilate_kernel, padding=1)
-        dilated = torch.clamp(dilated, 0, 1)
-
-        # Boundary is where dilation added a 1 that wasn't there before
-        boundary = dilated - mask_float
-        return boundary
 
     def forward(self, predicted, known, inpainted, mask):
         """
@@ -86,9 +70,9 @@ class PhysicsInformedLoss(nn.Module):
         # W_fidelity = torch.ones_like(mask) - (boundary * 0.9)
 
         # Current implementation: Trust data equally everywhere
-        W_fidelity = torch.ones_like(mask)
+        fidelity_mask = torch.ones_like(mask)
 
-        loss_fidelity = torch.mean(W_fidelity * (predicted - naive) ** 2)
+        loss_fidelity = torch.mean(fidelity_mask * (predicted - naive)) ** 2
 
         # --- 4. PHYSICS LOSS (Divergence Constraint) ---
         div_pred = self._compute_mean_abs_divergence(predicted)
@@ -97,25 +81,22 @@ class PhysicsInformedLoss(nn.Module):
         # Only penalize if divergence is WORSE than the inputs
         loss_physics = F.relu(div_pred - max_div_threshold)
 
-        # --- 5. SMOOTHNESS LOSS ---
-        # Calculate gradients (using slicing to handle shapes)
-        # Pad the difference to match original size or ignore edges
-        du = torch.abs(predicted[:, :, :, :-1] - predicted[:, :, :, 1:])
-        dv = torch.abs(predicted[:, :, :-1, :] - predicted[:, :, 1:, :])
-        loss_smooth = torch.mean(du) + torch.mean(dv)
+
+        # # --- MAGNITUDE LOSS ---
+        # pred_mag = torch.mean(torch.abs(predicted))
+        # known_mag = torch.mean(torch.abs(known))
+        # loss_mag = torch.abs(pred_mag - known_mag)
 
         # --- TOTAL LOSS ---
         weighted_fidelity = self.weights['fidelity'] * loss_fidelity
         weighted_physics = self.weights['physics'] * loss_physics
-        weighted_smooth = self.weights['smooth'] * loss_smooth
 
-        total_loss = weighted_fidelity + weighted_physics + weighted_smooth
+        total_loss = weighted_fidelity + weighted_physics #+ loss_mag
 
         return total_loss, {
             'total_loss': total_loss,
             'loss_fidelity': weighted_fidelity,
             'loss_physics': weighted_physics,
-            'loss_smooth': weighted_smooth,
             'metric_div_pred': div_pred,
             'metric_div_thresh': max_div_threshold
         }
