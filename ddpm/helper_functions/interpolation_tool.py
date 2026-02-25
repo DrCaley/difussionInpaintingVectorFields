@@ -137,6 +137,7 @@ def gp_fill(
     sample_posterior=False,
     kernel_type="rbf",
     coord_system="pixels",
+    return_variance=False,
 ):
     """
     Fills in missing values (mask == 1) in a tensor using Gaussian Process regression.
@@ -152,9 +153,13 @@ def gp_fill(
         sample_posterior: if True, sample from GP posterior instead of using mean
         kernel_type: "rbf", "incompressible", "rbf_legacy", "incompressible_rbf"
         coord_system: "pixels" or "normalized" (0-1)
+        return_variance: if True, also return per-pixel posterior variance map
 
     Returns:
-        Tensor with missing values filled in.
+        If return_variance is False: Tensor with missing values filled in.
+        If return_variance is True: (filled_tensor, variance_map) where
+            variance_map is (1, C, H, W) with GP posterior variance at each
+            unknown pixel (0 at known pixels).
     """
     orig_device = tensor.device
     if orig_device.type == "mps":
@@ -174,6 +179,8 @@ def gp_fill(
 
     _, C, H, W = tensor.shape
     filled = tensor.clone()
+    if return_variance:
+        var_map = torch.zeros(1, C, H, W, dtype=dtype, device=device)
 
     valid_mask_2d = (tensor[0].abs().sum(dim=0) > 1e-5)
 
@@ -242,6 +249,22 @@ def gp_fill(
                 pred_values = dist.sample()
             else:
                 pred_values = pred_mean.squeeze(-1)
+
+            if return_variance:
+                # Posterior variance for incompressible kernel.
+                # Diagonal of K_ss - K_s @ K^{-1} @ K_s^T
+                if kernel_type == "incompressible_rbf":
+                    K_ss = incompressible_rbf_kernel(unknown_coords, unknown_coords, lengthscale, variance)
+                else:
+                    K_ss = incompressible_kernel(unknown_coords, unknown_coords, lengthscale, variance)
+                alpha_var = torch.cholesky_solve(K_s.T, L)
+                var_reduction = (K_s * alpha_var.T).sum(dim=1)
+                K_ss_diag = K_ss.diag()
+                post_var = (K_ss_diag - var_reduction).clamp(min=0)
+                n_unk = unknown_indices.shape[0]
+                for idx_i, idx in enumerate(unknown_indices):
+                    var_map[0, 0, idx[0], idx[1]] = post_var[idx_i].item()
+                    var_map[0, 1, idx[0], idx[1]] = post_var[n_unk + idx_i].item()
 
             if pred_values.ndim == 0:
                 pred_values = pred_values.unsqueeze(0)
@@ -317,10 +340,25 @@ def gp_fill(
             else:
                 pred_values = pred_mean.squeeze(-1)
 
+            if return_variance:
+                # Efficient posterior variance: diag(K_ss) - diag(K_s @ K^{-1} @ K_s^T)
+                # diag(K_ss) = prior variance at each point (kernel self-covariance)
+                if kernel_type == "rbf_legacy":
+                    prior_var = variance ** 2  # rbf_legacy uses kernel_noise^2
+                else:
+                    prior_var = variance  # standard rbf
+                alpha_var = torch.cholesky_solve(K_s.T, L)  # (n_known, n_unknown)
+                var_reduction = (K_s * alpha_var.T).sum(dim=1)  # (n_unknown,)
+                post_var = (prior_var - var_reduction).clamp(min=0)
+                for idx_i, idx in enumerate(unknown_indices):
+                    var_map[0, c, idx[0], idx[1]] = post_var[idx_i].item()
+
             if pred_values.ndim == 0:
                 pred_values = pred_values.unsqueeze(0)
 
             for idx, val in zip(unknown_indices, pred_values):
                 filled[0, c, idx[0], idx[1]] = val.item()
 
+    if return_variance:
+        return filled.to(torch.float32).to(orig_device), var_map.to(torch.float32).to(orig_device)
     return filled.to(torch.float32).to(orig_device)  # Return to original device

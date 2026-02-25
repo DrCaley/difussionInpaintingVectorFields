@@ -1,0 +1,22 @@
+# DPS Guided Inpainting — Gaussian Attention Model
+#
+# Inference-only experiment using Diffusion Posterior Sampling (DPS)
+# from Chung et al. (arxiv 2209.14687) as an alternative to RePaint.
+#
+# Model: repaint_gaussian_attn (MyUNet_Attn, epoch 132, Gaussian noise)
+# Checkpoint: experiments/02_inpaint_algorithm/repaint_gaussian_attn/results/
+#             inpaint_gaussian_t250_best_checkpoint.pt
+#
+# DPS replaces RePaint's copy-paste with soft gradient guidance:
+#   x_{t-1} = x_{t-1}^pred - ζ * ∇_xt ||y - A(x̂_0)||^2
+# where y = known observations, A = masking operator, x̂_0 = denoised estimate.
+#
+# Best config (100-sample eval):
+#   boundary=2.0, div=0.0, GP warm start t=75
+#   → 88/100 wins, 0.800x GP avg
+
+model_name: dps_guided_gaussian_attn
+noise_function: gaussian
+unet_type: standard_attn
+prediction_target: eps
+mask_xt: false

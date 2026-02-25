@@ -1,0 +1,26 @@
+# Mid-size attention UNet — between slim (6.1M) and big (23.2M)
+# Channels: [48, 96, 192, 192] with dropout=0.1
+# Attention at 8×16 (level 4) + 4×8 (bottleneck)
+# ~13.5M params — ~1,470 params/sample
+#
+# Why: slim model peaked at test_loss=0.016 (insufficient capacity),
+#      big model peaked at 0.0093 but overfits heavily (no dropout, 2523 p/s).
+#      Mid targets the sweet spot with dropout + selective attention.
+
+model_name: repaint_gaussian_attn_mid_eps_t250
+noise_function: gaussian
+unet_type: standard_attn_mid
+prediction_target: eps
+mask_xt: false
+batch_size: 32
+lr: 0.001
+max_grad_norm: 1.0
+
+# ── Training improvements ────────────────────────────────────────
+weight_decay: 0.0001      # AdamW regularization
+lr_schedule: cosine       # cosine annealing with warmup
+warmup_epochs: 10         # linear warmup from lr*0.001 → lr
+use_ema: true             # exponential moving average of weights
+ema_decay: 0.9999         # standard DDPM EMA decay
+ema_warmup_steps: 2000    # ramp decay 0→0.9999 over ~14 epochs
+augment: false            # disabled — site-specific ocean data

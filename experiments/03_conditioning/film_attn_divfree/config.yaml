@@ -1,0 +1,31 @@
+# FiLM-conditioned attention UNet with div-free noise
+# Uses the MyUNet_FiLM_Attn architecture: attention UNet backbone (~18M params)
+# + FiLM conditioning encoder that modulates via learned γ/β at every level.
+# FiLM layers are zero-initialized so the model starts as unconditioned.
+#
+# Key difference from 02_inpaint_algorithm experiments: the denoiser sees
+# [x_t, mask, known_values] (5ch) and learns to use observations directly,
+# rather than relying on RePaint-style known-pixel replacement.
+
+model_name: film_attn_divfree_x0_t250
+unet_type: film_attn
+noise_function: forward_diff_div_free
+prediction_target: x0
+mask_xt: true
+batch_size: 16
+gradient_accumulation_steps: 5   # effective batch size = 16 × 5 = 80
+lr: 0.0003
+max_grad_norm: 1.0
+
+# ── Training improvements (matching attn UNet best practices) ────
+weight_decay: 0.0001      # AdamW regularization
+lr_schedule: cosine       # cosine annealing with warmup
+warmup_epochs: 10         # linear warmup from lr*0.001 → lr
+use_ema: true             # exponential moving average of weights
+ema_decay: 0.999          # faster tracking (~9 epoch window at 115 steps/epoch)
+augment: false            # disabled — site-specific ocean data
+
+# ── Resume from epoch 15 checkpoint ──────────────────────────────
+retrain_mode: true
+model_to_retrain: experiments/03_conditioning/film_attn_divfree/results/inpaint_forward_diff_div_free_t250_best_checkpoint.pt
+reset_best: false

@@ -1,0 +1,30 @@
+# Forward-diff div-free noise with attention UNet
+# Mirrors the successful repaint_gaussian_attn setup but with div-free noise.
+# The original div-free model (repaint_cg) used MyUNet without attention —
+# this tests whether the attention UNet closes the gap.
+#
+# Key differences from repaint_gaussian_attn:
+#   - noise_function: forward_diff_div_free  (→ unified z-score standardizer)
+#   - Everything else matches: same lr, same schedule, same EMA, same arch
+#
+# Run:
+#   PYTHONPATH=. python experiments/run_experiment.py experiments/01_noise_strategy/fwd_divfree_attn/config.yaml
+# Smoke test:
+#   PYTHONPATH=. python experiments/run_experiment.py --smoke experiments/01_noise_strategy/fwd_divfree_attn/config.yaml
+
+model_name: fwd_eq_divfree_attn_eps_t250
+noise_function: fwd_diff_eq_divfree
+unet_type: standard_attn
+prediction_target: eps
+mask_xt: false
+batch_size: 16
+lr: 0.0003
+max_grad_norm: 1.0
+
+# ── Training improvements (same as gaussian attn) ────────────────
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999
+augment: false

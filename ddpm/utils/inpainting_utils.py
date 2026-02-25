@@ -212,12 +212,16 @@ def guided_inpaint(
     noise_strategy=None,
     guidance_scale_boundary=1.0,
     guidance_scale_div=0.5,
+    normalize_grad=True,
+    gp_init=None,
+    t_start=None,
     return_debug=False,
 ):
-    """Inpaint using classifier-free guidance on boundary + divergence losses.
+    """Inpaint using DPS-style gradient guidance on boundary + divergence losses.
 
-    Instead of RePaint's copy-paste, we run the *full* reverse process and
-    steer the trajectory with gradients of two losses:
+    Instead of RePaint's copy-paste, we run the reverse process and steer
+    the trajectory with gradients of two losses (Diffusion Posterior
+    Sampling, Chung et al. ICLR 2023):
 
         L = λ_b ‖(x̂₀ - x_known)·(1-mask)‖²  +  λ_d ‖∇·x̂₀‖²
 
@@ -226,17 +230,23 @@ def guided_inpaint(
       2. Estimate x̂₀ via Tweedie's formula
       3. Compute L on x̂₀
       4. Backprop to get ∇_{x_t} L
-      5. Subtract guidance_scale * grad from the next-step mean
+      5. Apply DPS step: subtract  ζ·∇_{x_t} from the next-step mean
 
-    This avoids copy-paste entirely so there are no boundary artefacts
-    and no magnitude-crushing from projection.
+    When normalize_grad=True (default, DPS-style), the step size for
+    each loss term is  λ / ‖residual‖ , matching DPS Algorithm 1.
+    When False, uses raw λ·∇L (original behaviour).
 
     Args:
         ddpm: GaussianDDPM model (eval mode).
         input_image: (1, 2, H, W) standardised input.
         mask: (1, 2, H, W) mask, 1=unknown / 0=known.
-        guidance_scale_boundary: strength of known-value matching.
-        guidance_scale_div: strength of divergence-free penalty.
+        guidance_scale_boundary: strength of known-value matching (ζ_boundary).
+        guidance_scale_div: strength of divergence-free penalty (ζ_div).
+        normalize_grad: If True, use DPS-style ζ/‖residual‖ normalization.
+        gp_init: Optional (1, 2, H, W) standardised GP estimate for warm start.
+            If provided with t_start, forward-diffuses GP to level t_start
+            and begins reverse diffusion there instead of from pure noise.
+        t_start: Timestep to begin reverse diffusion from (only with gp_init).
     """
     if noise_strategy is None:
         noise_strategy = dd.get_noise_strategy()
@@ -253,19 +263,32 @@ def guided_inpaint(
     # We only need x_known (standardised) for the boundary loss.
     x_known = input_img                    # already standardised
 
-    # Initial noise
-    x = noise_strat(
-        torch.zeros(n_samples, channels, height, width, device=device),
-        torch.tensor([ddpm.n_steps - 1], device=device),
-    )
+    # Determine starting timestep
+    start_t = ddpm.n_steps - 1  # default: full reverse from T
+    if gp_init is not None and t_start is not None:
+        start_t = min(t_start, ddpm.n_steps - 1)
+        # Forward-diffuse the GP init to level t_start
+        gp_dev = gp_init.clone().to(device)
+        alpha_bar_start = ddpm.alpha_bars[start_t].to(device)
+        eps = noise_strat(
+            torch.zeros(n_samples, channels, height, width, device=device),
+            torch.tensor([start_t], device=device),
+        )
+        x = alpha_bar_start.sqrt() * gp_dev + (1 - alpha_bar_start).sqrt() * eps
+    else:
+        # Initial noise (full reverse from T)
+        x = noise_strat(
+            torch.zeros(n_samples, channels, height, width, device=device),
+            torch.tensor([ddpm.n_steps - 1], device=device),
+        )
 
     # Ensure model is in eval mode but weights require no grad (we grad w.r.t. x_t)
     ddpm.eval()
     for p in ddpm.parameters():
         p.requires_grad_(False)
 
-    with tqdm(total=ddpm.n_steps, desc="Guided denoising") as pbar:
-        for t in range(ddpm.n_steps - 1, -1, -1):
+    with tqdm(total=start_t + 1, desc="Guided denoising") as pbar:
+        for t in range(start_t, -1, -1):
             alpha_t = ddpm.alphas[t].to(device)
             alpha_bar_t = ddpm.alpha_bars[t].to(device)
             beta_t = ddpm.betas[t].to(device)
@@ -285,19 +308,44 @@ def guided_inpaint(
             # ── guidance losses ──────────────────────────────────────
             # Boundary matching: predicted x0 should match known vals
             diff_known = (x0_hat - x_known) * known_mask
-            loss_boundary = (diff_known ** 2).sum() / known_mask.sum().clamp(min=1)
+            residual_boundary = diff_known.norm()
 
             # Divergence-free: ∇·x̂₀ should be zero
             div_x0 = divergence_2d_diffable(x0_hat)
-            loss_div = (div_x0 ** 2).mean()
+            residual_div = div_x0.norm()
 
-            loss = (
-                guidance_scale_boundary * loss_boundary
-                + guidance_scale_div * loss_div
-            )
+            if normalize_grad:
+                # DPS-style (Chung et al. Algorithm 1):
+                #   step = ζ · ∇_{x_t} ‖r‖²  /  ‖r‖
+                # Use ‖r‖² (sum, not mean) so gradient magnitude matches DPS.
+                loss_boundary_sum = (diff_known ** 2).sum()
+                loss_div_sum = (div_x0 ** 2).sum()
 
-            # ── gradient step ────────────────────────────────────────
-            grad = torch.autograd.grad(loss, x_in)[0]
+                grad_boundary = torch.autograd.grad(
+                    loss_boundary_sum, x_in, retain_graph=(guidance_scale_div > 0)
+                )[0]
+
+                if guidance_scale_div > 0:
+                    grad_div = torch.autograd.grad(loss_div_sum, x_in)[0]
+                else:
+                    grad_div = torch.zeros_like(grad_boundary)
+
+                # Normalize each gradient by its residual norm (DPS Eq. 16)
+                norm_b = residual_boundary.clamp(min=1e-8)
+                norm_d = residual_div.clamp(min=1e-8)
+                grad = (
+                    guidance_scale_boundary * grad_boundary / norm_b
+                    + guidance_scale_div * grad_div / norm_d
+                )
+            else:
+                # Original behaviour: raw λ·∇L  (MSE-based)
+                loss_boundary = (diff_known ** 2).sum() / known_mask.sum().clamp(min=1)
+                loss_div = (div_x0 ** 2).mean()
+                loss = (
+                    guidance_scale_boundary * loss_boundary
+                    + guidance_scale_div * loss_div
+                )
+                grad = torch.autograd.grad(loss, x_in)[0]
 
             # ── standard DDPM reverse step (no copy-paste!) ──────────
             with torch.no_grad():
@@ -926,6 +974,770 @@ def repaint_standard(
                          + (1 - alpha_t).sqrt() * noise_back)
 
     # --- Final CG projection (optional, project → restore known → repeat) ---
+    if project_final_steps > 0:
+        for _ in range(project_final_steps):
+            pre_energy = (x ** 2).sum()
+            x = forward_diff_project_div_free(x)
+            post_energy = (x ** 2).sum()
+            if post_energy > 1e-12:
+                x = x * (pre_energy / post_energy).sqrt()
+            x = input_img * known_mask + x * mask_dev
+
+    return x
+
+
+def repaint_gp_init(
+    ddpm,
+    input_image,
+    mask,
+    gp_image,
+    t_start=100,
+    n_samples=1,
+    device=None,
+    channels=2,
+    height=64,
+    width=128,
+    noise_strategy=None,
+    prediction_target="x0",
+    resample_steps=5,
+    project_div_free=False,
+    project_final_steps=0,
+):
+    """SDEdit-style RePaint initialised from a GP estimate.
+
+    Instead of starting from pure noise x_T, builds a composite image
+    (known pixels = ground truth, unknown pixels = GP estimate), forward-
+    diffuses it to timestep t_start, then runs the standard RePaint reverse
+    process from t_start down to 0.
+
+    The GP provides plausible large-scale structure; the DDPM refines it
+    by adding learned fine-scale detail. Lower t_start preserves more GP
+    structure; higher t_start gives the DDPM more freedom.
+
+    Args:
+        ddpm: GaussianDDPM with a standard UNet.
+        input_image: (1, 2, H, W) standardised input (known values).
+        mask: (1, 2, H, W) mask, 1 = missing (to inpaint), 0 = known.
+        gp_image: (1, 2, H, W) GP estimate in STANDARDISED space.
+        t_start: timestep to noise the GP composite to (0..n_steps-1).
+            Higher = more noise = more DDPM freedom.
+            Typical values: 50, 100, 150.
+        prediction_target: "x0" or "eps".
+        resample_steps: RePaint resample iterations per timestep.
+        (other args same as repaint_standard)
+
+    Returns:
+        (1, 2, H, W) inpainted result in standardised space.
+    """
+    if noise_strategy is None:
+        noise_strategy = dd.get_noise_strategy()
+    if device is None:
+        device = dd.get_device()
+
+    input_img = input_image.clone().to(device)
+    gp_img = gp_image.clone().to(device)
+    mask_dev = mask.to(device)
+    known_mask = 1.0 - mask_dev  # 1 where known
+
+    # Clamp t_start to valid range
+    t_start = min(t_start, ddpm.n_steps - 1)
+
+    # Build composite: known = GT, unknown = GP (all in standardised space)
+    composite = input_img * known_mask + gp_img * mask_dev
+
+    # Forward-diffuse composite to t_start:
+    #   x_{t_start} = sqrt(alpha_bar_{t_start}) * composite + sqrt(1-alpha_bar_{t_start}) * eps
+    alpha_bar_t = ddpm.alpha_bars[t_start].to(device)
+    noise_init = noise_strategy(
+        torch.zeros(n_samples, channels, height, width, device=device),
+        torch.tensor([t_start], device=device),
+    )
+    x = alpha_bar_t.sqrt() * composite + (1 - alpha_bar_t).sqrt() * noise_init
+
+    ddpm.eval()
+    with torch.no_grad():
+        for t in tqdm(range(t_start, -1, -1), desc=f"RePaint-GP(t={t_start})"):
+            n_resample = resample_steps if t > 0 else 1
+
+            for r in range(n_resample):
+                alpha_t = ddpm.alphas[t].to(device)
+                alpha_bar_t = ddpm.alpha_bars[t].to(device)
+                beta_t = ddpm.betas[t].to(device)
+
+                time_tensor = torch.full(
+                    (n_samples, 1), t, device=device, dtype=torch.long
+                )
+
+                # --- Reverse step: x_t -> x_{t-1} ---
+                net_out = ddpm.backward(x, time_tensor)
+
+                if prediction_target == "x0":
+                    x0_pred = net_out
+                else:  # eps
+                    x0_pred = (
+                        x - (1 - alpha_bar_t).sqrt() * net_out
+                    ) / alpha_bar_t.sqrt().clamp(min=1e-8)
+
+                if t > 0:
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+
+                    # Posterior mean
+                    coeff_x0 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t)
+                    coeff_xt = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t)
+                    mu = coeff_x0 * x0_pred + coeff_xt * x
+
+                    # Posterior variance
+                    beta_tilde = ((1 - alpha_bar_prev) / (1 - alpha_bar_t)) * beta_t
+                    sigma_t = beta_tilde.sqrt()
+
+                    z = noise_strategy(
+                        torch.zeros_like(x),
+                        torch.tensor([t], device=device),
+                    )
+                    x_denoised = mu + sigma_t * z
+                else:
+                    x_denoised = x0_pred
+
+                # --- RePaint: paste forward-noised known region ---
+                if t > 0:
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+                    noise_known = noise_strategy(
+                        torch.zeros_like(input_img),
+                        torch.tensor([t - 1], device=device),
+                    )
+                    x_known = (alpha_bar_prev.sqrt() * input_img
+                               + (1 - alpha_bar_prev).sqrt() * noise_known)
+                    x = x_known * known_mask + x_denoised * mask_dev
+                else:
+                    x = input_img * known_mask + x_denoised * mask_dev
+
+                # --- CG div-free projection after paste ---
+                if project_div_free and t > 0:
+                    pre_energy = (x ** 2).sum()
+                    x = forward_diff_project_div_free(x)
+                    post_energy = (x ** 2).sum()
+                    if post_energy > 1e-12:
+                        x = x * (pre_energy / post_energy).sqrt()
+                    if t > 0:
+                        x = x_known * known_mask + x * mask_dev
+                    else:
+                        x = input_img * known_mask + x * mask_dev
+
+                # --- Resample ---
+                if r < n_resample - 1 and t > 0:
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+                    noise_back = noise_strategy(
+                        torch.zeros_like(x),
+                        torch.tensor([t], device=device),
+                    )
+                    x = (alpha_t.sqrt() * x
+                         + (1 - alpha_t).sqrt() * noise_back)
+
+    # --- Final CG projection ---
+    if project_final_steps > 0:
+        for _ in range(project_final_steps):
+            pre_energy = (x ** 2).sum()
+            x = forward_diff_project_div_free(x)
+            post_energy = (x ** 2).sum()
+            if post_energy > 1e-12:
+                x = x * (pre_energy / post_energy).sqrt()
+            x = input_img * known_mask + x * mask_dev
+
+    return x
+
+
+def repaint_gp_init_adaptive(
+    ddpm,
+    input_image,
+    mask,
+    gp_image,
+    gp_variance_map,
+    t_start=100,
+    noise_floor=0.2,
+    n_samples=1,
+    device=None,
+    channels=2,
+    height=64,
+    width=128,
+    noise_strategy=None,
+    prediction_target="x0",
+    resample_steps=5,
+    project_div_free=False,
+    project_final_steps=0,
+    anneal_floor=False,
+    gamma=3.0,
+):
+    """Uncertainty-adaptive GP-Refined RePaint.
+
+    Like repaint_gp_init, but spatially modulates noise at EVERY step
+    using the GP posterior variance — not just at initialization.
+    Areas where the GP is uncertain receive full noise (giving the DDPM
+    freedom to correct them), while confident areas receive reduced
+    noise (preserving the GP estimate throughout the reverse process).
+
+    The noise weight at each pixel is:
+        w(i,j) = noise_floor + (1 - noise_floor) * var_norm(i,j) ** gamma
+    where var_norm is the GP variance normalised to [0, 1] and gamma
+    controls the nonlinearity of the confidence mapping:
+      gamma < 1: more aggressive preservation (even moderate-confidence areas)
+      gamma = 1: linear (default, current behaviour)
+      gamma > 1: concentrate preservation on most-confident pixels only
+
+    The weight is applied at three noise injection points:
+      1. Forward-diffusion init: x_t = √ᾱ_t · comp + w · √(1-ᾱ_t) · ε
+      2. Reverse-step sampling:  x_{t-1} = μ + w · σ_t · z
+      3. RePaint resampling:     x_t = √α_t · x + w · √(1-α_t) · ε_back
+
+    This ensures that GP-confident regions stay closer to the GP
+    estimate throughout the entire denoising trajectory.
+
+    Args:
+        ddpm: GaussianDDPM with a standard UNet.
+        input_image: (1, 2, H, W) standardised input (known values).
+        mask: (1, 2, H, W) mask, 1 = missing (to inpaint), 0 = known.
+        gp_image: (1, 2, H, W) GP estimate in STANDARDISED space.
+        gp_variance_map: (1, 2, H, W) or (1, 1, H, W) GP posterior variance
+            in PHYSICAL (unstandardised) space.
+        t_start: timestep to noise to (0..n_steps-1).
+        noise_floor: minimum noise weight for most-confident GP areas.
+            0.0 = no noise at confident spots, 1.0 = uniform (same as
+            repaint_gp_init). Recommended: 0.1-0.3.
+        anneal_floor: if True, linearly anneal noise_floor from its base
+            value at t=t_start up to 1.0 at t=0. This keeps the UNet
+            in-distribution at low t (where it is most sensitive to
+            noise scale) while still preserving GP confidence early.
+            Formula: noise_floor_t = noise_floor + (1-noise_floor)*(1-t/t_start)
+            NOTE: tested negative — makes results worse. Keep default False.
+        gamma: exponent for nonlinear confidence mapping. Default 1.0 (linear).
+            Values < 1 spread preservation to moderate-confidence areas;
+            values > 1 concentrate it on most-confident pixels.
+        prediction_target: "x0" or "eps".
+        resample_steps: RePaint resample iterations per timestep.
+        (other args same as repaint_gp_init)
+
+    Returns:
+        (1, 2, H, W) inpainted result in standardised space.
+    """
+    if noise_strategy is None:
+        noise_strategy = dd.get_noise_strategy()
+    if device is None:
+        device = dd.get_device()
+
+    input_img = input_image.clone().to(device)
+    gp_img = gp_image.clone().to(device)
+    mask_dev = mask.to(device)
+    known_mask = 1.0 - mask_dev  # 1 where known
+
+    # Clamp t_start to valid range
+    t_start = min(t_start, ddpm.n_steps - 1)
+
+    # Build composite: known = GT, unknown = GP (all in standardised space)
+    composite = input_img * known_mask + gp_img * mask_dev
+
+    # --- Build spatially-varying noise weight from GP variance ---
+    gp_var = gp_variance_map.to(device)
+    # If single-channel, broadcast to 2 channels
+    if gp_var.shape[1] == 1:
+        gp_var = gp_var.expand_as(mask_dev)
+
+    # Only consider variance in the masked (unknown) region
+    # Normalise to [0, 1] within the unknown region
+    masked_var = gp_var * mask_dev
+    var_max = masked_var.max()
+    var_min = masked_var[mask_dev > 0.5].min() if (mask_dev > 0.5).any() else torch.tensor(0.0)
+    var_range = var_max - var_min
+    if var_range < 1e-12:
+        # GP variance is constant — fall back to uniform noise
+        var_norm = torch.ones_like(mask_dev)
+    else:
+        var_norm = (masked_var - var_min) / var_range
+        var_norm = var_norm.clamp(0, 1)
+
+    noise_weight = noise_floor + (1.0 - noise_floor) * var_norm ** gamma
+
+    # Known region: noise_weight = 1 (doesn't matter, will be replaced by RePaint)
+    noise_weight = noise_weight * mask_dev + known_mask
+
+    # Forward-diffuse composite to t_start with spatially-varying noise:
+    #   x_{t_start} = sqrt(ᾱ_t) * composite + w * sqrt(1-ᾱ_t) * eps
+    alpha_bar_t = ddpm.alpha_bars[t_start].to(device)
+    noise_init = noise_strategy(
+        torch.zeros(n_samples, channels, height, width, device=device),
+        torch.tensor([t_start], device=device),
+    )
+    x = alpha_bar_t.sqrt() * composite + noise_weight * (1 - alpha_bar_t).sqrt() * noise_init
+
+    # --- Reverse process (uncertainty-weighted at every step) ---
+    ddpm.eval()
+    with torch.no_grad():
+        for t in tqdm(range(t_start, -1, -1), desc=f"AdaptiveGP(t={t_start})"):
+            # Time-varying noise floor: anneal from noise_floor at t_start
+            # up to 1.0 at t=0 (keeps UNet in-distribution at low t).
+            if anneal_floor and t < t_start:
+                nf_t = noise_floor + (1.0 - noise_floor) * (1.0 - t / t_start)
+                nw = nf_t + (1.0 - nf_t) * var_norm ** gamma
+                nw = nw * mask_dev + known_mask
+            else:
+                nw = noise_weight
+
+            n_resample = resample_steps if t > 0 else 1
+
+            for r in range(n_resample):
+                alpha_t = ddpm.alphas[t].to(device)
+                alpha_bar_t = ddpm.alpha_bars[t].to(device)
+                beta_t = ddpm.betas[t].to(device)
+
+                time_tensor = torch.full(
+                    (n_samples, 1), t, device=device, dtype=torch.long
+                )
+
+                net_out = ddpm.backward(x, time_tensor)
+
+                if prediction_target == "x0":
+                    x0_pred = net_out
+                else:  # eps
+                    x0_pred = (
+                        x - (1 - alpha_bar_t).sqrt() * net_out
+                    ) / alpha_bar_t.sqrt().clamp(min=1e-8)
+
+                if t > 0:
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+
+                    coeff_x0 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t)
+                    coeff_xt = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t)
+                    mu = coeff_x0 * x0_pred + coeff_xt * x
+
+                    beta_tilde = ((1 - alpha_bar_prev) / (1 - alpha_bar_t)) * beta_t
+                    sigma_t = beta_tilde.sqrt()
+
+                    z = noise_strategy(
+                        torch.zeros_like(x),
+                        torch.tensor([t], device=device),
+                    )
+                    # Uncertainty-weighted: less noise where GP is confident
+                    x_denoised = mu + nw * sigma_t * z
+                else:
+                    x_denoised = x0_pred
+
+                # --- RePaint: paste forward-noised known region ---
+                if t > 0:
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+                    noise_known = noise_strategy(
+                        torch.zeros_like(input_img),
+                        torch.tensor([t - 1], device=device),
+                    )
+                    x_known = (alpha_bar_prev.sqrt() * input_img
+                               + (1 - alpha_bar_prev).sqrt() * noise_known)
+                    x = x_known * known_mask + x_denoised * mask_dev
+                else:
+                    x = input_img * known_mask + x_denoised * mask_dev
+
+                # --- CG div-free projection after paste ---
+                if project_div_free and t > 0:
+                    pre_energy = (x ** 2).sum()
+                    x = forward_diff_project_div_free(x)
+                    post_energy = (x ** 2).sum()
+                    if post_energy > 1e-12:
+                        x = x * (pre_energy / post_energy).sqrt()
+                    if t > 0:
+                        x = x_known * known_mask + x * mask_dev
+                    else:
+                        x = input_img * known_mask + x * mask_dev
+
+                # --- Resample (uncertainty-weighted) ---
+                if r < n_resample - 1 and t > 0:
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+                    noise_back = noise_strategy(
+                        torch.zeros_like(x),
+                        torch.tensor([t], device=device),
+                    )
+                    x = (alpha_t.sqrt() * x
+                         + nw * (1 - alpha_t).sqrt() * noise_back)
+
+    # --- Final CG projection ---
+    if project_final_steps > 0:
+        for _ in range(project_final_steps):
+            pre_energy = (x ** 2).sum()
+            x = forward_diff_project_div_free(x)
+            post_energy = (x ** 2).sum()
+            if post_energy > 1e-12:
+                x = x * (pre_energy / post_energy).sqrt()
+            x = input_img * known_mask + x * mask_dev
+
+    return x
+
+
+def repaint_gp_init_guided(
+    ddpm,
+    input_image,
+    mask,
+    gp_image,
+    gp_variance_map,
+    t_start=100,
+    noise_floor=0.2,
+    guidance_scale=1.0,
+    n_samples=1,
+    device=None,
+    channels=2,
+    height=64,
+    width=128,
+    noise_strategy=None,
+    prediction_target="x0",
+    resample_steps=5,
+    project_div_free=False,
+    project_final_steps=0,
+):
+    """GP-Refined RePaint with gradient guidance (in-distribution noise).
+
+    All noise injections remain at the standard DDPM level — the UNet
+    always sees uniformly-noised images consistent with training.
+
+    GP confidence is incorporated via classifier-style guidance
+    (Dhariwal & Nichol 2021).  At each reverse step we:
+      1. Enable gradients on x_t
+      2. Run the UNet to get x0_pred
+      3. Compute a GP-fidelity loss weighted by confidence:
+            L = || w * (x0_pred - gp_image) ||^2
+         where w is high where GP variance is low (confident)
+      4. Backprop to get  g = ∇_{x_t} L
+      5. Shift the posterior mean:  μ ← μ − guidance_scale · g
+
+    Unlike x0-blend (which nudges x0 but gets washed out by noise), the
+    gradient operates on x_t directly, creating a *persistent trajectory
+    shift* that compounds across timesteps.
+
+    Args:
+        guidance_scale: Strength of the gradient push. Higher values push
+            harder toward GP.  Start with ~1.0 and tune.  The gradient is
+            already variance-weighted, so this is a global multiplier.
+        (other args same as repaint_gp_init_adaptive)
+
+    Returns:
+        (1, 2, H, W) inpainted result in standardised space.
+    """
+    if noise_strategy is None:
+        noise_strategy = dd.get_noise_strategy()
+    if device is None:
+        device = dd.get_device()
+
+    input_img = input_image.clone().to(device)
+    gp_img = gp_image.clone().to(device)
+    mask_dev = mask.to(device)
+    known_mask = 1.0 - mask_dev  # 1 where known
+
+    # Clamp t_start to valid range
+    t_start = min(t_start, ddpm.n_steps - 1)
+
+    # Build composite: known = GT, unknown = GP (all in standardised space)
+    composite = input_img * known_mask + gp_img * mask_dev
+
+    # --- Build GP-confidence weight from GP variance ---
+    # conf_w is HIGH where GP is confident (low variance)
+    gp_var = gp_variance_map.to(device)
+    if gp_var.shape[1] == 1:
+        gp_var = gp_var.expand_as(mask_dev)
+
+    masked_var = gp_var * mask_dev
+    var_max = masked_var.max()
+    var_min = (masked_var[mask_dev > 0.5].min()
+               if (mask_dev > 0.5).any() else torch.tensor(0.0))
+    var_range = var_max - var_min
+    if var_range < 1e-12:
+        conf_w = torch.zeros_like(mask_dev)
+    else:
+        var_norm = ((masked_var - var_min) / var_range).clamp(0, 1)
+        # Invert: low variance → high confidence → strong guidance
+        conf_w = (1.0 - noise_floor) * (1.0 - var_norm)
+
+    # Only guide in unknown region
+    conf_w = conf_w * mask_dev
+
+    # Forward-diffuse composite to t_start with STANDARD (uniform) noise
+    alpha_bar_t = ddpm.alpha_bars[t_start].to(device)
+    noise_init = noise_strategy(
+        torch.zeros(n_samples, channels, height, width, device=device),
+        torch.tensor([t_start], device=device),
+    )
+    x = alpha_bar_t.sqrt() * composite + (1 - alpha_bar_t).sqrt() * noise_init
+
+    # --- Reverse process with gradient guidance ---
+    ddpm.eval()
+    for t in tqdm(range(t_start, -1, -1), desc=f"Guided(t={t_start})"):
+        n_resample = resample_steps if t > 0 else 1
+
+        for r in range(n_resample):
+            alpha_t = ddpm.alphas[t].to(device)
+            alpha_bar_t_val = ddpm.alpha_bars[t].to(device)
+            beta_t = ddpm.betas[t].to(device)
+
+            time_tensor = torch.full(
+                (n_samples, 1), t, device=device, dtype=torch.long
+            )
+
+            # --- Gradient guidance step (requires grad on x) ---
+            x_grad = x.detach().requires_grad_(True)
+            net_out = ddpm.backward(x_grad, time_tensor)
+
+            if prediction_target == "x0":
+                x0_pred_g = net_out
+            else:  # eps
+                x0_pred_g = (
+                    x_grad - (1 - alpha_bar_t_val).sqrt() * net_out
+                ) / alpha_bar_t_val.sqrt().clamp(min=1e-8)
+
+            # GP-fidelity loss: weighted MSE between x0_pred and GP
+            residual = conf_w * (x0_pred_g - gp_img)
+            loss = (residual ** 2).sum()
+            loss.backward()
+
+            grad = x_grad.grad.detach()
+            x0_pred = x0_pred_g.detach()
+
+            # --- Standard posterior mean, shifted by gradient ---
+            if t > 0:
+                alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+
+                coeff_x0 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t_val)
+                coeff_xt = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t_val)
+                mu = coeff_x0 * x0_pred + coeff_xt * x.detach()
+
+                # Gradient guidance: shift mean toward GP
+                mu = mu - guidance_scale * grad
+
+                beta_tilde = ((1 - alpha_bar_prev) / (1 - alpha_bar_t_val)) * beta_t
+                sigma_t = beta_tilde.sqrt()
+
+                z = noise_strategy(
+                    torch.zeros_like(x),
+                    torch.tensor([t], device=device),
+                )
+                # Standard uniform noise — UNet stays in-distribution
+                x_denoised = mu + sigma_t * z
+            else:
+                x_denoised = x0_pred
+
+            # --- RePaint: paste forward-noised known region ---
+            if t > 0:
+                alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+                with torch.no_grad():
+                    noise_known = noise_strategy(
+                        torch.zeros_like(input_img),
+                        torch.tensor([t - 1], device=device),
+                    )
+                x_known = (alpha_bar_prev.sqrt() * input_img
+                           + (1 - alpha_bar_prev).sqrt() * noise_known)
+                x = x_known * known_mask + x_denoised * mask_dev
+            else:
+                x = input_img * known_mask + x_denoised * mask_dev
+
+            x = x.detach()  # break graph for next iteration
+
+            # --- CG div-free projection after paste ---
+            if project_div_free and t > 0:
+                pre_energy = (x ** 2).sum()
+                x = forward_diff_project_div_free(x)
+                post_energy = (x ** 2).sum()
+                if post_energy > 1e-12:
+                    x = x * (pre_energy / post_energy).sqrt()
+                if t > 0:
+                    x = x_known * known_mask + x * mask_dev
+                else:
+                    x = input_img * known_mask + x * mask_dev
+
+            # --- Resample with STANDARD noise ---
+            if r < n_resample - 1 and t > 0:
+                with torch.no_grad():
+                    noise_back = noise_strategy(
+                        torch.zeros_like(x),
+                        torch.tensor([t], device=device),
+                    )
+                x = (alpha_t.sqrt() * x
+                     + (1 - alpha_t).sqrt() * noise_back)
+
+    # --- Final CG projection ---
+    if project_final_steps > 0:
+        for _ in range(project_final_steps):
+            pre_energy = (x ** 2).sum()
+            x = forward_diff_project_div_free(x)
+            post_energy = (x ** 2).sum()
+            if post_energy > 1e-12:
+                x = x * (pre_energy / post_energy).sqrt()
+            x = input_img * known_mask + x * mask_dev
+
+    return x
+
+
+def repaint_gp_init_x0blend(
+    ddpm,
+    input_image,
+    mask,
+    gp_image,
+    gp_variance_map,
+    t_start=100,
+    noise_floor=0.2,
+    n_samples=1,
+    device=None,
+    channels=2,
+    height=64,
+    width=128,
+    noise_strategy=None,
+    prediction_target="x0",
+    resample_steps=5,
+    project_div_free=False,
+    project_final_steps=0,
+):
+    """GP-Refined RePaint with x0-prediction blending (in-distribution noise).
+
+    Unlike repaint_gp_init_adaptive, all noise injections remain at the
+    standard DDPM level — the UNet always sees uniformly-noised images
+    consistent with its training distribution.
+
+    The GP confidence is incorporated *after* the UNet predicts x0:
+        x0_blended = w * gp_image + (1 - w) * x0_pred
+    where w is high where the GP is confident (low variance) and low
+    where the GP is uncertain (high variance):
+        w(i,j) = (1 - noise_floor) * (1 - var_norm(i,j))
+
+    The posterior mean is then recomputed from x0_blended, and denoising
+    proceeds with standard uniform noise.  This keeps the UNet perfectly
+    in-distribution while still nudging the trajectory toward the GP in
+    high-confidence areas.
+
+    Args:
+        Same as repaint_gp_init_adaptive.
+
+    Returns:
+        (1, 2, H, W) inpainted result in standardised space.
+    """
+    if noise_strategy is None:
+        noise_strategy = dd.get_noise_strategy()
+    if device is None:
+        device = dd.get_device()
+
+    input_img = input_image.clone().to(device)
+    gp_img = gp_image.clone().to(device)
+    mask_dev = mask.to(device)
+    known_mask = 1.0 - mask_dev  # 1 where known
+
+    # Clamp t_start to valid range
+    t_start = min(t_start, ddpm.n_steps - 1)
+
+    # Build composite: known = GT, unknown = GP (all in standardised space)
+    composite = input_img * known_mask + gp_img * mask_dev
+
+    # --- Build GP-confidence blend weight from GP variance ---
+    # blend_w is HIGH where GP is confident → keep GP prediction
+    # blend_w is LOW where GP is uncertain → trust DDPM prediction
+    gp_var = gp_variance_map.to(device)
+    if gp_var.shape[1] == 1:
+        gp_var = gp_var.expand_as(mask_dev)
+
+    masked_var = gp_var * mask_dev
+    var_max = masked_var.max()
+    var_min = masked_var[mask_dev > 0.5].min() if (mask_dev > 0.5).any() else torch.tensor(0.0)
+    var_range = var_max - var_min
+    if var_range < 1e-12:
+        # Constant variance → no blending, trust DDPM fully
+        blend_w = torch.zeros_like(mask_dev)
+    else:
+        var_norm = ((masked_var - var_min) / var_range).clamp(0, 1)
+        # Invert: low variance → high blend weight (keep GP)
+        # Scale by (1 - noise_floor) so noise_floor=0.2 → max blend = 0.8
+        blend_w = (1.0 - noise_floor) * (1.0 - var_norm)
+
+    # Known region gets zero blend (will be pasted by RePaint anyway)
+    blend_w = blend_w * mask_dev
+
+    # Forward-diffuse composite to t_start with STANDARD (uniform) noise:
+    alpha_bar_t = ddpm.alpha_bars[t_start].to(device)
+    noise_init = noise_strategy(
+        torch.zeros(n_samples, channels, height, width, device=device),
+        torch.tensor([t_start], device=device),
+    )
+    x = alpha_bar_t.sqrt() * composite + (1 - alpha_bar_t).sqrt() * noise_init
+
+    # --- Reverse process (x0-blending at every step, uniform noise) ---
+    ddpm.eval()
+    with torch.no_grad():
+        for t in tqdm(range(t_start, -1, -1), desc=f"x0Blend(t={t_start})"):
+            n_resample = resample_steps if t > 0 else 1
+
+            for r in range(n_resample):
+                alpha_t = ddpm.alphas[t].to(device)
+                alpha_bar_t = ddpm.alpha_bars[t].to(device)
+                beta_t = ddpm.betas[t].to(device)
+
+                time_tensor = torch.full(
+                    (n_samples, 1), t, device=device, dtype=torch.long
+                )
+
+                net_out = ddpm.backward(x, time_tensor)
+
+                if prediction_target == "x0":
+                    x0_pred = net_out
+                else:  # eps
+                    x0_pred = (
+                        x - (1 - alpha_bar_t).sqrt() * net_out
+                    ) / alpha_bar_t.sqrt().clamp(min=1e-8)
+
+                # --- x0 blending: nudge toward GP where confident ---
+                x0_blended = (1.0 - blend_w) * x0_pred + blend_w * gp_img
+
+                if t > 0:
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+
+                    # Recompute posterior mean from BLENDED x0
+                    coeff_x0 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t)
+                    coeff_xt = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t)
+                    mu = coeff_x0 * x0_blended + coeff_xt * x
+
+                    beta_tilde = ((1 - alpha_bar_prev) / (1 - alpha_bar_t)) * beta_t
+                    sigma_t = beta_tilde.sqrt()
+
+                    z = noise_strategy(
+                        torch.zeros_like(x),
+                        torch.tensor([t], device=device),
+                    )
+                    # Standard uniform noise — UNet stays in-distribution
+                    x_denoised = mu + sigma_t * z
+                else:
+                    x_denoised = x0_blended
+
+                # --- RePaint: paste forward-noised known region ---
+                if t > 0:
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+                    noise_known = noise_strategy(
+                        torch.zeros_like(input_img),
+                        torch.tensor([t - 1], device=device),
+                    )
+                    x_known = (alpha_bar_prev.sqrt() * input_img
+                               + (1 - alpha_bar_prev).sqrt() * noise_known)
+                    x = x_known * known_mask + x_denoised * mask_dev
+                else:
+                    x = input_img * known_mask + x_denoised * mask_dev
+
+                # --- CG div-free projection after paste ---
+                if project_div_free and t > 0:
+                    pre_energy = (x ** 2).sum()
+                    x = forward_diff_project_div_free(x)
+                    post_energy = (x ** 2).sum()
+                    if post_energy > 1e-12:
+                        x = x * (pre_energy / post_energy).sqrt()
+                    if t > 0:
+                        x = x_known * known_mask + x * mask_dev
+                    else:
+                        x = input_img * known_mask + x * mask_dev
+
+                # --- Resample with STANDARD noise ---
+                if r < n_resample - 1 and t > 0:
+                    noise_back = noise_strategy(
+                        torch.zeros_like(x),
+                        torch.tensor([t], device=device),
+                    )
+                    x = (alpha_t.sqrt() * x
+                         + (1 - alpha_t).sqrt() * noise_back)
+
+    # --- Final CG projection ---
     if project_final_steps > 0:
         for _ in range(project_final_steps):
             pre_energy = (x ** 2).sum()

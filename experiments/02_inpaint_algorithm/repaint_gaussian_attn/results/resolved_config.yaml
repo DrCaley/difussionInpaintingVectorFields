@@ -10,9 +10,9 @@ unet_type: standard_attn
 mask_xt: false
 prediction_target: eps
 p_uncond: 0.0
-retrain_mode: false
-model_to_retrain: null
-reset_best: false
+retrain_mode: true
+model_to_retrain: experiments/02_inpaint_algorithm/repaint_gaussian_attn/results/inpaint_gaussian_t250_Feb20_2037.pt
+reset_best: true
 partial_conv_mode: false
 training_mode: true
 testSeed: 42
@@ -20,6 +20,12 @@ epochs: 1000
 batch_size: 16
 lr: 0.0003
 max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999
+augment: false
 standardizer_type: auto
 standardizer_by_noise:
   gaussian: zscore

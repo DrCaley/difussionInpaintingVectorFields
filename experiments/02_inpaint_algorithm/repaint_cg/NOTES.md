@@ -71,6 +71,13 @@ errors in the eps→x₀ conversion.
 - `scripts/diagnose_repaint_magnitudes.py` — 5-test magnitude diagnostic
 - `scripts/diagnose_uncond_generation.py` — unconditional generation sanity check
 
+### Diagnostic outputs (bad-beta model)
+
+- `results/inpaint_demo/` — 5 PNG panels: ground truth, masked, plain RePaint,
+  RePaint+CG, GP baseline (all from the bad-beta model with magnitude blow-up)
+- `results/cg_step_diagnosis/` — per-timestep before/after CG projections
+  (before_cg, after_cg, cg_diff) as .pt and .png files for t=0,1,...,150+
+
 ---
 
 ## 2026-02-19 — Retraining with corrected beta schedule
@@ -81,6 +88,29 @@ errors in the eps→x₀ conversion.
 - Best test loss: 0.003686 at epoch 348 (converged but slightly higher than
   the old model's 0.0023 — expected since old model had more aggressive noise
   which may have been easier to denoise in the low-noise regime)
+
+---
+
+## 2026-02-20 — Cross-experiment findings
+
+The `fwd_divfree_equalized` experiment confirmed that **RePaint is fundamentally
+incompatible with spatially-correlated noise** — including the div-free noise
+used by this experiment's training. The paste step truncates spatial correlations
+in the noise, and the model receives out-of-distribution inputs during inference.
+
+**Implications for repaint_cg:**
+- This model was trained with `forward_diff_div_free` noise (spatially correlated)
+- RePaint inference will suffer the same noise distribution mismatch
+- However, the CG projection step may partially compensate by re-imposing
+  divergence-free structure after each paste
+- Inference with the corrected-beta model is needed to determine whether
+  CG projection is sufficient to overcome the noise mismatch
+
+**Alternative approach:** A model trained with **Gaussian noise** + post-hoc
+CG projection at inference would avoid the noise mismatch entirely. The
+`repaint_gaussian` baseline model (or `repaint_gaussian_attn` attention model)
+could be used with `project_div_free=True` in `repaint_standard()` to test
+this without retraining.
 
 ---
 
@@ -97,7 +127,10 @@ errors in the eps→x₀ conversion.
 ## Status
 
 **Retrained** with corrected beta schedule (357 epochs, best test loss 0.003686).
-Inference with corrected model not yet run. This experiment shares the same
-spectral gap in `forward_diff_div_free` noise identified in the fwd_divfree
-experiment — the equalized noise variant (`fwd_divfree_equalized`) may perform
-better for this reason.
+Inference with corrected model not yet run. Cross-experiment findings from the
+equalized div-free experiment suggest the noise distribution mismatch may limit
+RePaint quality — testing will determine whether CG projection compensates.
+
+This experiment shares the same spectral gap in `forward_diff_div_free` noise
+identified in the fwd_divfree experiment — the equalized noise variant
+(`fwd_divfree_equalized`) may perform better for this reason.

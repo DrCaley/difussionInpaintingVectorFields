@@ -1,23 +1,25 @@
 augment: false
 batch_size: 16
-ema_decay: 0.9999
+ema_decay: 0.999
+ema_warmup_steps: 500
 enable_divergence_projection: auto
 epochs: 1000
 gpu_to_use: 0
+gradient_accumulation_steps: 5
 loss_function: mse
-lr: 0.0003
+lr: 0.0005
 lr_schedule: cosine
 mag_mean: 0.1446947511640557
 mask_xt: false
 max_beta: 0.02
 max_grad_norm: 1.0
 min_beta: 0.0001
-model_name: repaint_gaussian_attn_eps_t250
-model_to_retrain: experiments/02_inpaint_algorithm/repaint_gaussian_attn/results/inpaint_gaussian_t250_Feb20_2037.pt
+model_name: repaint_gaussian_attn_v2
+model_to_retrain: experiments/02_inpaint_algorithm/repaint_gaussian_attn_v2/results/inpaint_gaussian_t250_best_checkpoint.pt
 noise_function: gaussian
 noise_steps: 250
 num_workers: 0
-output_dir: /Users/caleyjb/Library/Mobile Documents/com~apple~CloudDocs/JeffsStuff/PLU/Research/diffusionInpaintingVectorFields/experiments/02_inpaint_algorithm/repaint_gaussian_attn/results
+output_dir: /Users/caleyjb/Library/Mobile Documents/com~apple~CloudDocs/JeffsStuff/PLU/Research/diffusionInpaintingVectorFields/experiments/02_inpaint_algorithm/repaint_gaussian_attn_v2/results
 p_uncond: 0.0
 partial_conv_mode: false
 prediction_target: eps
@@ -27,7 +29,7 @@ projection_by_noise:
   fwd_diff_eq_divfree: true
   gaussian: false
   spectral_div_free: true
-reset_best: true
+reset_best: false
 retrain_mode: true
 shared_mean: -0.05084468695562498
 shared_std: 0.11479844598042026

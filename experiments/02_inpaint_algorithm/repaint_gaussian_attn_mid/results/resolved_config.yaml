@@ -6,7 +6,7 @@ mag_mean: 0.1446947511640557
 shared_mean: -0.05084468695562498
 shared_std: 0.11479844598042026
 gpu_to_use: 0
-unet_type: standard
+unet_type: standard_attn_mid
 mask_xt: false
 prediction_target: eps
 p_uncond: 0.0
@@ -17,9 +17,15 @@ partial_conv_mode: false
 training_mode: true
 testSeed: 42
 epochs: 1000
-batch_size: 80
+batch_size: 32
 lr: 0.001
-max_grad_norm: 0
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999
+augment: false
 standardizer_type: auto
 standardizer_by_noise:
   gaussian: zscore
@@ -27,7 +33,7 @@ standardizer_by_noise:
   spectral_div_free: zscore_unified
   forward_diff_div_free: zscore_unified
   fwd_diff_eq_divfree: zscore_unified
-noise_function: fwd_diff_eq_divfree
+noise_function: gaussian
 noise_steps: 250
 min_beta: 0.0001
 max_beta: 0.02
@@ -42,5 +48,6 @@ loss_function: mse
 w1: 0.6
 w2: 0.4
 num_workers: 0
-model_name: fwd_diff_eq_divfree_eps_t250
-output_dir: /Users/caleyjb/Library/Mobile Documents/com~apple~CloudDocs/JeffsStuff/PLU/Research/diffusionInpaintingVectorFields/experiments/01_noise_strategy/fwd_divfree_equalized/results
+model_name: repaint_gaussian_attn_mid_eps_t250
+ema_warmup_steps: 2000
+output_dir: /Users/caleyjb/Library/Mobile Documents/com~apple~CloudDocs/JeffsStuff/PLU/Research/diffusionInpaintingVectorFields/experiments/02_inpaint_algorithm/repaint_gaussian_attn_mid/results

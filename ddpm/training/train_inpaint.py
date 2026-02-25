@@ -42,6 +42,9 @@ from ddpm.neural_networks.unets.unet_inpaint import MyUNet_Inpaint
 from ddpm.neural_networks.unets.unet_film import MyUNet_FiLM
 from ddpm.neural_networks.unets.unet_xl import MyUNet
 from ddpm.neural_networks.unets.unet_xl_attn import MyUNet_Attn
+from ddpm.neural_networks.unets.unet_attn_slim import MyUNet_Attn_Slim
+from ddpm.neural_networks.unets.unet_attn_mid import MyUNet_Attn_Mid
+from ddpm.neural_networks.unets.unet_film_attn import MyUNet_FiLM_Attn
 from ddpm.helper_functions.death_messages import get_death_message
 from ddpm.helper_functions.ema import EMA
 
@@ -86,6 +89,9 @@ class TrainInpaint:
             f"prediction_target must be 'eps' or 'x0', got '{self.prediction_target}'"
         )
 
+        # Gradient accumulation: simulate larger batches without more memory
+        self.gradient_accumulation_steps = int(dd.get_attribute("gradient_accumulation_steps") or 1)
+
         # Gradient clipping (max L2 norm); 0 = disabled
         self.max_grad_norm = float(dd.get_attribute("max_grad_norm") or 0)
 
@@ -99,6 +105,7 @@ class TrainInpaint:
         # EMA (Exponential Moving Average of model weights)
         self.use_ema = bool(dd.get_attribute("use_ema") or False)
         self.ema_decay = float(dd.get_attribute("ema_decay") or 0.9999)
+        self.ema_warmup_steps = int(dd.get_attribute("ema_warmup_steps") or 0)
 
         # Data augmentation (velocity-field-aware flips)
         self.augment = bool(dd.get_attribute("augment") or False)
@@ -110,6 +117,9 @@ class TrainInpaint:
         if self.unet_type == "film":
             unet = MyUNet_FiLM(n_steps=self.n_steps).to(self.device)
             logging.info("Using FiLM-conditioned UNet")
+        elif self.unet_type == "film_attn":
+            unet = MyUNet_FiLM_Attn(n_steps=self.n_steps).to(self.device)
+            logging.info("Using FiLM-conditioned UNet with self-attention (film_attn)")
         elif self.unet_type == "standard":
             unet = MyUNet(n_steps=self.n_steps).to(self.device)
             unet.in_channels = 2  # expose for logging
@@ -117,12 +127,18 @@ class TrainInpaint:
         elif self.unet_type == "standard_attn":
             unet = MyUNet_Attn(n_steps=self.n_steps).to(self.device)
             logging.info("Using unconditional UNet with self-attention (standard_attn, 2-channel)")
+        elif self.unet_type == "standard_attn_slim":
+            unet = MyUNet_Attn_Slim(n_steps=self.n_steps).to(self.device)
+            logging.info("Using slim unconditional UNet with bottleneck attention + dropout (standard_attn_slim, 2-channel)")
+        elif self.unet_type == "standard_attn_mid":
+            unet = MyUNet_Attn_Mid(n_steps=self.n_steps).to(self.device)
+            logging.info("Using mid-size unconditional UNet with level4+bottleneck attention + dropout (standard_attn_mid, 2-channel)")
         else:
             unet = MyUNet_Inpaint(n_steps=self.n_steps).to(self.device)
             logging.info("Using concat-conditioned UNet (Palette-style)")
 
         # Unconditional UNets: disable conditioning-related options
-        if self.unet_type in ("standard", "standard_attn"):
+        if self.unet_type in ("standard", "standard_attn", "standard_attn_slim", "standard_attn_mid"):
             if self.mask_xt:
                 logging.warning("mask_xt is ignored for unet_type='%s' (no conditioning)", self.unet_type)
                 self.mask_xt = False
@@ -176,6 +192,7 @@ class TrainInpaint:
         self.best_checkpoint = self.output_dir / f"{model_base}_best_checkpoint.pt"
         self.latest_checkpoint = self.output_dir / f"{model_base}_{self.timestamp}.pt"
         self.best_weights = self.output_dir / f"{model_base}_best_weights.pt"
+        self.best_ema_weights = self.output_dir / f"{model_base}_best_ema_weights.pt"
 
         # Drive backup (auto-detected on Colab, or set drive_backup_dir in config)
         self.drive_backup_dir = self._setup_drive_backup(dd)
@@ -261,7 +278,7 @@ class TrainInpaint:
                     # Forward: noise the clean image
                     noisy = self.ddpm(x0, t, noise)
 
-                    if self.unet_type in ("standard", "standard_attn"):
+                    if self.unet_type in ("standard", "standard_attn", "standard_attn_slim", "standard_attn_mid"):
                         # Unconditional UNet: just (x_t, t) → ε or x̂₀
                         pred = self.ddpm.network(noisy, t.reshape(n, -1))
                     else:
@@ -309,7 +326,7 @@ class TrainInpaint:
         logging.info(f"Prediction target: {self.prediction_target}")
         logging.info(f"LR schedule: {self.lr_schedule}, warmup: {self.warmup_epochs} epochs")
         logging.info(f"Weight decay: {self.weight_decay}")
-        logging.info(f"EMA: {self.use_ema} (decay={self.ema_decay})")
+        logging.info(f"EMA: {self.use_ema} (decay={self.ema_decay}, warmup_steps={self.ema_warmup_steps})")
         logging.info(f"Augmentation: {self.augment}")
         logging.info(f"Output dir: {self.output_dir}")
 
@@ -378,10 +395,15 @@ class TrainInpaint:
             logging.info(f"Cosine LR schedule: peak={self.lr}, warmup={self.warmup_epochs}, "
                          f"min={self.lr * 0.01:.6f}")
 
+        if self.gradient_accumulation_steps > 1:
+            effective_batch = self.batch_size * self.gradient_accumulation_steps
+            logging.info(f"Gradient accumulation: {self.gradient_accumulation_steps} steps "
+                         f"(effective batch size: {effective_batch})")
+
         # EMA
         ema = None
         if self.use_ema:
-            ema = EMA(self.ddpm, decay=self.ema_decay)
+            ema = EMA(self.ddpm, decay=self.ema_decay, warmup_steps=self.ema_warmup_steps)
             # Restore EMA state if resuming
             if self.retrain_mode and self.model_to_retrain:
                 path = Path(self.model_to_retrain)
@@ -390,13 +412,18 @@ class TrainInpaint:
                     if "ema_state" in ema_ckpt:
                         ema.load_state_dict(ema_ckpt["ema_state"])
                         logging.info("Restored EMA state from checkpoint")
-            logging.info(f"EMA enabled (decay={self.ema_decay})")
+            logging.info(f"EMA enabled (decay={self.ema_decay}, warmup_steps={self.ema_warmup_steps})")
 
         # CSV header
         with self.csv_file.open("w", newline="") as f:
-            csv.writer(f).writerow(["Epoch", "Epoch Loss", "Train Loss", "Test Loss"])
+            if ema is not None:
+                csv.writer(f).writerow(["Epoch", "Epoch Loss", "Train Loss", "Test Loss",
+                                        "EMA Train Loss", "EMA Test Loss"])
+            else:
+                csv.writer(f).writerow(["Epoch", "Epoch Loss", "Train Loss", "Test Loss"])
 
         best_epoch = start_epoch
+        accum_steps = self.gradient_accumulation_steps
 
         try:
             for epoch in tqdm(
@@ -406,8 +433,9 @@ class TrainInpaint:
             ):
                 epoch_loss = 0.0
                 self.ddpm.train()
+                optimizer.zero_grad()  # zero once at start of epoch
 
-                for _, (x0, t, noise, mask, known) in enumerate(
+                for batch_idx, (x0, t, noise, mask, known) in enumerate(
                     tqdm(
                         self.train_loader,
                         leave=False,
@@ -423,7 +451,7 @@ class TrainInpaint:
                     # Forward diffusion: add noise to x0
                     noisy = self.ddpm(x0, t, noise)
 
-                    if self.unet_type in ("standard", "standard_attn"):
+                    if self.unet_type in ("standard", "standard_attn", "standard_attn_slim", "standard_attn_mid"):
                         # Unconditional UNet: just (x_t, t) → ε or x̂₀
                         pred = self.ddpm.network(noisy, t.reshape(n, -1))
                     else:
@@ -464,17 +492,22 @@ class TrainInpaint:
                     else:
                         loss = self.loss_strategy(pred, target, noisy)
 
-                    optimizer.zero_grad()
-                    loss.backward()
-                    if self.max_grad_norm > 0:
-                        torch.nn.utils.clip_grad_norm_(
-                            self.ddpm.parameters(), self.max_grad_norm
-                        )
-                    optimizer.step()
+                    # Scale loss for gradient accumulation
+                    scaled_loss = loss / accum_steps
+                    scaled_loss.backward()
 
-                    # Update EMA after each optimizer step
-                    if ema is not None:
-                        ema.update()
+                    # Step optimizer every accum_steps microbatches (or at end of epoch)
+                    if (batch_idx + 1) % accum_steps == 0 or (batch_idx + 1) == len(self.train_loader):
+                        if self.max_grad_norm > 0:
+                            torch.nn.utils.clip_grad_norm_(
+                                self.ddpm.parameters(), self.max_grad_norm
+                            )
+                        optimizer.step()
+                        optimizer.zero_grad()
+
+                        # Update EMA after each optimizer step
+                        if ema is not None:
+                            ema.update()
 
                     epoch_loss += loss.item() * n / len(self.train_loader.dataset)
 
@@ -482,13 +515,18 @@ class TrainInpaint:
                 if scheduler is not None:
                     scheduler.step()
 
-                # Evaluate (use EMA weights if available)
-                if ema is not None:
-                    ema.apply()
+                # Evaluate with RAW weights (used for checkpoint selection)
                 self.ddpm.eval()
                 avg_train_loss = self.evaluate(self.train_loader)
                 avg_test_loss = self.evaluate(self.test_loader, fixed_seed=12345)
+
+                # Also evaluate with EMA weights (logged separately)
+                ema_train_loss = None
+                ema_test_loss = None
                 if ema is not None:
+                    ema.apply()
+                    ema_train_loss = self.evaluate(self.train_loader)
+                    ema_test_loss = self.evaluate(self.test_loader, fixed_seed=12345)
                     ema.restore()
 
                 epoch_losses.append(epoch_loss)
@@ -498,7 +536,10 @@ class TrainInpaint:
                 # CSV logging
                 try:
                     with self.csv_file.open("a", newline="") as f:
-                        csv.writer(f).writerow([epoch + 1, epoch_loss, avg_train_loss, avg_test_loss])
+                        row = [epoch + 1, epoch_loss, avg_train_loss, avg_test_loss]
+                        if ema is not None:
+                            row.extend([ema_train_loss, ema_test_loss])
+                        csv.writer(f).writerow(row)
                 except Exception:
                     pass
 
@@ -527,10 +568,13 @@ class TrainInpaint:
                 if ema is not None:
                     checkpoint["ema_state"] = ema.state_dict()
 
+                ema_str = ""
+                if ema is not None:
+                    ema_str = f", ema_test={ema_test_loss:.7f}"
                 log_str = (
                     f"\nEpoch {epoch + 1}: epoch_loss={epoch_loss:.7f}, "
-                    f"train={avg_train_loss:.7f}, test={avg_test_loss:.7f}, "
-                    f"lr={current_lr:.6f}"
+                    f"train={avg_train_loss:.7f}, test={avg_test_loss:.7f}"
+                    f"{ema_str}, lr={current_lr:.6f}"
                 )
 
                 if avg_test_loss < best_test_loss:
@@ -538,6 +582,11 @@ class TrainInpaint:
                     best_epoch = epoch
                     torch.save(self.ddpm.state_dict(), self.best_weights)
                     torch.save(checkpoint, self.best_checkpoint)
+                    # Save EMA weights separately for inference
+                    if ema is not None:
+                        ema.apply()
+                        torch.save(self.ddpm.state_dict(), self.best_ema_weights)
+                        ema.restore()
                     self._backup_to_drive(
                         self.best_weights, self.best_checkpoint, self.csv_file
                     )

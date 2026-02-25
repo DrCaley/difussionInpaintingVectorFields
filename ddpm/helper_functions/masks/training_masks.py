@@ -9,11 +9,9 @@ else is MISSING.  This matches the test scenario where ~80% of pixels
 are unobserved and the model must inpaint them.
 
 Mask types (selected randomly each call):
-  - Rectangle windows: 1-4 known rectangles, rest missing  (~50-95% missing)
   - Random-walk path:  brush walk = known, rest missing    (~60-90% missing)
   - Straight-line:     1-3 known lines, rest missing       (~90-99% missing)
   - Sparse Gaussian:   sparse known points, rest missing   (~90-99.99% missing)
-  - Pixel sampling:    random known pixels, rest missing   (~50-85% missing)
   - Robot BFS path:    greedy walk = known, rest missing   (~60-90% missing)
   - No mask / all-known (unconditional denoising)          (0% missing)
 
@@ -30,20 +28,16 @@ import numpy as np
 # ── probability table ────────────────────────────────────────────────
 #   type                prob    % MISSING (what model must inpaint)
 #   no mask             5%      0%
-#   rectangle windows   10%     ~50-95%
-#   random walk path    25%     ~60-90%
-#   straight line       15%     ~90-99%
-#   sparse gaussian     15%     ~90-99.99%
-#   pixel sampling      10%     ~50-85%
-#   robot-style BFS     20%     ~60-90%  (matches test scenario)
+#   random walk path    15%     ~60-90%
+#   straight line       30%     ~90-99%
+#   sparse gaussian     20%     ~90-99.99%
+#   robot-style BFS     30%     ~60-90%  (matches test scenario)
 
 _THRESHOLDS = [
     0.05,   # no mask
-    0.15,   # rectangle windows (known patches)
-    0.40,   # random walk path (known trail)
-    0.55,   # straight line (known tracks)
+    0.20,   # random walk path (known trail)
+    0.50,   # straight line (known tracks)
     0.70,   # sparse gaussian (known points)
-    0.80,   # pixel sampling (known samples)
     1.00,   # robot-style BFS walk (known explored area)
 ]
 
@@ -69,15 +63,11 @@ def generate_training_mask(h: int, w: int, land_mask: torch.Tensor = None) -> to
     if r < _THRESHOLDS[0]:
         mask = torch.zeros(1, h, w)
     elif r < _THRESHOLDS[1]:
-        mask = _rectangle_mask(h, w)
-    elif r < _THRESHOLDS[2]:
         mask = _random_walk_mask(h, w)
-    elif r < _THRESHOLDS[3]:
+    elif r < _THRESHOLDS[2]:
         mask = _straight_line_mask(h, w)
-    elif r < _THRESHOLDS[4]:
+    elif r < _THRESHOLDS[3]:
         mask = _sparse_gaussian_mask(h, w)
-    elif r < _THRESHOLDS[5]:
-        mask = _pixel_sampling_mask(h, w)
     else:
         mask = _robot_bfs_mask(h, w, land_mask)
 
