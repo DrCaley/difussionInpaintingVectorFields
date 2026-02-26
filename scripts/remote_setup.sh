@@ -5,7 +5,9 @@
 # ─────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-REPO_DIR="$HOME/diffusionInpaintingVectorFields"
+# Auto-detect repo directory: use the directory containing this script's parent
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIG="experiments/04_spatiotemporal/st_t13_gaussian/config_cuda.yaml"
 
 echo "═══════════════════════════════════════════════════════════"
