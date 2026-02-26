@@ -1,0 +1,56 @@
+u_training_mean: -0.06929559429949586
+u_training_std: 0.1358005549716049
+v_training_mean: -0.0323937796117541
+v_training_std: 0.08899177232117582
+mag_mean: 0.1446947511640557
+shared_mean: -0.05084468695562498
+shared_std: 0.11479844598042026
+gpu_to_use: 0
+unet_type: spatiotemporal
+mask_xt: false
+prediction_target: eps
+p_uncond: 0.0
+retrain_mode: false
+model_to_retrain: null
+reset_best: false
+partial_conv_mode: false
+training_mode: true
+testSeed: 42
+epochs: 3
+batch_size: 2
+lr: 0.001
+max_grad_norm: 1.0
+weight_decay: 0.01
+lr_schedule: cosine
+warmup_epochs: 5
+use_ema: true
+ema_decay: 0.9999
+augment: false
+standardizer_type: auto
+standardizer_by_noise:
+  gaussian: zscore
+  div_free: zscore_unified
+  spectral_div_free: zscore_unified
+  forward_diff_div_free: zscore_unified
+  fwd_diff_eq_divfree: zscore_unified
+noise_function: gaussian
+noise_steps: 250
+min_beta: 0.0001
+max_beta: 0.02
+enable_divergence_projection: auto
+projection_by_noise:
+  gaussian: false
+  div_free: true
+  spectral_div_free: true
+  forward_diff_div_free: true
+  fwd_diff_eq_divfree: true
+loss_function: mse
+w1: 0.6
+w2: 0.4
+num_workers: 0
+model_name: st_t13_gaussian_smoke
+T: 13
+pretrained_spatial_checkpoint: experiments/02_inpaint_algorithm/repaint_gaussian_attn/results/inpaint_gaussian_t250_best_checkpoint.pt
+freeze_spatial_epochs: 50
+gradient_accumulation_steps: 4
+output_dir: /Users/caleyjb/Library/Mobile Documents/com~apple~CloudDocs/JeffsStuff/PLU/Research/diffusionInpaintingVectorFields/experiments/04_spatiotemporal/st_t13_gaussian/results

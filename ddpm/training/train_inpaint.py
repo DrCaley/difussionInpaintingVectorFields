@@ -45,6 +45,8 @@ from ddpm.neural_networks.unets.unet_xl_attn import MyUNet_Attn
 from ddpm.neural_networks.unets.unet_attn_slim import MyUNet_Attn_Slim
 from ddpm.neural_networks.unets.unet_attn_mid import MyUNet_Attn_Mid
 from ddpm.neural_networks.unets.unet_film_attn import MyUNet_FiLM_Attn
+from ddpm.neural_networks.unets.unet_st import MyUNet_ST
+from data_prep.ocean_sequence_dataset import OceanSequenceDataset
 from ddpm.helper_functions.death_messages import get_death_message
 from ddpm.helper_functions.ema import EMA
 
@@ -113,6 +115,11 @@ class TrainInpaint:
         # UNet type: "concat" (Palette-style) or "film" (FiLM conditioning)
         self.unet_type = dd.get_attribute("unet_type") or "concat"
 
+        # Spatiotemporal config
+        self.T = int(dd.get_attribute("T") or 1)
+        self.pretrained_spatial = dd.get_attribute("pretrained_spatial_checkpoint") or None
+        self.freeze_spatial_epochs = int(dd.get_attribute("freeze_spatial_epochs") or 0)
+
         # Build inpainting model
         if self.unet_type == "film":
             unet = MyUNet_FiLM(n_steps=self.n_steps).to(self.device)
@@ -133,12 +140,33 @@ class TrainInpaint:
         elif self.unet_type == "standard_attn_mid":
             unet = MyUNet_Attn_Mid(n_steps=self.n_steps).to(self.device)
             logging.info("Using mid-size unconditional UNet with level4+bottleneck attention + dropout (standard_attn_mid, 2-channel)")
+        elif self.unet_type == "spatiotemporal":
+            if self.pretrained_spatial:
+                ckpt_path = Path(self.pretrained_spatial)
+                if not ckpt_path.is_absolute():
+                    ckpt_path = BASE_DIR / ckpt_path
+                unet = MyUNet_ST.from_pretrained_spatial(
+                    str(ckpt_path), T=self.T, n_steps=self.n_steps,
+                ).to(self.device)
+                logging.info(f"Loaded pretrained spatial weights from {ckpt_path}")
+            else:
+                unet = MyUNet_ST(n_steps=self.n_steps, T=self.T).to(self.device)
+            logging.info(
+                f"Using spatiotemporal UNet (T={self.T}, "
+                f"spatial={unet.num_spatial_params:,}, "
+                f"temporal={unet.num_temporal_params:,}, "
+                f"total={unet.num_total_params:,})"
+            )
         else:
             unet = MyUNet_Inpaint(n_steps=self.n_steps).to(self.device)
             logging.info("Using concat-conditioned UNet (Palette-style)")
 
         # Unconditional UNets: disable conditioning-related options
-        if self.unet_type in ("standard", "standard_attn", "standard_attn_slim", "standard_attn_mid"):
+        self._unconditional_types = (
+            "standard", "standard_attn", "standard_attn_slim",
+            "standard_attn_mid", "spatiotemporal",
+        )
+        if self.unet_type in self._unconditional_types:
             if self.mask_xt:
                 logging.warning("mask_xt is ignored for unet_type='%s' (no conditioning)", self.unet_type)
                 self.mask_xt = False
@@ -146,28 +174,54 @@ class TrainInpaint:
                 logging.warning("p_uncond is ignored for unet_type='%s' (no conditioning)", self.unet_type)
                 self.p_uncond = 0.0
 
+        image_chw = (self.T * 2, 64, 128) if self.unet_type == "spatiotemporal" else (2, 64, 128)
         self.ddpm = GaussianDDPM(
             unet,
             n_steps=self.n_steps,
             min_beta=self.min_beta,
             max_beta=self.max_beta,
             device=self.device,
+            image_chw=image_chw,
         )
 
-        # Wrap datasets with inpainting conditioning
-        self.train_loader = DataLoader(
-            OceanInpaintDataset(
-                dd.get_training_data(),
-                standardizer=self.standardizer,
-                augment=self.augment,
-            ),
-            batch_size=self.batch_size,
-            shuffle=True,
-        )
-        self.test_loader = DataLoader(
-            OceanInpaintDataset(dd.get_test_data(), standardizer=self.standardizer),
-            batch_size=self.batch_size,
-        )
+        # Wrap datasets: use OceanSequenceDataset for spatiotemporal,
+        # OceanInpaintDataset for everything else
+        if self.unet_type == "spatiotemporal":
+            self.train_loader = DataLoader(
+                OceanSequenceDataset(
+                    data_tensor=dd.training_tensor,
+                    n_steps=self.n_steps,
+                    noise_strategy=self.noise_strategy,
+                    transform=dd.get_transform(),
+                    T=self.T,
+                ),
+                batch_size=self.batch_size,
+                shuffle=True,
+            )
+            self.test_loader = DataLoader(
+                OceanSequenceDataset(
+                    data_tensor=dd.test_tensor,
+                    n_steps=self.n_steps,
+                    noise_strategy=self.noise_strategy,
+                    transform=dd.get_transform(),
+                    T=self.T,
+                ),
+                batch_size=self.batch_size,
+            )
+        else:
+            self.train_loader = DataLoader(
+                OceanInpaintDataset(
+                    dd.get_training_data(),
+                    standardizer=self.standardizer,
+                    augment=self.augment,
+                ),
+                batch_size=self.batch_size,
+                shuffle=True,
+            )
+            self.test_loader = DataLoader(
+                OceanInpaintDataset(dd.get_test_data(), standardizer=self.standardizer),
+                batch_size=self.batch_size,
+            )
 
         # Output paths
         self.timestamp = datetime.now().strftime("%h%d_%H%M")
@@ -269,7 +323,14 @@ class TrainInpaint:
 
         try:
             with torch.no_grad():
-                for i, (x0, t, noise, mask, known) in enumerate(loader):
+                for batch in loader:
+                    # Handle both 3-tuple (sequence) and 5-tuple (inpaint) loaders
+                    if len(batch) == 3:
+                        x0, t, noise = batch
+                        mask = known = None
+                    else:
+                        x0, t, noise, mask, known = batch
+
                     x0 = x0.to(self.device)
                     t = t.to(self.device)
                     noise = noise.to(self.device)
@@ -278,7 +339,7 @@ class TrainInpaint:
                     # Forward: noise the clean image
                     noisy = self.ddpm(x0, t, noise)
 
-                    if self.unet_type in ("standard", "standard_attn", "standard_attn_slim", "standard_attn_mid"):
+                    if self.unet_type in self._unconditional_types:
                         # Unconditional UNet: just (x_t, t) → ε or x̂₀
                         pred = self.ddpm.network(noisy, t.reshape(n, -1))
                     else:
@@ -329,6 +390,10 @@ class TrainInpaint:
         logging.info(f"EMA: {self.use_ema} (decay={self.ema_decay}, warmup_steps={self.ema_warmup_steps})")
         logging.info(f"Augmentation: {self.augment}")
         logging.info(f"Output dir: {self.output_dir}")
+        if self.unet_type == "spatiotemporal":
+            logging.info(f"Spatiotemporal: T={self.T}, freeze_spatial_epochs={self.freeze_spatial_epochs}")
+            if self.pretrained_spatial:
+                logging.info(f"Pretrained spatial checkpoint: {self.pretrained_spatial}")
 
         # Optimizer: AdamW if weight_decay > 0, else plain Adam
         if self.weight_decay > 0:
@@ -425,17 +490,37 @@ class TrainInpaint:
         best_epoch = start_epoch
         accum_steps = self.gradient_accumulation_steps
 
+        # ── Two-phase training for spatiotemporal UNet ───────────────
+        # Phase 1: freeze spatial weights, train only temporal layers
+        # Phase 2: unfreeze everything for end-to-end fine-tuning
+        spatial_frozen = False
+        if (self.unet_type == "spatiotemporal" and self.freeze_spatial_epochs > 0):
+            self.ddpm.network.freeze_spatial()
+            spatial_frozen = True
+            logging.info(
+                f"Phase 1: spatial weights frozen for first "
+                f"{self.freeze_spatial_epochs} epochs"
+            )
+
         try:
             for epoch in tqdm(
                 range(start_epoch, start_epoch + self.n_epochs),
                 desc="Training (inpaint)",
                 colour="#00ff00",
             ):
+                # Phase transition: unfreeze spatial weights after N epochs
+                if spatial_frozen and epoch >= start_epoch + self.freeze_spatial_epochs:
+                    self.ddpm.network.unfreeze_spatial()
+                    spatial_frozen = False
+                    logging.info(
+                        f"Phase 2: unfroze spatial weights at epoch {epoch + 1}"
+                    )
+
                 epoch_loss = 0.0
                 self.ddpm.train()
                 optimizer.zero_grad()  # zero once at start of epoch
 
-                for batch_idx, (x0, t, noise, mask, known) in enumerate(
+                for batch_idx, batch in enumerate(
                     tqdm(
                         self.train_loader,
                         leave=False,
@@ -443,6 +528,13 @@ class TrainInpaint:
                         colour="#005500",
                     )
                 ):
+                    # Handle both 3-tuple (sequence) and 5-tuple (inpaint) loaders
+                    if len(batch) == 3:
+                        x0, t, noise = batch
+                        mask = known = None
+                    else:
+                        x0, t, noise, mask, known = batch
+
                     n = len(x0)
                     x0 = x0.to(self.device)
                     t = t.to(self.device)
@@ -451,7 +543,7 @@ class TrainInpaint:
                     # Forward diffusion: add noise to x0
                     noisy = self.ddpm(x0, t, noise)
 
-                    if self.unet_type in ("standard", "standard_attn", "standard_attn_slim", "standard_attn_mid"):
+                    if self.unet_type in self._unconditional_types:
                         # Unconditional UNet: just (x_t, t) → ε or x̂₀
                         pred = self.ddpm.network(noisy, t.reshape(n, -1))
                     else:

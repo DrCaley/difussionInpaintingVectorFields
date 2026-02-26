@@ -483,4 +483,85 @@ var_decay=0.1, resample_steps=5. Fixed center-line mask (row 22, 94 ocean cols).
 - 100 quiver plots saved to `results/quiver_plots/sample_001.png`–`sample_100.png`.
 - Full tensor data in `results/bulk_eval_best_100samples.pt`.
 
-**Status:** TESTED, POSITIVE. Best single-sample config validated at scale.
+**Status:** SUPERSEDED — used sequential indices. See corrected results below.
+
+---
+
+## 2026-02-25 — Corrected evaluations with random sampling
+
+Previous sweeps and bulk eval all used sequential val indices 0..N−1 (adjacent
+timesteps). These were overly optimistic — adjacent samples share similar flow
+patterns. All experiments below use random sampling from the full validation set
+(1965 timesteps, seed=42).
+
+### Gamma sweep (corrected)
+
+10 random samples, S6 multi-stage, indices: [56, 584, 705, 869, 978, 1001, 1120, 1355, 1766, 1927]
+
+| γ | S1 avg | S6 avg | S6 vs S1 | S6 Wins/GP |
+|---|:------:|:------:|:--------:|:----------:|
+| 0.3 | 0.848x | 0.821x | +2.64% | 10/10 |
+| 0.5 | 0.836x | 0.800x | +3.58% | 10/10 |
+| 1.0 | 0.821x | 0.767x | +5.45% | 10/10 |
+| 2.0 | 0.811x | 0.741x | +7.03% | 10/10 |
+| **3.0** | **0.808x** | **0.730x** | **+7.78%** | **10/10** |
+| 5.0 | ~0.808x | ~0.730x | plateau | 10/10 |
+
+**Key change vs sequential:** γ=3.0 improvement over γ=1.0 is now +4.8% at S6
+(was +0.9% on sequential data). Higher gamma matters more on diverse samples.
+γ=3.0 confirmed as best choice.
+
+### Multi-stage sweep (corrected)
+
+10 random samples, γ=3.0, same indices as above.
+
+| Stage | Avg ratio | Wins/GP | vs prev stage | vs S1 |
+|-------|:---------:|:-------:|:-------------:|:-----:|
+| S1 | 0.808x | 10/10 | --- | --- |
+| S2 | 0.772x | 10/10 | 9/10 (+3.59%) | +3.59% |
+| S3 | 0.745x | 10/10 | 10/10 (+2.72%) | +6.31% |
+| S4 | 0.739x | 10/10 | 7/10 (+0.56%) | +6.88% |
+| S5 | 0.734x | 10/10 | 7/10 (+0.51%) | +7.39% |
+| **S6** | **0.730x** | **10/10** | **8/10 (+0.39%)** | **+7.78%** |
+| S7 | 0.737x | 10/10 | 5/10 (−0.70%) | +7.08% |
+| S8 | 0.774x | 10/10 | 2/10 (−3.75%) | +3.33% |
+| S9 | 0.808x | 9/10 | 1/10 (−3.31%) | +0.03% |
+| S10 | 0.854x | 9/10 | 2/10 (−4.63%) | −4.60% |
+
+**S6 confirmed as sweet spot.** Performance degrades at S7+ and S10 is worse
+than S1. Non-monotonic pattern is robust across sampling strategies.
+
+### 100-sample bulk evaluation (corrected)
+
+100 random samples (seed=42), S6, γ=3.0, full best config.
+
+| Metric | Value |
+|--------|-------|
+| Samples | 100 (random from 1965 val set) |
+| **Median MSE ratio** | **0.825x** |
+| Mean MSE ratio | 1.001x (skewed by outliers) |
+| Min ratio | 0.479x (best — DDPM halves GP error) |
+| Max ratio | 5.352x (worst — GP near-perfect, DDPM adds noise) |
+| Wins vs GP | **80/100 (80.0%)** |
+| Outliers >1.5x | 9 samples |
+
+**Outlier analysis:**
+- 9 samples with ratio >1.5x (worst: 5.35x, 4.61x, 3.04x)
+- These are cases where GP MSE is already very low — GP was near-perfect
+  and the DDPM's 6-stage processing adds noise the UNet can't remove
+- The median (0.825x) is the right summary statistic, not the mean
+
+**Comparison: sequential vs random sampling:**
+
+| Metric | Sequential (old) | Random (corrected) |
+|--------|:----------------:|:------------------:|
+| Mean ratio | 0.802x | 1.001x |
+| Median ratio | 0.809x | 0.825x |
+| Win rate | 94% | 80% |
+
+Sequential data was overly optimistic. Random sampling reveals harder cases
+(heavy-tailed failure distribution) but the median improvement is similar
+and the DDPM still wins 4 out of 5 times.
+
+**Status:** TESTED, POSITIVE. Results now on representative random data.
+Best config: S6, γ=3.0, t_start=75/50, floor=0.2/0.3, var_decay=0.1.
