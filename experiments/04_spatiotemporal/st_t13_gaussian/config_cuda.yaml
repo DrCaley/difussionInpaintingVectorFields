@@ -1,0 +1,35 @@
+# Spatiotemporal UNet, T=13, Gaussian noise — CUDA config (RTX 5080, 16GB)
+# Overrides only — merged with experiments/templates/base_inpaint.yaml
+
+model_name: st_t13_gaussian
+
+# ── Architecture ──────────────────────────────────────────────────
+unet_type: spatiotemporal
+T: 13
+pretrained_spatial_checkpoint: experiments/02_inpaint_algorithm/repaint_gaussian_attn/results/inpaint_gaussian_t250_best_checkpoint.pt
+
+# ── Training ──────────────────────────────────────────────────────
+# Phase 1: train temporal layers only (spatial frozen)
+# Phase 2: unfreeze everything with cosine LR
+freeze_spatial_epochs: 50
+epochs: 500
+batch_size: 4                    # RTX 5080 (16GB) — conservative; try 6 if memory allows
+gradient_accumulation_steps: 2   # effective batch = 4×2 = 8
+lr: 0.001
+lr_schedule: cosine
+warmup_epochs: 5
+weight_decay: 0.01
+max_grad_norm: 1.0
+use_ema: true
+
+# ── Noise (Gaussian, same as best 2D model) ──────────────────────
+noise_function: gaussian
+prediction_target: eps
+
+# ── Unconditional model (no mask/known conditioning) ──────────────
+mask_xt: false
+p_uncond: 0.0
+
+# ── Hardware ──────────────────────────────────────────────────────
+gpu_to_use: 0
+num_workers: 4
