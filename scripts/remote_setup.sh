@@ -24,7 +24,7 @@ echo ""
 echo "[2/5] Installing Python packages..."
 cd "$REPO_DIR"
 
-pip install --quiet --upgrade pip
+pip install --quiet --upgrade pip 2>/dev/null || true
 
 # Install PyTorch with CUDA if not already present (e.g. vastai/base-image)
 python -c "import torch" 2>/dev/null || {
