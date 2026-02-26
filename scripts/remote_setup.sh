@@ -22,9 +22,15 @@ echo ""
 echo "[2/5] Installing Python packages..."
 cd "$REPO_DIR"
 
-# Most Vast.ai PyTorch images already have torch + torchvision.
-# Only install the extras we need.
 pip install --quiet --upgrade pip
+
+# Install PyTorch with CUDA if not already present (e.g. vastai/base-image)
+python -c "import torch" 2>/dev/null || {
+    echo "  PyTorch not found — installing torch + torchvision with CUDA 12.4..."
+    pip install --quiet torch torchvision --index-url https://download.pytorch.org/whl/cu124
+}
+
+# Install remaining dependencies
 pip install --quiet numpy scipy matplotlib tqdm PyYAML Pillow gpytorch
 
 echo "  PyTorch version: $(python -c 'import torch; print(torch.__version__)')"
