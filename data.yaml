@@ -4,31 +4,53 @@ v_training_mean: -0.0323937796117541
 v_training_std: 0.08899177232117582
 mag_mean: 0.1446947511640557
 
+# Unified statistics for zscore_unified (preserves divergence-free property)
+# shared_mean = avg(u_mean, v_mean), shared_std = sqrt((u_std² + v_std²) / 2)
+shared_mean: -0.05084468695562498
+shared_std: 0.11479844598042026
+
 gpu_to_use: 0
 
 # === training ===
 retrain_mode: False
-model_to_retrain: ""
+model_to_retrain: "training_output/data/ddpm_ocean_model_best_checkpoint.pt"
 
 partial_conv_mode: False
 
 training_mode: True
 testSeed: 0
-epochs: 1
+epochs: 1000
 batch_size: 100  #use ~80 for server
 lr: 0.001
 
-standardizer_type: zscore
-                  # zscore
+standardizer_type: auto
+                  # auto            - select based on noise_function
+                  # zscore          - independent z-score per component (breaks div-free!)
+                  # zscore_unified  - same std for both components (preserves div-free)
                   # maxmag
                   # units
 
-noise_function: div_free
+# Auto-selection mapping for standardizers based on noise type
+standardizer_by_noise:
+  gaussian: zscore
+  div_free: zscore_unified
+  spectral_div_free: zscore_unified
+
+# Auto-selection mapping for divergence projection based on noise type
+# Projection only makes sense for div-free noise; applying it to Gaussian
+# noise causes large boundary artifacts near the known/missing boundary.
+projection_by_noise:
+  gaussian: false
+  div_free: true
+  spectral_div_free: true
+
+noise_function: spectral_div_free
               # gaussian
               # div_free
               # div_gaussian
               # hh_decomp_div_free
               # cached_div
+              # spectral_div_free
 
 loss_function: mse
               # mse
@@ -39,27 +61,70 @@ w2: 0.4
 num_workers: 0
 
 # === Both ===
-noise_steps: 100
-min_beta: 0.0001
-max_beta: 0.02
+noise_steps: 250
+min_beta: 0.0004
+max_beta: 0.08
 
 # === inpainting ===
 inpainting_batch_size: 1
-num_images_to_process: 5
+num_images_to_process: 1
 n_samples: 1
-resample_nums: [1]
-save_pt_fields: True
+resample_nums: [5]
+save_pt_fields: False
+enable_divergence_projection: auto
+                  # auto  - select based on noise_function (see projection_by_noise)
+                  # true  - always enable
+                  # false - always disable
+clamp_project_cycles: 1
+poisson_jacobi_iters: 200
+poisson_dx: 1.0
+poisson_dy: 1.0
+
+# === guided diffusion inpainting ===
+inpainting_method: guided   # repaint | guided
+guidance_scale_boundary: 50.0   # boundary matching strength (sweet spot: 20-50)
+guidance_scale_div: 5.0         # divergence-free penalty (sweet spot: 2-5)
+
+# === GP baseline ===
+gp_lengthscale: 14.1
+gp_variance: 0.0103420345
+gp_noise: 0.00000001
+gp_kernel_type: rbf_legacy  # rbf | incompressible | rbf_legacy | incompressible_rbf
+gp_coord_system: pixels  # pixels | normalized
+gp_use_double: True
+gp_max_points: null  # Set to an integer to cap known points for faster GP
+gp_sample_posterior: False
+
+# === GP tuning (training set) ===
+gp_tuning_num_images: 10
+gp_tuning_lengthscales: [0.5, 1.0, 1.5, 2.0, 3.0]
+gp_tuning_variances: [0.5, 1.0, 2.0]
+gp_tuning_noises: [0.000001, 0.00001, 0.0001]
+gp_tuning_masks:
+  - straight_line
+  - robot_path
+
+# === autocorrelation analysis ===
+gp_autocorr_num_images: 10
+gp_autocorr_max_lag: 120
 
 # === div-free inpainting ===
-use_comb_net: auto
+use_comb_net: no
               #yes
               #no
               #auto
-comb_training_steps: 200
-weight_strategy: pcgrad
-fidelity_weight: 1
-physics_weight: 1
-save_combination_data: False # warning: True may use a large amount of storage
+comb_training_steps: 200  # Per-step training iterations (only used if no pretrained model)
+fidelity_weight: 1.0      # Preserve naive stitch values (relaxed at boundary)
+physics_weight: 1.0       # Divergence penalty (only for excess above threshold)
+smooth_weight: 0.0        # Boundary smoothing (disabled for now)
+divergence_threshold: 0.06  # Only penalize divergence above this (normal background level)
 
-model_paths:
-  - "../../models/div_free_model.pt"
+# Pretrained CombNet path (set to null to disable and use per-step training)
+# Run 'python scripts/pretrain_combnet.py' to create this model
+pretrained_combnet_path: null  # Use Per-Step CombNet for testing
+
+# Model paths by noise type - automatically selected based on noise_function
+model_by_noise_type:
+  gaussian: "ddpm/Trained_Models/ddpm_ocean_model_gaussian_t250.pt"
+  div_free: "ddpm/Trained_Models/div_free_model.pt"
+  spectral_div_free: "ddpm/Trained_Models/spectral_div_free_t250_best.pt"

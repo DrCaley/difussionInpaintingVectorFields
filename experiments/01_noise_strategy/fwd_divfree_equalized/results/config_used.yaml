@@ -1,0 +1,45 @@
+batch_size: 80
+enable_divergence_projection: auto
+epochs: 3
+gpu_to_use: 0
+loss_function: mse
+lr: 0.001
+mag_mean: 0.1446947511640557
+mask_xt: false
+max_beta: 0.02
+min_beta: 0.0001
+model_name: fwd_diff_eq_divfree_eps_t250_smoke
+model_to_retrain: null
+noise_function: fwd_diff_eq_divfree
+noise_steps: 250
+num_workers: 0
+output_dir: /Users/caleyjb/Library/Mobile Documents/com~apple~CloudDocs/JeffsStuff/PLU/Research/diffusionInpaintingVectorFields/experiments/01_noise_strategy/fwd_divfree_equalized/results
+p_uncond: 0.0
+partial_conv_mode: false
+prediction_target: eps
+projection_by_noise:
+  div_free: true
+  forward_diff_div_free: true
+  fwd_diff_eq_divfree: true
+  gaussian: false
+  spectral_div_free: true
+reset_best: false
+retrain_mode: false
+shared_mean: -0.05084468695562498
+shared_std: 0.11479844598042026
+standardizer_by_noise:
+  div_free: zscore_unified
+  forward_diff_div_free: zscore_unified
+  fwd_diff_eq_divfree: zscore_unified
+  gaussian: zscore
+  spectral_div_free: zscore_unified
+standardizer_type: auto
+testSeed: 42
+training_mode: true
+u_training_mean: -0.06929559429949586
+u_training_std: 0.1358005549716049
+unet_type: standard
+v_training_mean: -0.0323937796117541
+v_training_std: 0.08899177232117582
+w1: 0.6
+w2: 0.4

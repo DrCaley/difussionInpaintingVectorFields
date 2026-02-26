@@ -1,0 +1,73 @@
+# Base inpainting config template
+# Experiments override only the keys they need to change.
+# Any key set to "auto" is resolved at init time based on other settings.
+#
+# See ddpm/protocols.py for component compatibility rules.
+
+# ── Data statistics (from rams_head dataset) ──────────────────────
+u_training_mean: -0.06929559429949586
+u_training_std: 0.1358005549716049
+v_training_mean: -0.0323937796117541
+v_training_std: 0.08899177232117582
+mag_mean: 0.1446947511640557
+shared_mean: -0.05084468695562498
+shared_std: 0.11479844598042026
+
+# ── Hardware ──────────────────────────────────────────────────────
+gpu_to_use: 0
+
+# ── Architecture ──────────────────────────────────────────────────
+unet_type: film              # film | concat | standard
+mask_xt: true                # replace known region of x_t with independent noise
+prediction_target: x0        # x0 | eps
+p_uncond: 0.0                # classifier-free guidance dropout probability
+
+# ── Training ──────────────────────────────────────────────────────
+retrain_mode: false
+model_to_retrain: null
+reset_best: false
+partial_conv_mode: false
+training_mode: true
+testSeed: 42
+epochs: 1000
+batch_size: 80
+lr: 0.001
+max_grad_norm: 0       # 0 = disabled; typical value: 1.0
+weight_decay: 0        # 0 = plain Adam; >0 = AdamW
+lr_schedule: constant  # constant | cosine
+warmup_epochs: 0       # linear warmup epochs for cosine schedule
+use_ema: false         # Exponential Moving Average of model weights
+ema_decay: 0.9999      # EMA decay rate (only used if use_ema: true)
+augment: false         # velocity-field-aware flip augmentation
+
+# ── Standardizer (auto-resolved from noise_function) ─────────────
+standardizer_type: auto
+standardizer_by_noise:
+  gaussian: zscore
+  div_free: zscore_unified
+  spectral_div_free: zscore_unified
+  forward_diff_div_free: zscore_unified
+  fwd_diff_eq_divfree: zscore_unified
+
+# ── Noise ─────────────────────────────────────────────────────────
+noise_function: forward_diff_div_free
+noise_steps: 250
+min_beta: 0.0001
+max_beta: 0.02
+
+# ── Divergence projection (auto-resolved from noise_function) ────
+enable_divergence_projection: auto
+projection_by_noise:
+  gaussian: false
+  div_free: true
+  spectral_div_free: true
+  forward_diff_div_free: true
+  fwd_diff_eq_divfree: true
+
+# ── Loss ──────────────────────────────────────────────────────────
+loss_function: mse
+w1: 0.6
+w2: 0.4
+
+# ── Misc ──────────────────────────────────────────────────────────
+num_workers: 0

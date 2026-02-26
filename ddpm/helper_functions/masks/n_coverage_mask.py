@@ -57,7 +57,9 @@ class CoverageMaskGenerator(MaskGenerator):
 
         # Final mask: shape [1, 2, H, W], mask == 1 => missing
         final_mask = np.stack([mask, mask], axis=0)  # shape [2, H, W]
+        # Mask convention: 1.0 = missing (to inpaint), 0.0 = known.
         final_mask = torch.tensor(final_mask, dtype=torch.float32).unsqueeze(0).to(device)  # [1,2,H,W]
+        final_mask = 1.0 - final_mask
 
         return final_mask
 

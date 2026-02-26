@@ -149,7 +149,11 @@ class TrainOceanXL:
         self.set_output_directory(self.dd.get_config_name())
         self.set_csv_file()
         self.save_config_used()
-        self.set_model_file()
+        # Build a descriptive model filename from noise type and T
+        noise_fn = dd.get_attribute('noise_function') or 'unknown'
+        n_steps = dd.get_attribute('noise_steps') or 0
+        model_base_name = f"{noise_fn}_t{n_steps}"
+        self.set_model_file(initial_model_file=model_base_name)
         self.set_plot_file()
 
     def load_checkpoint(self, optimizer: torch.optim.Optimizer):
@@ -226,10 +230,10 @@ class TrainOceanXL:
 
     def set_ddpm(self, ddpm: torch.nn.Module):
         """
-        Replaces the current DDPM model.
+        Replaces the current ddpm model.
 
         Args:
-            ddpm (torch.nn.Module): New DDPM model instance.
+            ddpm (torch.nn.Module): New ddpm model instance.
         """
         self.ddpm = ddpm
 
@@ -244,7 +248,7 @@ class TrainOceanXL:
 
     def training_loop(self, optim: torch.optim.Optimizer, loss_function: callable, ):
         """
-        Main training logic. Trains DDPM over epochs, logs results, evaluates with multi-threading,
+        Main training logic. Trains ddpm over epochs, logs results, evaluates with multi-threading,
         and saves the best model based on test loss.
 
         Args:
@@ -317,7 +321,7 @@ class TrainOceanXL:
 
                     epoch_loss += loss.item() * len(x0) / len(train_loader.dataset)
 
-                spinner = Halo("Evaluating DDPM...", spinner="dots")
+                spinner = Halo("Evaluating ddpm...", spinner="dots")
                 spinner.start()
                 ddpm.eval()
                 spinner.succeed()
@@ -360,6 +364,8 @@ class TrainOceanXL:
                     'test_losses': test_losses,
                     'best_test_loss': best_test_loss,
                     'n_steps': self.n_steps,
+                    'min_beta': self.min_beta,
+                    'max_beta': self.max_beta,
                     'noise_strategy': self.noise_strategy,
                     'standardizer_type': self.standardize_strategy,
                     }
@@ -407,7 +413,7 @@ class TrainOceanXL:
         """
         Sets up optimizer and kicks off training based on config mode.
         """
-        logging.info("🔧 Starting DDPM training...")
+        logging.info("🔧 Starting ddpm training...")
         logging.info(f"👾 Device: {self.device}")
         logging.info(f"📦 Batch size: {self.batch_size}")
         logging.info(f"🧠 Epochs: {self.n_epochs}")

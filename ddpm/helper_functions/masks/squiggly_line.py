@@ -20,7 +20,8 @@ class SquigglyLineMaskGenerator(MaskGenerator):
         num_lines = self.num_lines
         line_thickness = self.line_thickness
 
-        mask = np.zeros((h, w), dtype=np.float32)
+        # Mask convention: 1.0 = missing (to inpaint), 0.0 = known.
+        mask = np.ones((h, w), dtype=np.float32)
 
         def draw_line(mask, start_point, end_point, thickness):
             x0, y0 = start_point
@@ -32,7 +33,7 @@ class SquigglyLineMaskGenerator(MaskGenerator):
                 for i in range(-thickness//2, thickness//2 + 1):
                     for j in range(-thickness//2, thickness//2 + 1):
                         if 0 <= x+i < w and 0 <= y+j < h:
-                            mask[y+j, x+i] = 1.0
+                            mask[y+j, x+i] = 0.0
 
         for _ in range(num_lines):
             start_point = (random.randint(0, w - 1), random.randint(0, h - 1))

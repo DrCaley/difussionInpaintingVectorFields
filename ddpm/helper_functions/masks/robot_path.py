@@ -1,6 +1,7 @@
 import random
 import torch
 import numpy as np
+from collections import deque
 
 from data_prep.data_initializer import DDInitializer
 from ddpm.helper_functions.masks.abstract_mask import MaskGenerator
@@ -8,100 +9,84 @@ from ddpm.helper_functions.masks.border_mask import BorderMaskGenerator
 
 dd = DDInitializer()
 
-class RobotPathMaskGenerator(MaskGenerator):
 
-    def __init__(self, num_squares=10, square_size=10, line_thickness=1):
-        self.line_thickness = line_thickness
-        self.square_size = square_size
-        self.num_squares = num_squares
+class RobotPathGenerator(MaskGenerator):
 
-    def generate_mask(self, image_shape = None):
+    def __init__(self, coverage_ratio=0.2):
+        self.coverage_ratio = coverage_ratio
+
+    def flood_fill_area(self, start_y, start_x, valid_mask, visited, max_depth=10):
+        """Returns the number of unexplored cells reachable within max_depth."""
+        h, w = valid_mask.shape
+        seen = np.zeros_like(valid_mask, dtype=bool)
+        q = deque([(start_y, start_x, 0)])
+        count = 0
+        while q:
+            y, x, d = q.popleft()
+            if d > max_depth:
+                continue
+            if not (0 <= y < h and 0 <= x < w):
+                continue
+            if seen[y, x] or visited[y, x] or valid_mask[y, x] != 1:
+                continue
+            seen[y, x] = True
+            count += 1
+            for dy, dx in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                q.append((y + dy, x + dx, d + 1))
+        return count
+
+    def generate_mask(self, image_shape=None):
         if image_shape is None:
-            print("image_shape is None")
-
-        num_squares = self.num_squares
-        square_size = self.square_size
+            raise ValueError("Missing required shape.")
 
         _, _, h, w = image_shape
-
+        device = dd.get_device()
+        # Mask convention: 1.0 = missing (to inpaint), 0.0 = known.
         mask = np.ones((h, w), dtype=np.float32)
-
-        area_top = 0
-        area_left = 0
-        area_bottom = 44
-        area_right = 94
-
-        grid_rows = 4  # 44 / 10 = 4.4
-        grid_cols = 9  # 94 / 10 = 9.4
-        grid_height = area_bottom // grid_rows
-        grid_width = area_right // grid_cols
-
-        for row in range(grid_rows):
-            for col in range(grid_cols):
-                if num_squares <= 0:
-                    break
-
-                current_y = random.randint(area_top + row * grid_height, area_top + (row + 1) * grid_height - square_size)
-                current_x = random.randint(area_left + col * grid_width, area_left + (col + 1) * grid_width - square_size)
-
-                for i in range(square_size):
-                    if current_x + i < w:
-                        mask[current_y, current_x + i] = 0.0
-
-                for i in range(square_size):
-                    if current_y + i < h:
-                        mask[current_y + i, current_x + square_size - 1] = 0.0
-
-                for i in range(square_size):
-                    if current_x + square_size - 1 - i >= 0:
-                        mask[current_y + square_size - 1, current_x + square_size - 1 - i] = 0.0
-
-                for i in range(square_size):
-                    if current_y + square_size - 1 - i >= 0:
-                        mask[current_y + square_size - 1 - i, current_x] = 0.0
-
-                num_squares -= 1
-
-        directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]  # (dy, dx) for (N, S, E, W)
-        current_y = random.randint(area_top, area_bottom - square_size)
-        current_x = random.randint(area_left, area_right - square_size)
-
-        for _ in range(num_squares):
-            for i in range(square_size):
-                if current_x + i < w:
-                    mask[current_y, current_x + i] = 0.0
-
-            for i in range(square_size):
-                if current_y + i < h:
-                    mask[current_y + i, current_x + square_size - 1] = 0.0
-
-            for i in range(square_size):
-                if current_x + square_size - 1 - i >= 0:
-                    mask[current_y + square_size - 1, current_x + square_size - 1 - i] = 0.0
-
-            for i in range(square_size):
-                if current_y + square_size - 1 - i >= 0:
-                    mask[current_y + square_size - 1 - i, current_x] = 0.0
-
-            direction = random.choice(directions)
-            new_y = current_y + direction[0] * square_size
-            new_x = current_x + direction[1] * square_size
-
-            new_y = max(area_top, min(area_bottom - square_size, new_y))
-            new_x = max(area_left, min(area_right - square_size, new_x))
-
-            current_y = new_y
-            current_x = new_x
-
-        mask = torch.tensor(mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
 
         border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape)
 
-        device = dd.get_device()
-
-        mask = mask.to(device)
         border_mask = border_mask.to(device)
+        valid_mask = border_mask.squeeze().cpu().numpy()
+        if valid_mask.ndim == 3:
+            valid_mask = valid_mask[0]
 
+        visited = np.zeros_like(valid_mask, dtype=bool)
+        valid_points = np.argwhere(valid_mask == 1)
+        if len(valid_points) == 0:
+            raise ValueError("No valid points to explore.")
+
+        start_y, start_x = random.choice(valid_points.tolist())
+        queue = deque([(start_y, start_x)])
+        visited[start_y, start_x] = True
+        mask[start_y, start_x] = 0.0
+
+        target_cells = int(self.coverage_ratio * np.sum(valid_mask))
+        explored = 1
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+        while queue and explored < target_cells:
+            y, x = queue.popleft()
+
+            best_score = -1
+            best_dir = None
+            for dy, dx in directions:
+                ny, nx = y + dy, x + dx
+                if 0 <= ny < h and 0 <= nx < w:
+                    if valid_mask[ny, nx] == 1 and not visited[ny, nx]:
+                        score = self.flood_fill_area(ny, nx, valid_mask, visited, max_depth=10)
+                        if score > best_score:
+                            best_score = score
+                            best_dir = (ny, nx)
+
+            if best_dir:
+                ny, nx = best_dir
+                visited[ny, nx] = True
+                mask[ny, nx] = 0.0
+                queue.append((ny, nx))
+                explored += 1
+
+        mask = torch.tensor(mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
         mask = mask * border_mask
 
         return mask

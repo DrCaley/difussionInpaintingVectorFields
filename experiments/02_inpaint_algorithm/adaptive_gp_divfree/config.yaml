@@ -1,0 +1,19 @@
+# Adaptive GP-Refined RePaint with Div-Free Noise + CG Projection
+# Uses the converged repaint_cg model (standard UNet, eps-prediction,
+# forward_diff_div_free noise, 357 epochs, test loss 0.003686).
+#
+# This is an INFERENCE-ONLY experiment — no training needed.
+# The model is unconditional (2ch), trained in repaint_cg/.
+#
+# Inpainting algorithm: repaint_gp_init_adaptive()
+#   - GP posterior variance → spatially-varying noise weight
+#   - CG streamfunction projection at every step
+#   - Noise: forward_diff_div_free (matching training)
+#   - Best practices from Gaussian experiments: t=75, r=5, noise_floor=0.2
+
+model_name: adaptive_gp_divfree_eps_t250
+unet_type: standard
+prediction_target: eps
+noise_function: forward_diff_div_free
+mask_xt: false
+p_uncond: 0.0

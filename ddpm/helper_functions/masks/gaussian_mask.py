@@ -15,7 +15,8 @@ class GaussianNoiseBinaryMaskGenerator(MaskGenerator):
 
         noise = torch.normal(mean=self.mean, std=self.std, size=image_shape)
 
-        binary_mask = (noise > self.threshold).float()
+        # Mask convention: 1.0 = missing (to inpaint), 0.0 = known.
+        binary_mask = 1.0 - (noise > self.threshold).float()
 
         return binary_mask
 

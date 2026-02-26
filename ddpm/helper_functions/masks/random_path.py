@@ -25,6 +25,7 @@ class RandomPathMaskGenerator(MaskGenerator):
         num_lines = self.num_lines
         line_length = self.line_length
 
+        # Mask convention: 1.0 = missing (to inpaint), 0.0 = known.
         mask = np.ones((h, w), dtype=np.float32)
         mask = torch.tensor(mask, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
 
@@ -50,7 +51,7 @@ class RandomPathMaskGenerator(MaskGenerator):
 
             for i in range(line_length):
 
-                mask[current_y:current_y + line_thickness, current_x:current_x + line_thickness] = 0.0  # Unmask the path
+                mask[current_y:current_y + line_thickness, current_x:current_x + line_thickness] = 0.0
 
                 new_y = current_y + direction[0]
                 new_x = current_x + direction[1]

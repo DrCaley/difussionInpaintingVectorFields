@@ -77,12 +77,28 @@ class PTVisualizer():
 
                 H, W = u.shape
                 x, y = np.meshgrid(np.arange(W), np.arange(H))
+                step = 2
+                x = x[::step, ::step]
+                y = y[::step, ::step]
+                u = u[::step, ::step]
+                v = v[::step, ::step]
 
                 max_dim = 9
                 figsize = (max_dim, max_dim* H / W) if W > H else (max_dim * W / H, max_dim)
 
                 plt.figure(figsize=figsize)
-                plt.quiver(x, y, u.cpu(), v.cpu(), scale=1.0 / vector_scale)
+                plt.quiver(
+                    x,
+                    y,
+                    u.cpu(),
+                    v.cpu(),
+                    scale=1.0 / vector_scale,
+                    width=0.002,
+                    headwidth=2,
+                    headlength=2,
+                    headaxislength=2,
+                    alpha=0.9,
+                )
                 plt.title(title + " (Vector Field - Polar to Cartesian)")
                 plt.gca().set_aspect('equal', adjustable='box')
                 plt.savefig(os.path.join(save_dir, f"{title}_polar_vector_field.png"))
@@ -93,12 +109,28 @@ class PTVisualizer():
                 u, v = tensor[0], tensor[1]
                 H, W = u.shape
                 x, y = np.meshgrid(np.arange(W), np.arange(H))
+                step = 2
+                x = x[::step, ::step]
+                y = y[::step, ::step]
+                u = u[::step, ::step]
+                v = v[::step, ::step]
 
                 max_dim = 8
                 figsize = (max_dim, max_dim * H / W) if W > H else (max_dim * W / H, max_dim)
 
                 plt.figure(figsize=figsize)
-                plt.quiver(x, y, u.cpu(), v.cpu(), scale=1.0 / vector_scale)
+                plt.quiver(
+                    x,
+                    y,
+                    u.cpu(),
+                    v.cpu(),
+                    scale=1.0 / vector_scale,
+                    width=0.002,
+                    headwidth=2,
+                    headlength=2,
+                    headaxislength=2,
+                    alpha=0.9,
+                )
                 plt.title(title + " (Vector Field)")
                 plt.gca().set_aspect('equal', adjustable='box')
                 plt.savefig(os.path.join(save_dir, f"{title}_vector_field.png"))

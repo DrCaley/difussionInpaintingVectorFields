@@ -22,6 +22,7 @@ class StraightLineMaskGenerator(MaskGenerator):
 
         _, _, h, w = image_shape
 
+        # Mask convention: 1.0 = missing (to inpaint), 0.0 = known.
         mask = np.ones((h, w), dtype=np.float32)
 
         # Exclude border

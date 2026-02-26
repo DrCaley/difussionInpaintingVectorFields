@@ -1,0 +1,9 @@
+# Gaussian noise baseline — overrides only what differs from base template
+# Run: PYTHONPATH=. python experiments/run_experiment.py experiments/01_noise_strategy/gaussian_baseline/config.yaml
+
+model_name: gaussian_x0pred_film_t250
+noise_function: gaussian
+
+# Gaussian doesn't need unified z-score, but "auto" handles this correctly.
+# Explicitly set to confirm awareness:
+# standardizer_type: auto   (inherits from base)

@@ -64,10 +64,11 @@ class SmileyMaskGenerator(MaskGenerator):
         full_mask = np.zeros((H, W), dtype=np.uint8)
         full_mask[0:symbol_h, 0:symbol_w] = self.symbol_mask
 
+        # Mask convention: 1.0 = missing (to inpaint), 0.0 = known.
         # Convert to tensor shape (1, 2, H, W)
         tensor_mask = torch.tensor(full_mask, dtype=torch.float32)
         tensor_mask = tensor_mask.unsqueeze(0).repeat(2, 1, 1)  # (2, H, W)
-        return tensor_mask.unsqueeze(0)  # (1, 2, H, W)
+        return (1.0 - tensor_mask).unsqueeze(0)  # (1, 2, H, W)
 
     def __str__(self):
         return "SmileyMaskGenerator(size=44x94, top-left)"

@@ -18,7 +18,8 @@ class RandomMaskGenerator(MaskGenerator):
         _, _, h, w = image_shape
         max_mask_size = self.max_mask_size
 
-        mask = torch.zeros((1, 1, h, w), dtype=torch.float32)
+        # Mask convention: 1.0 = missing (to inpaint), 0.0 = known.
+        mask = torch.ones((1, 1, h, w), dtype=torch.float32)
 
         while True:
             mask_h = random.randint(1, max_mask_size)
@@ -26,6 +27,8 @@ class RandomMaskGenerator(MaskGenerator):
             start_h = random.randint(0, 44 - mask_h)
             start_w = random.randint(0,94 - mask_w)
             break
+
+        mask[:, :, start_h:start_h + mask_h, start_w:start_w + mask_w] = 0.0
 
         device = dd.get_device()
 
