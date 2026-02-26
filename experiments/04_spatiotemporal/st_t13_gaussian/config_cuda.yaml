@@ -1,4 +1,4 @@
-# Spatiotemporal UNet, T=13, Gaussian noise — CUDA config (RTX 5080, 16GB)
+# Spatiotemporal UNet, T=13, Gaussian noise — CUDA config (RTX 3060, 12GB)
 # Overrides only — merged with experiments/templates/base_inpaint.yaml
 
 model_name: st_t13_gaussian
@@ -13,8 +13,8 @@ pretrained_spatial_checkpoint: experiments/02_inpaint_algorithm/repaint_gaussian
 # Phase 2: unfreeze everything with cosine LR
 freeze_spatial_epochs: 50
 epochs: 500
-batch_size: 4                    # RTX 5080 (16GB) — conservative; try 6 if memory allows
-gradient_accumulation_steps: 2   # effective batch = 4×2 = 8
+batch_size: 2                    # RTX 3060 (12GB) — conservative; try 3 if memory allows
+gradient_accumulation_steps: 4   # effective batch = 2×4 = 8
 lr: 0.001
 lr_schedule: cosine
 warmup_epochs: 5
