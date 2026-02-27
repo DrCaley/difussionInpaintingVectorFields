@@ -121,6 +121,8 @@ class TrainInpaint:
         self.freeze_spatial_epochs = int(dd.get_attribute("freeze_spatial_epochs") or 0)
         # Differential LR: spatial_lr_factor scales lr for pretrained spatial params after unfreeze
         self.spatial_lr_factor = float(dd.get_attribute("spatial_lr_factor") or 0.01)
+        # Temporal dropout: regularization for temporal layers in ST UNet
+        self.temporal_dropout = float(dd.get_attribute("temporal_dropout") or 0.0)
         # Max evaluation batches per loader (0 = evaluate all)
         self.eval_max_batches = int(dd.get_attribute("eval_max_batches") or 0)
 
@@ -151,10 +153,12 @@ class TrainInpaint:
                     ckpt_path = BASE_DIR / ckpt_path
                 unet = MyUNet_ST.from_pretrained_spatial(
                     str(ckpt_path), T=self.T, n_steps=self.n_steps,
+                    temporal_dropout=self.temporal_dropout,
                 ).to(self.device)
                 logging.info(f"Loaded pretrained spatial weights from {ckpt_path}")
             else:
-                unet = MyUNet_ST(n_steps=self.n_steps, T=self.T).to(self.device)
+                unet = MyUNet_ST(n_steps=self.n_steps, T=self.T,
+                                 temporal_dropout=self.temporal_dropout).to(self.device)
             logging.info(
                 f"Using spatiotemporal UNet (T={self.T}, "
                 f"spatial={unet.num_spatial_params:,}, "
@@ -404,6 +408,9 @@ class TrainInpaint:
         if self.unet_type == "spatiotemporal":
             logging.info(f"Spatiotemporal: T={self.T}, freeze_spatial_epochs={self.freeze_spatial_epochs}")
             logging.info(f"Spatial LR factor: {self.spatial_lr_factor} (spatial_lr={self.lr * self.spatial_lr_factor:.6f} at unfreeze)")
+            logging.info(f"Temporal dropout: {self.temporal_dropout}")
+            if self.freeze_spatial_epochs >= self.n_epochs:
+                logging.info("Spatial weights frozen for ALL epochs (freeze-forever mode)")
             if self.pretrained_spatial:
                 logging.info(f"Pretrained spatial checkpoint: {self.pretrained_spatial}")
 
@@ -521,7 +528,10 @@ class TrainInpaint:
                 colour="#00ff00",
             ):
                 # Phase transition: unfreeze spatial weights after N epochs
-                if spatial_frozen and epoch >= start_epoch + self.freeze_spatial_epochs:
+                # (skip if freeze_spatial_epochs >= total epochs → freeze-forever mode)
+                if (spatial_frozen
+                        and self.freeze_spatial_epochs < self.n_epochs
+                        and epoch >= start_epoch + self.freeze_spatial_epochs):
                     self.ddpm.network.unfreeze_spatial()
                     spatial_frozen = False
 

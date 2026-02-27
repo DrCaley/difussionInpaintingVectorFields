@@ -94,7 +94,7 @@ class TemporalConvBlock(nn.Module):
     (no temporal mixing), preserving pretrained spatial behavior.
     """
 
-    def __init__(self, channels: int, kernel_size: int = 3):
+    def __init__(self, channels: int, kernel_size: int = 3, dropout: float = 0.0):
         super().__init__()
         self.norm = nn.GroupNorm(min(8, channels), channels)
         self.conv = nn.Conv1d(
@@ -102,6 +102,7 @@ class TemporalConvBlock(nn.Module):
             kernel_size=kernel_size,
             padding=kernel_size // 2,
         )
+        self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
         # Zero-init → identity residual at start
         nn.init.zeros_(self.conv.weight)
         nn.init.zeros_(self.conv.bias)
@@ -122,7 +123,7 @@ class TemporalConvBlock(nn.Module):
         h = (h.reshape(B, T, C, H, W)
               .permute(0, 3, 4, 2, 1)                    # (B, H, W, C, T)
               .reshape(B * H * W, C, T))
-        h = F.silu(self.conv(h))                          # (B*H*W, C, T)
+        h = self.dropout(F.silu(self.conv(h)))             # (B*H*W, C, T)
         h = (h.reshape(B, H, W, C, T)
               .permute(0, 4, 3, 1, 2)                     # (B, T, C, H, W)
               .reshape(BT, C, H, W))
@@ -141,7 +142,7 @@ class TemporalAttnBlock(nn.Module):
     **zero-initialized output projection** for identity at start.
     """
 
-    def __init__(self, channels: int, T: int = 13, num_heads: int = 4):
+    def __init__(self, channels: int, T: int = 13, num_heads: int = 4, dropout: float = 0.0):
         super().__init__()
         assert channels % num_heads == 0, (
             f"channels ({channels}) must be divisible by num_heads ({num_heads})"
@@ -153,6 +154,7 @@ class TemporalAttnBlock(nn.Module):
         self.norm = nn.GroupNorm(min(8, channels), channels)
         self.qkv = nn.Linear(channels, 3 * channels)
         self.proj = nn.Linear(channels, channels)
+        self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
 
         # Learned temporal position embedding (zero-init)
         self.pos_emb = nn.Parameter(torch.zeros(1, T, channels))
@@ -194,7 +196,7 @@ class TemporalAttnBlock(nn.Module):
                   .reshape(B * H * W, T, C))
 
         # Output projection (zero-initialized)
-        out = self.proj(out)                             # (B*H*W, T, C)
+        out = self.dropout(self.proj(out))                # (B*H*W, T, C)
 
         # Reshape back to (B*T, C, H, W)
         out = (out.reshape(B, H, W, T, C)
@@ -219,11 +221,13 @@ class TemporalMixBlock(nn.Module):
         use_attn: bool = False,
         num_heads: int = 4,
         conv_kernel: int = 3,
+        dropout: float = 0.0,
     ):
         super().__init__()
-        self.conv = TemporalConvBlock(channels, conv_kernel)
+        self.conv = TemporalConvBlock(channels, conv_kernel, dropout=dropout)
         self.attn = (
-            TemporalAttnBlock(channels, T, num_heads) if use_attn else None
+            TemporalAttnBlock(channels, T, num_heads, dropout=dropout)
+            if use_attn else None
         )
 
     def forward(self, x: torch.Tensor, B: int, T: int) -> torch.Tensor:
@@ -268,6 +272,7 @@ class MyUNet_ST(MyUNet_Attn):
         T: int = 13,
         time_emb_dim: int = 256,
         in_channels: int = 2,
+        temporal_dropout: float = 0.0,
     ):
         # Initialize all spatial blocks from MyUNet_Attn
         super().__init__(
@@ -276,23 +281,24 @@ class MyUNet_ST(MyUNet_Attn):
             in_channels=in_channels,
         )
         self.T = T
+        self.temporal_dropout = temporal_dropout
 
         ch = [64, 128, 256, 256]
 
         # ── Temporal mixing layers ───────────────────────────────────
         # Temporal attention mirrors spatial attention placement:
         # levels 3, 4, and bottleneck (all ≤ 16×32 spatial resolution).
-        self.temp_enc1 = TemporalMixBlock(ch[0], T, use_attn=False)
-        self.temp_enc2 = TemporalMixBlock(ch[1], T, use_attn=False)
-        self.temp_enc3 = TemporalMixBlock(ch[2], T, use_attn=True)
-        self.temp_enc4 = TemporalMixBlock(ch[3], T, use_attn=True)
+        self.temp_enc1 = TemporalMixBlock(ch[0], T, use_attn=False, dropout=temporal_dropout)
+        self.temp_enc2 = TemporalMixBlock(ch[1], T, use_attn=False, dropout=temporal_dropout)
+        self.temp_enc3 = TemporalMixBlock(ch[2], T, use_attn=True, dropout=temporal_dropout)
+        self.temp_enc4 = TemporalMixBlock(ch[3], T, use_attn=True, dropout=temporal_dropout)
 
-        self.temp_mid = TemporalMixBlock(ch[3], T, use_attn=True)
+        self.temp_mid = TemporalMixBlock(ch[3], T, use_attn=True, dropout=temporal_dropout)
 
-        self.temp_dec4 = TemporalMixBlock(ch[2], T, use_attn=True)   # dec4 out: 256ch
-        self.temp_dec3 = TemporalMixBlock(ch[1], T, use_attn=True)   # dec3 out: 128ch
-        self.temp_dec2 = TemporalMixBlock(ch[0], T, use_attn=False)  # dec2 out:  64ch
-        self.temp_dec1 = TemporalMixBlock(ch[0], T, use_attn=False)  # dec1 out:  64ch
+        self.temp_dec4 = TemporalMixBlock(ch[2], T, use_attn=True, dropout=temporal_dropout)   # dec4 out: 256ch
+        self.temp_dec3 = TemporalMixBlock(ch[1], T, use_attn=True, dropout=temporal_dropout)   # dec3 out: 128ch
+        self.temp_dec2 = TemporalMixBlock(ch[0], T, use_attn=False, dropout=temporal_dropout)  # dec2 out:  64ch
+        self.temp_dec1 = TemporalMixBlock(ch[0], T, use_attn=False, dropout=temporal_dropout)  # dec1 out:  64ch
 
     # ------------------------------------------------------------------
     def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
@@ -415,7 +421,7 @@ class MyUNet_ST(MyUNet_Attn):
         Returns:
             ``MyUNet_ST`` with pretrained spatial weights loaded.
         """
-        model = cls(n_steps=n_steps, T=T, **kwargs)
+        model = cls(n_steps=n_steps, T=T, temporal_dropout=kwargs.pop('temporal_dropout', 0.0), **kwargs)
 
         ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
 
