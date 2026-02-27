@@ -4,22 +4,42 @@ from scipy.io import loadmat
 import numpy as np
 import pickle
 import datetime
+import h5py
+
+# ── Set the input file — format is auto-detected from the extension ───────────
+INPUT_FILE = "data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat"
 
 pycharm_dumb_flag = False
-# pickle file is found in the project directory if you run it in pycharm, otherwise it might be in your desktop!
 
-if(os.path.exists("../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat")):
-    pycharm_dumb_flag = True
-    file_name = "../data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat"
-    mat_data = loadmat(file_name)
-else :
-    file_name = "data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat"
-    mat_data = loadmat(file_name)
+def resolve_path(path):
+    """Try ../path first (PyCharm), then path as-is."""
+    alt = os.path.join("..", path)
+    if os.path.exists(alt):
+        return alt, True
+    return path, False
 
-print("splitting:", file_name)
+def load_dataset(input_file):
+    file_path, is_pycharm = resolve_path(input_file)
+    ext = os.path.splitext(file_path)[1].lower()
+    print(f"splitting: {file_path}  (detected format: {ext})")
 
-u_tensors = mat_data['u']
-v_tensors = mat_data['v']
+    if ext in ('.pkl', '.pickle'):
+        with open(file_path, 'rb') as f:
+            data = pickle.load(f)
+        # Pickle stores (T, H, W); transpose to (W, H, T) to match mat convention
+        u = np.transpose(data['us'], (2, 1, 0))
+        v = np.transpose(data['vs'], (2, 1, 0))
+        return u, v, is_pycharm
+
+    elif ext == '.mat':
+        mat_data = loadmat(file_path)
+        # mat stores (W, H, T) directly
+        return mat_data['u'], mat_data['v'], is_pycharm
+
+    else:
+        raise ValueError(f"Unrecognised file extension '{ext}'. Use .pkl, .pickle, or .mat.")
+
+u_tensors, v_tensors, pycharm_dumb_flag = load_dataset(INPUT_FILE)
 
 u_tensors = np.expand_dims(u_tensors,axis=2)
 v_tensors = np.expand_dims(v_tensors,axis=2)
