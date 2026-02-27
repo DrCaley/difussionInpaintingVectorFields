@@ -149,7 +149,11 @@ class TrainOceanXL:
         self.set_output_directory(self.dd.get_config_name())
         self.set_csv_file()
         self.save_config_used()
-        self.set_model_file()
+        # Build a descriptive model filename from noise type and T
+        noise_fn = dd.get_attribute('noise_function') or 'unknown'
+        n_steps = dd.get_attribute('noise_steps') or 0
+        model_base_name = f"{noise_fn}_t{n_steps}"
+        self.set_model_file(initial_model_file=model_base_name)
         self.set_plot_file()
 
     def load_checkpoint(self, optimizer: torch.optim.Optimizer):
@@ -360,6 +364,8 @@ class TrainOceanXL:
                     'test_losses': test_losses,
                     'best_test_loss': best_test_loss,
                     'n_steps': self.n_steps,
+                    'min_beta': self.min_beta,
+                    'max_beta': self.max_beta,
                     'noise_strategy': self.noise_strategy,
                     'standardizer_type': self.standardize_strategy,
                     }

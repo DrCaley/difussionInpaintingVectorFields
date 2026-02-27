@@ -1,0 +1,9 @@
+# RePaint + CG div-free projection
+# Unconditional eps-prediction DDPM with forward-diff div-free noise.
+# Inpainting via repaint_standard() with per-step CG projection.
+
+model_name: repaint_cg_fwd_divfree_eps_t250
+unet_type: standard
+prediction_target: eps
+mask_xt: false
+p_uncond: 0.0

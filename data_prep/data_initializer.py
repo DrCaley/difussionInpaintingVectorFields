@@ -16,6 +16,7 @@ from ddpm.utils.noise_utils import NoiseStrategy, get_noise_strategy
 from ddpm.helper_functions.loss_functions import LossStrategy, get_loss_strategy
 from ddpm.helper_functions.resize_tensor import resize_transform
 from ddpm.helper_functions.standardize_data import STANDARDIZER_REGISTRY, Standardizer
+from ddpm.protocols import validate_noise_standardizer, ComponentIncompatibilityError
 
 class PickleNotFoundException(Exception):
     """Raise for my specific kind of exception"""
@@ -58,13 +59,17 @@ class DDInitializer:
         self._setup_noise_strategy()
         self._setup_vector_combination()
         self._setup_loss_strategy()
+        self._resolve_noise_dependent_settings()
         self._setup_alphas()
         self._setup_datasets(self.full_boundaries_path)
+        self._validate_component_compatibility()
 
     def reinitialize(self, min_beta, max_beta, n_steps, standardizer : Standardizer):
         self._setup_alphas(min_beta, max_beta, n_steps)
         self._setup_transforms(standardizer)
+        self._resolve_noise_dependent_settings()
         self._setup_datasets(self.full_boundaries_path)
+        self._validate_component_compatibility()
 
     def _setup_yaml_file(self, config_path : Path) -> None:
         if not config_path.exists():
@@ -116,6 +121,27 @@ class DDInitializer:
             boundaries=boundaries_file,
             transform=self.transform,
         )
+
+    def _resolve_noise_dependent_settings(self):
+        """Resolve all 'auto' settings that depend on the active noise type.
+
+        Called during init and reinitialize so that consumers (e.g.
+        inpaint_generate_new_images) get the correct resolved values
+        from get_attribute() without needing any noise-type awareness.
+        """
+        noise_type = self.get_noise_type()
+
+        # --- divergence projection ---
+        proj_raw = self._config.get("enable_divergence_projection", "auto")
+        if isinstance(proj_raw, str) and proj_raw.lower() == "auto":
+            mapping = self._config.get("projection_by_noise", {})
+            self._resolved_projection = bool(mapping.get(noise_type, False))
+        else:
+            self._resolved_projection = bool(proj_raw)
+
+    def get_noise_type(self) -> str:
+        """Return the active noise function name."""
+        return self._config.get("noise_function", "gaussian")
 
     def _setup_noise_strategy(self):
         noise_type = self._config.get("noise_function", "gaussian")
@@ -203,6 +229,10 @@ class DDInitializer:
         ])
 
     def get_attribute(self, attr):
+        # Return noise-resolved values for auto-configured settings
+        if attr == "enable_divergence_projection":
+            return getattr(self, "_resolved_projection",
+                           self._config.get("enable_divergence_projection"))
         try:
             return self._config.get(attr)
         except:
@@ -244,3 +274,27 @@ class DDInitializer:
     @classmethod
     def reset_instance(cls):
         cls._instance = None
+
+    # ------------------------------------------------------------------
+    # Component compatibility validation
+    # ------------------------------------------------------------------
+
+    def _validate_component_compatibility(self):
+        """Validate that all building-block pairings are consistent.
+
+        Called automatically at the end of ``_init()`` and ``reinitialize()``.
+        Raises ``ComponentIncompatibilityError`` on the first violation,
+        or prints a success message if all checks pass.
+
+        Validated rules
+        ---------------
+        1. Div-free noise strategies require a unified standardizer
+           (same std for u,v) so that standardization preserves the
+           zero-divergence property.  See ``protocols.py``.
+        """
+        try:
+            validate_noise_standardizer(self.noise_strategy, self.standardizer)
+            print("[DDInitializer] Component compatibility check: PASSED")
+        except ComponentIncompatibilityError as e:
+            print(f"[DDInitializer] WARNING — component incompatibility: {e}")
+            raise

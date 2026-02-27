@@ -1,0 +1,275 @@
+# Algorithm & Component Catalog (machine-readable)
+#
+# Single source of truth for which building blocks exist, what they do,
+# and which combinations are valid.  Used alongside design/algorithm-catalog.md
+# (the human-readable prose version).
+#
+# The experiment launcher (experiments/run_experiment.py) validates configs
+# against ddpm/protocols.py; this file is a higher-level planning reference.
+
+# ═══════════════════════════════════════════════════════════════════════
+# Conditioning Methods (how the model receives mask + known values)
+# ═══════════════════════════════════════════════════════════════════════
+conditioning_methods:
+
+  film:
+    paper: "Perez et al., FiLM (AAAI 2018)"
+    config_key: "unet_type: film"
+    unet_class: MyUNet_FiLM
+    input_channels: 5   # [x_t(2), mask(1), known(2)] — split internally
+    description: >
+      FiLM layers modulate UNet features at every resolution level.
+      Main path sees only x_t (2ch); conditioning injected via γ·h+β.
+    supports_mask_xt: true
+    supports_p_uncond: true
+    compatible_prediction: [x0, eps]
+    code: ddpm/neural_networks/unets/unet_film.py
+
+  concat:
+    paper: "Saharia et al., Palette (SIGGRAPH 2022)"
+    config_key: "unet_type: concat"
+    unet_class: MyUNet_Inpaint
+    input_channels: 5   # [x_t(2), mask(1), known(2)] — concatenated
+    description: >
+      Conditioning channels concatenated to x_t as extra input channels.
+      Simplest approach; model sees everything at the input layer.
+    supports_mask_xt: true
+    supports_p_uncond: true
+    compatible_prediction: [x0, eps]
+    code: ddpm/neural_networks/unets/unet_inpaint.py
+
+  standard:
+    paper: "Ho et al., DDPM (NeurIPS 2020)"
+    config_key: "unet_type: standard"
+    unet_class: MyUNet
+    input_channels: 2   # x_t only — no conditioning
+    description: >
+      Unconditional UNet. No mask, no known values passed to model.
+      Inpainting happens entirely at inference via RePaint copy-paste.
+    supports_mask_xt: false
+    supports_p_uncond: false
+    compatible_prediction: [eps, x0]
+    code: ddpm/neural_networks/unets/unet_xl.py
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Inpainting Algorithms (how we fill the missing region at inference)
+# ═══════════════════════════════════════════════════════════════════════
+inpainting_algorithms:
+
+  repaint_standard:
+    paper: "Lugmayr et al., RePaint (CVPR 2022)"
+    config_key: null    # inference-time choice, not a training config
+    description: >
+      Copy-paste inpainting. At each reverse step, paste forward-noised
+      known region into the denoised field. Optional resample loop.
+    compatible_prediction: [eps, x0]
+    compatible_unet: [standard, film, concat]
+    key_params:
+      resample_steps: "Number of re-noise/re-denoise cycles per step (5–10)"
+      project_div_free: "Apply CG projection after each paste (our variant)"
+      project_final_steps: "CG project→restore cycles on final result"
+    our_variant: >
+      After copy-paste, apply forward_diff_project_div_free() to fix the
+      divergence discontinuity at the mask boundary, then re-stamp known.
+    code: "ddpm/utils/inpainting_utils.py::repaint_standard()"
+
+  x0_full_reverse_inpaint:
+    paper: null   # standard DDPM posterior, adapted for x0-prediction
+    description: >
+      Full 250-step reverse using posterior mean parameterized by predicted x̂₀.
+      FiLM UNet provides conditioning. mask_xt replaces known region of x_t.
+    compatible_prediction: [x0]
+    compatible_unet: [film, concat]
+    key_params:
+      mask_xt: "Replace known region of x_t with independent noise"
+      repaint_steps: "Optional RePaint-style resampling (0 = disabled)"
+      project_steps: "CG projection cycles on final result"
+    code: "ddpm/utils/inpainting_utils.py::x0_full_reverse_inpaint()"
+
+  mask_aware_inpaint:
+    paper: "Saharia et al., Palette (SIGGRAPH 2022)"
+    description: >
+      Standard reverse process with 5-channel conditioning at every step.
+      No copy-paste — model was trained to denoise conditioned on mask+known.
+    compatible_prediction: [eps]
+    compatible_unet: [concat, film]
+    key_params:
+      mask_xt: "Replace known region of x_t with independent noise"
+    code: "ddpm/utils/inpainting_utils.py::mask_aware_inpaint()"
+
+  mask_aware_inpaint_cfg:
+    paper: "Ho & Salimans, Classifier-Free Guidance (NeurIPSW 2021)"
+    description: >
+      Two forward passes (conditioned + unconditioned), blended:
+      ε = ε_uncond + w·(ε_cond - ε_uncond). Requires p_uncond > 0 training.
+    compatible_prediction: [eps]
+    compatible_unet: [concat, film]
+    key_params:
+      guidance_scale: "CFG weight w (2–7 typical)"
+    training_requirement: "p_uncond > 0 during training"
+    code: "ddpm/utils/inpainting_utils.py::mask_aware_inpaint_cfg()"
+
+  guided_inpaint:
+    paper: "Dhariwal & Nichol, Diffusion Beats GANs (NeurIPS 2021) §4"
+    description: >
+      Gradient-guided reverse process. Computes boundary MSE + divergence
+      loss on x̂₀ (via Tweedie), backprops through UNet, shifts posterior mean.
+      No copy-paste → no boundary artifacts.
+    compatible_prediction: [eps]
+    compatible_unet: [standard]
+    key_params:
+      guidance_scale_boundary: "Weight on known-value matching loss"
+      guidance_scale_div: "Weight on divergence-free penalty"
+    code: "ddpm/utils/inpainting_utils.py::guided_inpaint()"
+
+  inpaint_generate_new_images:
+    paper: null   # legacy implementation
+    description: >
+      Older copy-paste inpainting with per-step boundary fix via
+      combine_fields() and spectral projection. Superseded by repaint_standard.
+    compatible_prediction: [eps]
+    compatible_unet: [standard]
+    code: "ddpm/utils/inpainting_utils.py::inpaint_generate_new_images()"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Noise Strategies (what ε looks like in the forward process)
+# ═══════════════════════════════════════════════════════════════════════
+noise_strategies:
+
+  gaussian:
+    description: "Standard i.i.d. N(0,I)"
+    class: GaussianNoise
+    gaussian_scaling: true
+    div_free: false
+    requires_standardizer: [zscore, zscore_unified]
+    compatible_projection: [project_div_free_2d, spectral_project_div_free, forward_diff_project_div_free]
+    code: ddpm/utils/noise_utils.py
+
+  forward_diff_div_free:
+    description: "Forward-difference streamfunction curl — exactly pixelwise div-free"
+    class: ForwardDiffDivFreeNoise
+    gaussian_scaling: true
+    div_free: true
+    div_free_operator: forward_difference
+    requires_standardizer: [zscore_unified]
+    compatible_projection: [forward_diff_project_div_free]
+    code: ddpm/utils/noise_utils.py
+
+  spectral_div_free:
+    description: "Central-difference streamfunction curl — div-free under central diffs"
+    class: SpectralDivFreeNoise
+    gaussian_scaling: true
+    div_free: true
+    div_free_operator: central_difference
+    requires_standardizer: [zscore_unified]
+    compatible_projection: [spectral_project_div_free]
+    code: ddpm/utils/noise_utils.py
+
+  div_free:
+    description: "GP-based multi-step divergence-free noise (legacy)"
+    class: DivergenceFreeNoise
+    gaussian_scaling: true
+    div_free: true
+    requires_standardizer: [zscore_unified]
+    code: ddpm/utils/noise_utils.py
+
+  hh_decomp_div_free:
+    description: "Helmholtz-Hodge decomposition of Gaussian noise (legacy)"
+    class: HH_Decomp_Div_Free
+    gaussian_scaling: false   # projection changes magnitude
+    div_free: true
+    requires_standardizer: [zscore_unified]
+    code: ddpm/utils/noise_utils.py
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Divergence-Free Projections (post-hoc inference-time repair)
+# ═══════════════════════════════════════════════════════════════════════
+projections:
+
+  forward_diff_project_div_free:
+    description: "CG streamfunction solver — exactly div-free under forward diffs"
+    operator: forward_difference
+    solver: conjugate_gradient
+    convergence: "~60 iters for 64×128"
+    compatible_noise: [forward_diff_div_free]
+    code: "ddpm/utils/inpainting_utils.py line 83"
+
+  spectral_project_div_free:
+    description: "FFT Helmholtz decomposition — exact for periodic BC"
+    operator: spectral
+    solver: fft
+    convergence: "O(N log N), one-shot"
+    compatible_noise: [spectral_div_free, gaussian]
+    code: "ddpm/utils/inpainting_utils.py line 161"
+
+  project_div_free_2d:
+    description: "Jacobi Poisson solver — 5-pt stencil, Neumann BC"
+    operator: central_difference_5pt
+    solver: jacobi
+    convergence: "O(N²) — slow"
+    compatible_noise: [gaussian]
+    code: "ddpm/utils/inpainting_utils.py line 73"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Loss Functions
+# ═══════════════════════════════════════════════════════════════════════
+loss_functions:
+
+  mse:
+    class: MSELossStrategy
+    description: "Standard MSE between prediction and target"
+    compatible_prediction: [eps, x0]
+
+  physical:
+    class: PhysicalLossStrategy
+    description: "MSE + weighted divergence penalty on predicted ε"
+    compatible_prediction: [eps]   # penalizes div(ε̂), meaningless for x0
+
+  best_loss:
+    class: HotGarbage
+    description: "Legacy experimental loss — not recommended"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Standardizers
+# ═══════════════════════════════════════════════════════════════════════
+standardizers:
+
+  zscore:
+    class: ZScoreStandardizer
+    description: "Per-component z-score (different μ,σ for u and v)"
+    preserves_div_free: false
+
+  zscore_unified:
+    class: UnifiedZScoreStandardizer
+    description: "Shared μ,σ for both components — preserves div-free"
+    preserves_div_free: true
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Experiments (current and planned)
+# ═══════════════════════════════════════════════════════════════════════
+experiments:
+
+  01_noise_strategy:
+    question: "Which noise construction produces best inpainting?"
+    controlled: {unet: film, prediction: x0, inpainting: x0_full_reverse_inpaint}
+    variants:
+      fwd_divfree: {noise: forward_diff_div_free, status: trained_380ep}
+      spectral_divfree: {noise: spectral_div_free, status: config_ready}
+      gaussian_baseline: {noise: gaussian, status: config_ready}
+
+  02_inpaint_algorithm:
+    question: "Does RePaint+CG beat FiLM x0-prediction for boundary divergence?"
+    controlled: {noise: forward_diff_div_free}
+    variants:
+      repaint_cg:
+        unet: standard
+        prediction: eps
+        inpainting: repaint_standard
+        projection: forward_diff_project_div_free (per-step)
+        status: config_ready

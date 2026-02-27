@@ -1,17 +1,55 @@
+"""Data standardization strategies for DDPM training.
+
+Each strategy normalizes (2, H, W) vector fields to roughly unit
+variance and provides an inverse to recover physical magnitudes.
+
+See ``ddpm.protocols.StandardizerProtocol`` for the formal contract.
+
+Compatibility constraint
+------------------------
+If the noise strategy is divergence-free, the standardizer MUST use
+a unified scale (same divisor for u and v) to preserve the div-free
+property.  ``UnifiedZScoreStandardizer`` is the only built-in
+standardizer that satisfies this.
+
+Registry
+--------
+Concrete strategies are registered in ``STANDARDIZER_REGISTRY``.
+"""
+
 from abc import ABC, abstractmethod
 import torch
 
-# === Abstract base class ===
+
 class Standardizer(ABC):
+    """Base class for all data standardization strategies.
+
+    Subclasses must implement ``__call__`` (standardize) and
+    ``unstandardize`` (inverse).
+
+    See Also
+    --------
+    ddpm.protocols.StandardizerProtocol
+    """
+
     @abstractmethod
     def __call__(self, tensor: torch.Tensor) -> torch.Tensor:
+        """Standardize a (2, H, W) or (B, 2, H, W) vector field."""
         pass
 
     @abstractmethod
     def unstandardize(self, tensor: torch.Tensor) -> torch.Tensor:
+        """Inverse of ``__call__`` — recover physical units."""
         pass
 
 class ZScoreStandardizer(Standardizer):
+    """Per-component z-score: separate mean/std for u and v.
+
+    WARNING: This breaks the divergence-free property because
+    ``div(standardized) = du/(std_u·dx) + dv/(std_v·dy) ≠ 0``
+    when ``std_u ≠ std_v``.  Use ``UnifiedZScoreStandardizer``
+    with div-free noise strategies.
+    """
     def __init__(self, u_training_mean, u_training_std, v_training_mean, v_training_std):
         self.u_mean = u_training_mean
         self.u_std = u_training_std
@@ -52,6 +90,12 @@ class UnifiedZScoreStandardizer(Standardizer):
         return tensor * self.std + self.mean
 
 class MaxMagnitudeStandardizer(Standardizer):
+    """Divide by the maximum velocity magnitude.
+
+    WARNING: Stateful — stores ``last_max_mag`` from the most recent
+    ``__call__``.  Not safe for batched unstandardize across differently
+    scaled inputs.
+    """
     def __init__(self):
         self.last_max_mag = None  # Store the last magnitude used
 
@@ -70,6 +114,11 @@ class MaxMagnitudeStandardizer(Standardizer):
         return tensor * self.last_max_mag
 
 class UnitVectorNormalizer(Standardizer):
+    """Normalize each pixel's vector to unit length.
+
+    WARNING: Stateful — stores per-pixel magnitudes for inversion.
+    Destroys magnitude information; only direction is preserved.
+    """
     def __init__(self):
         self.eps = 1e-8
         self.last_magnitudes = None  # Store per-vector magnitudes

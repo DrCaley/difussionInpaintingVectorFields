@@ -11,7 +11,7 @@ plots/visualization_tools/pt_visualizer_images
 plots/outputs
 plots/images
 noise/
-results/
+/results/
 noise_images/
 tested_models/
 *.csv
@@ -21,19 +21,51 @@ tested_models/
 *.png
 
 util.py
+
 # Test and temporary scripts
 scripts/test_*.py
 scripts/diagnose_*.py
+scripts/_*.py
 scripts/compare_methods.py
 scripts/verify_gaussian.py
 scripts/better_images.py
 scripts/run_comparison.py
 scripts/visualize_*.py
 
+# Analysis, evaluation, and one-off scripts (local-only tools)
+scripts/analyze_*.py
+scripts/check_*.py
+scripts/compare_*.py
+scripts/generate_*_inpaint.py
+scripts/inspect_*.py
+scripts/plot_*.py
+scripts/quick_*.py
+scripts/render_*.py
+scripts/resume_*.sh
+scripts/run_*_bulk.py
+scripts/run_*_sweep.py
+scripts/save_*.py
+scripts/smoke_test_*.py
+scripts/summarize_*.py
+scripts/sweep_*.py
+scripts/sweep_*.sh
+scripts/tmp_*.py
+scripts/verify_*.py
+scripts/view_*.py
+scripts/show_*.py
+scripts/replot_*.py
+
+# Legacy training configs (superseded by experiments/ system)
+models_to_train/inpaint_*.yaml
+models_to_train/smoke_test_*.yaml
+models_to_train/resume_*.yaml
+models_to_train/palette_*.yaml
+models_to_train/spectral_*.yaml
+
 # Training logs
 *.log
 
 # Virtual environment
 env/
-.DS_Store
+**/.DS_Store
 .rapid/

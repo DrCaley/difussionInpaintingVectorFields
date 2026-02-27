@@ -1,0 +1,38 @@
+# Big MyUNet_Attn with proper regularization to beat 0.0093
+# Changes from original (which peaked at 0.0093 @ epoch 57):
+#   - AdamW (weight_decay=0.0001) to prevent overfitting past epoch 57
+#   - Cosine LR with warmup, then anneal down for finer convergence
+#   - EMA (decay=0.999, faster than 0.9999) for smooth inference weights
+#   - Raw weights used for checkpoint selection (EMA logged separately)
+#   - Gradient clipping (max_grad_norm=1.0) for stability
+# v2 attempt 2: LR 0.001 collapsed at epoch 15 with batch_size 16.
+#   Lowered LR to 0.0005 (still above original 0.0003).
+# v2 attempt 3: Added gradient accumulation (5 steps) for effective
+#   batch size 80. Resumed from epoch 31 checkpoint.
+
+model_name: repaint_gaussian_attn_v2
+noise_function: gaussian
+unet_type: standard_attn
+prediction_target: eps
+mask_xt: false
+
+batch_size: 16
+lr: 0.0005
+max_grad_norm: 1.0
+gradient_accumulation_steps: 5  # effective batch = 16 * 5 = 80
+
+# Regularization
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+
+# EMA with faster decay (effective window ~2 epochs instead of ~17)
+use_ema: true
+ema_decay: 0.999
+ema_warmup_steps: 500
+
+augment: false
+
+# Resume from batch-16 run (epoch 31)
+retrain_mode: true
+model_to_retrain: experiments/02_inpaint_algorithm/repaint_gaussian_attn_v2/results/inpaint_gaussian_t250_best_checkpoint.pt

@@ -1,0 +1,24 @@
+# Slim attention UNet — reduced capacity + dropout to combat overfitting
+# Same inference algorithm (RePaint) as repaint_gaussian_attn, but with:
+#   - Halved channels: [32, 64, 128, 128] (was [64, 128, 256, 256])
+#   - Dropout p=0.1 in every ResBlock
+#   - Attention only at bottleneck (4×8, 32 positions)
+# ~6.1M params (was 23.2M) — 666 params/sample (was 2,523)
+
+model_name: repaint_gaussian_attn_slim_eps_t250
+noise_function: gaussian
+unet_type: standard_attn_slim
+prediction_target: eps
+mask_xt: false
+batch_size: 64
+lr: 0.001
+max_grad_norm: 1.0
+
+# ── Training improvements ────────────────────────────────────────
+weight_decay: 0.0001      # AdamW regularization
+lr_schedule: cosine       # cosine annealing with warmup
+warmup_epochs: 10         # linear warmup from lr*0.001 → lr
+use_ema: true             # exponential moving average of weights
+ema_decay: 0.9999         # standard DDPM EMA decay
+ema_warmup_steps: 2000    # ramp decay 0→0.9999 over ~14 epochs
+augment: false            # disabled — site-specific ocean data

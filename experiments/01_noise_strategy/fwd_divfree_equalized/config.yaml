@@ -1,0 +1,12 @@
+# Spectrally-equalized forward-diff div-free noise
+# Same unconditional eps-prediction setup as repaint_cg, but with equalized noise
+# that has flat (white) power spectrum instead of high-pass.
+#
+# Run: PYTHONPATH=. python experiments/run_experiment.py experiments/01_noise_strategy/fwd_divfree_equalized/config.yaml
+
+model_name: fwd_diff_eq_divfree_eps_t250
+noise_function: fwd_diff_eq_divfree
+unet_type: standard
+prediction_target: eps
+mask_xt: false
+p_uncond: 0.0

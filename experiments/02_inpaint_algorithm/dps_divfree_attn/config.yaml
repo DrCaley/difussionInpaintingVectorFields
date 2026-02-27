@@ -1,0 +1,16 @@
+# DPS Guided Inpainting — Div-Free Attention Model
+#
+# Inference-only experiment. Tests new equalized div-free model with
+# attention UNet (MyUNet_Attn) — same architecture as the successful
+# Gaussian model but trained with div-free noise.
+#
+# Model: fwd_divfree_attn (MyUNet_Attn, epoch 43, fwd_diff_eq_divfree noise)
+# Checkpoint: experiments/01_noise_strategy/fwd_divfree_attn/results/
+#             inpaint_fwd_diff_eq_divfree_t250_best_checkpoint.pt
+# Noise: fwd_diff_eq_divfree
+
+model_name: dps_divfree_attn
+noise_function: fwd_diff_eq_divfree
+unet_type: standard_attn
+prediction_target: eps
+mask_xt: false

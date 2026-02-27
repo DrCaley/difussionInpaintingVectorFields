@@ -1,0 +1,9 @@
+# Vanilla RePaint with Gaussian noise
+# Unconditional eps-prediction DDPM with standard Gaussian noise.
+# Inpainting via repaint_standard() — no div-free projection.
+
+model_name: repaint_gaussian_eps_t250
+noise_function: gaussian
+unet_type: standard
+prediction_target: eps
+mask_xt: false

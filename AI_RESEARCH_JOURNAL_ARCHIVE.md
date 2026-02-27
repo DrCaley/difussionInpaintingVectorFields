@@ -1148,3 +1148,186 @@ This suggests the divergence-free constraint helps maintain physical consistency
 - Compare Pretrained vs Per-Step CombNet on new models
 
 ---
+
+## Session: Guided Diffusion Inpainting
+
+**Date:** 2025-01-XX
+**Goal:** Replace RePaint's copy-paste inpainting with gradient-guided diffusion
+
+### Motivation
+
+Deep quality diagnostics revealed fundamental limitations of RePaint:
+- **Magnitude bias**: FFT projection at every step removes ~0.4% energy per step, compounding to ~34% magnitude loss over 250 steps
+- **OOD inputs**: Copy-paste composites present out-of-distribution inputs to the denoiser, causing biased predictions
+- **Angular errors**: 47–88° directional errors in unknown region despite reasonable MSE
+
+### Approach: Guided Diffusion (No Retraining Required)
+
+Instead of RePaint's copy-paste-denoise loop, run the **full reverse process** from pure noise and steer the trajectory with two gradient losses at each step:
+
+$$L = \lambda_b \| (\hat{x}_0 - x_{\text{known}}) \cdot (1-\text{mask}) \|^2 + \lambda_d \| \nabla \cdot \hat{x}_0 \|^2$$
+
+Where $\hat{x}_0$ is estimated via **Tweedie's formula**: $\hat{x}_0 = \frac{x_t - \sqrt{1-\bar\alpha_t}\,\epsilon_\theta}{\sqrt{\bar\alpha_t}}$
+
+**Key advantages over RePaint:**
+- No copy-paste → no boundary artefacts, no OOD composites
+- No FFT projection → no magnitude crushing
+- Natural enforcement of both boundary matching AND divergence-free constraint
+- No resample cycles needed
+
+### Implementation
+
+- `guided_inpaint()` in `ddpm/utils/inpainting_utils.py`
+- `divergence_2d_diffable()` — autograd-compatible divergence via `F.conv2d` (no in-place ops)
+- Config in `data.yaml`: `inpainting_method: guided`, `guidance_scale_boundary`, `guidance_scale_div`
+- `run_ddpm_gp_bulk_robot_path.py` dispatches to `guided_inpaint` or `inpaint_generate_new_images` based on config
+
+### Results: Guidance Scale Sweep (Single Sample)
+
+True mean magnitude: 0.14407
+
+| gs_boundary | gs_div | Magnitude | Ratio | MSE | \|div\| |
+|-------------|--------|-----------|-------|-----|---------|
+| 1.0 | 0.5 | 0.08689 | 0.60× | 0.009854 | 0.005066 |
+| 5.0 | 1.0 | 0.10094 | 0.70× | 0.008530 | 0.005944 |
+| 10.0 | 1.0 | 0.10464 | 0.73× | 0.008450 | 0.007027 |
+| 20.0 | 1.0 | 0.10546 | 0.73× | 0.007905 | 0.008232 |
+| 20.0 | 2.0 | 0.10466 | 0.73× | 0.007691 | 0.007304 |
+| 50.0 | 5.0 | 0.10129 | 0.70× | 0.007043 | 0.006562 |
+| 100.0 | 5.0 | 0.10175 | 0.71× | 0.007421 | 0.007783 |
+
+### Comparison vs RePaint
+
+| Method | Magnitude Ratio | MSE | Notes |
+|--------|----------------|-----|-------|
+| RePaint (FFT, 1 cycle) | 0.34× | 0.028 | Projection crushes magnitude |
+| RePaint (no projection) | 2.13× | 0.124 | Overshoots without projection |
+| **Guided (gs_b=50, gs_d=5)** | **0.70×** | **0.007** | **4× MSE improvement, 2× magnitude** |
+
+### Key Findings
+
+1. **4× MSE improvement** over best RePaint config (0.007 vs 0.028)
+2. **2× better magnitude recovery** (0.70× vs 0.34×)
+3. Magnitude plateaus at ~0.73× — residual bias from UNet's unconditional predictions
+4. Divergence stays low (~0.005–0.008) across all configs
+5. **Speed**: ~90 it/s on MPS (2–3s per sample) — faster than RePaint with resample cycles
+6. Best MSE at (gs_b=50, gs_d=5); best magnitude at (gs_b=20, gs_d=1)
+
+### Remaining Limitation
+
+The magnitude still saturates at ~73% of true. This is because the UNet was trained for **unconditional denoising** — it has no awareness of the mask or known values during training. Gradient guidance helps but cannot fully compensate for the model's bias.
+
+### Next Step: Mask-Aware Training (Palette-Style)
+
+To fundamentally solve the remaining magnitude gap, the next approach to try is **mask-aware training**, inspired by Palette (Saharia et al., 2022):
+
+**Core idea:** Modify the UNet to accept the mask and known values as additional input channels during training. This makes the denoiser aware of the inpainting task structure.
+
+**Implementation plan:**
+1. **Change UNet input**: 2 channels → 5 channels: `[x_t (2ch), mask (1ch), known_values (2ch)]`
+2. **Training pipeline**: At each training step, generate random masks, compute `known_values = x_0 * (1 - mask)`, concatenate `[x_t, mask, known_values]`, train denoiser to predict noise
+3. **Random mask augmentation**: Use diverse masks (rectangles, robot paths, random blocks) during training so the model generalizes to arbitrary mask shapes
+4. **Inference**: Simply run standard reverse process with mask/known values as conditioning — no copy-paste, no gradient guidance needed, no projection
+5. **Expected benefit**: Model learns to jointly denoise AND inpaint with correct magnitudes because it sees the conditioning context during training
+
+**Why this should work:**
+- The denoiser will be in-distribution at inference time (it was trained with mask+context conditioning)
+- No post-hoc projection needed → no magnitude crushing
+- No gradient computation through UNet → faster inference
+- Palette demonstrated excellent results on natural image inpainting with this exact approach
+
+**Estimated effort:** ~1–2 days (modify UNet, update dataloader, retrain ~600 epochs)
+
+---
+
+### February 19, 2026 — Beta Schedule Diagnosis & Fix (RePaint+CG Experiment)
+
+**Objective:** Diagnose and fix magnitude blow-up in RePaint+CG inpainting results.
+
+#### Background
+
+The RePaint+CG experiment (`experiments/02_inpaint_algorithm/repaint_cg/`) uses an unconditional eps-prediction DDPM with `forward_diff_div_free` noise (250 steps) and RePaint inpainting with per-step CG div-free projection. Initial training converged (best test loss 0.0023 at epoch 172), but inference showed severe magnitude blow-up:
+
+| Method | Median Magnitude | GT Magnitude | MSE |
+|--------|-----------------|--------------|-----|
+| RePaint (no projection) | 1.45 | 0.19 | 34.48 |
+| RePaint+CG | 0.31 | 0.19 | 3.20 |
+| GP baseline | ~0.19 | 0.19 | 0.0007 |
+
+CG projection helped (1.45→0.31) but magnitudes were still 1.6× too large.
+
+#### Investigation (5-Test Diagnostic)
+
+Created `scripts/diagnose_repaint_magnitudes.py` with five targeted tests:
+
+1. **CG on pure div-free noise** → energy_ratio = 1.0000 at all timesteps. CG is a perfect no-op on div-free noise — NOT the culprit.
+2. **CG on x_t (signal+noise)** → 2–12% energy loss (removes irrotational component of signal). Expected and acceptable.
+3. **Plain RePaint step trace** → x0_pred RMS 25–37× too large; final magnitude 7.5× GT.
+4. **RePaint+CG step trace** → final magnitude 1.6× GT. CG helps but doesn't fix root cause.
+5. **Repeated project→re-stamp cycle** → stable convergence. No runaway growth.
+
+#### Key Finding: Unconditional Generation Also Broken
+
+Created `scripts/diagnose_uncond_generation.py` — tested the model with NO inpainting at all (pure reverse diffusion from noise). Result: generated samples were **2.32× too large**. This proved the problem is in the model/schedule, not in RePaint.
+
+#### Root Cause: Overly Aggressive Beta Schedule
+
+Compared the beta schedules:
+
+| Model | min_beta | max_beta | ᾱ₂₄₉ (final SNR) |
+|-------|----------|----------|-------------------|
+| Working Gaussian model | 0.0001 | 0.02 | 0.0797 |
+| Fwd-diff model (broken) | 0.0004 | 0.08 | 0.000033 |
+
+The fwd-diff schedule was **4× more aggressive**. By t=166, ᾱ < 0.01 — all signal was destroyed. The last 84 of 250 timesteps were pure noise→noise denoising, which the model couldn't learn meaningfully. The near-zero ᾱ_T caused the eps→x₀ conversion to amplify prediction errors enormously.
+
+#### Fix Applied
+
+- Changed `experiments/templates/base_inpaint.yaml`: `min_beta: 0.0001`, `max_beta: 0.02` (matching the working Gaussian model's schedule)
+- Killed old training (PID 7041), relaunched with corrected schedule
+- New training: loss dropped from 0.267 → 0.022 in first ~200 epochs; best test loss 0.0022 at epoch 203 (still improving)
+
+#### Lessons Learned
+
+1. **CG projection is well-behaved**: energy_ratio = 1.0 on div-free noise; it only removes irrotational components, which is exactly what we want.
+2. **Beta schedule must preserve residual signal**: ᾱ_T should be > ~0.05 so the model always has some signal to work with. Our old schedule had ᾱ_T = 0.000033.
+3. **Test unconditional generation first**: If pure generation is broken, no inpainting algorithm can fix it.
+4. **Don't blame training duration for bad results when loss has plateaued**: The old model was fully converged at 0.0023 — the problem was architectural (schedule), not training.
+
+#### Files Created
+
+- `scripts/diagnose_repaint_magnitudes.py` — 5-test magnitude diagnostic
+- `scripts/diagnose_uncond_generation.py` — unconditional generation sanity check
+
+#### Status
+
+Training with corrected beta schedule in progress. Will re-run inference after convergence.
+
+---
+
+### February 20, 2026 — Architecture Context Notes (CRITICAL)
+
+**Purpose:** Prevent confusion about which network/algorithm is under discussion.
+
+#### Active Experimental Configurations
+
+| Experiment | UNet type | Channels | Conditioning | Inpainting | Noise |
+|------------|-----------|----------|--------------|------------|-------|
+| `01_noise_strategy/fwd_divfree` | `standard` (2ch) | 2 in, 2 out | NONE | RePaint | `forward_diff_div_free` |
+| `01_noise_strategy/fwd_divfree_equalized` | `standard` (2ch) | 2 in, 2 out | NONE | RePaint | `fwd_diff_eq_divfree` |
+| `02_inpaint_algorithm/repaint_cg` | `standard` (2ch) | 2 in, 2 out | NONE | RePaint + CG proj | `forward_diff_div_free` |
+| `02_inpaint_algorithm/repaint_gaussian_attn` | `standard_attn` (2ch) | 2 in, 2 out | NONE | RePaint | `gaussian` |
+
+#### Key Rules — Know Which Architecture You're Discussing
+
+1. **`standard` / `standard_attn` UNets are UNCONDITIONAL** — 2 channels only (u, v). No mask channel, no known_values channels, no `mask_xt`. The model sees only x_t.
+2. **`film` / `concat` UNets are CONDITIONED** — 5 channels: [x_t(2ch), mask(1ch), known_values(2ch)]. These use `mask_xt`, `known_values`, and FiLM/concatenation conditioning.
+3. **RePaint does NOT use conditioning** — it's an unconditional algorithm. The model never sees the mask. Known region is pasted in via copy-paste at each step.
+4. **mask_aware_inpaint / CFG inpaint use conditioned models** — these pass mask+known_values as extra input channels.
+5. **`mask_xt` is ONLY relevant to conditioned models** — it replaces x_t in the known region with Gaussian noise to prevent information leakage. Unconditional models don't have this concept.
+
+#### Current Focus (Feb 20, 2026)
+
+Working on div-free noise for the **unconditional RePaint pipeline** (`standard` 2ch UNet). The spectral gap analysis applies to noise generation only — all projections have flat transfer functions. The equalized noise fix propagates correctly through all noise injection sites in `repaint_standard()` because they all use the same `noise_strategy` object.
+
+---

@@ -1,0 +1,15 @@
+# DPS Guided Inpainting — Div-Free Model (No Attention)
+#
+# Inference-only experiment. Tests whether DPS avoids the copy-paste
+# problem that made div-free models fail with RePaint.
+#
+# Model: repaint_cg (MyUNet, no attention, 8.8M params, epoch 347)
+# Checkpoint: experiments/02_inpaint_algorithm/repaint_cg/results/
+#             inpaint_forward_diff_div_free_t250_best_checkpoint.pt
+# Noise: forward_diff_div_free
+
+model_name: dps_divfree_no_attn
+noise_function: forward_diff_div_free
+unet_type: standard
+prediction_target: eps
+mask_xt: false

@@ -74,6 +74,7 @@ class StraightLinePathGenerator(MaskGenerator):
 
         _, _, h, w = image_shape
         device = dd.get_device()
+        # Mask convention: 1.0 = missing (to inpaint), 0.0 = known.
         mask = np.ones((h, w), dtype=np.float32)
 
         border_mask = BorderMaskGenerator().generate_mask(image_shape=image_shape)

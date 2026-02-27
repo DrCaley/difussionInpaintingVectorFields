@@ -20,7 +20,8 @@ class OceanRobotPathMask(MaskGenerator):
             raise ValueError("Image shape must be provided")
 
         height, width = image_shape[-2:]
-        mask = torch.ones((height, width), dtype=torch.uint8, device=self.device)
+        # Mask convention: 1.0 = missing (to inpaint), 0.0 = known.
+        mask = torch.ones((height, width), dtype=torch.float32, device=self.device)
 
         # Initial position
         if self.start_pos is None:
@@ -58,7 +59,7 @@ class OceanRobotPathMask(MaskGenerator):
         return mask
 
     def _reveal_circle(self, mask, center, radius):
-        """Reveal a circular patch by setting mask to 0 in that region."""
+        """Mark a circular patch as known by setting mask to 0 in that region."""
         h, w = mask.shape
         y = torch.arange(h, device=self.device).view(-1, 1)
         x = torch.arange(w, device=self.device).view(1, -1)
@@ -67,4 +68,4 @@ class OceanRobotPathMask(MaskGenerator):
         dist_squared = (y - cy)**2 + (x - cx)**2
         region = dist_squared <= radius**2
 
-        mask[region] = 0
+        mask[region] = 0.0

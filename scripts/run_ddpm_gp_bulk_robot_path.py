@@ -13,7 +13,7 @@ from data_prep.data_initializer import DDInitializer
 from ddpm.Testing.model_inpainter import ModelInpainter
 from ddpm.helper_functions.masks.robot_path import RobotPathGenerator
 from ddpm.helper_functions.interpolation_tool import gp_fill
-from ddpm.utils.inpainting_utils import inpaint_generate_new_images, top_left_crop
+from ddpm.utils.inpainting_utils import inpaint_generate_new_images, guided_inpaint, top_left_crop
 from scripts.run_comparison import compute_all_metrics
 
 
@@ -93,15 +93,30 @@ def main(num_runs=10, seed=0):
             raw_mask = RobotPathGenerator().generate_mask(input_image.shape).to(device)
             missing_mask = raw_mask * land_mask
 
-            ddpm_output = inpaint_generate_new_images(
-                mi.best_model,
-                input_image,
-                missing_mask,
-                n_samples=1,
-                device=device,
-                resample_steps=resample_steps,
-                noise_strategy=dd.get_noise_strategy(),
-            )
+            inpainting_method = dd.get_attribute("inpainting_method") or "repaint"
+            if inpainting_method == "guided":
+                gs_b = float(dd.get_attribute("guidance_scale_boundary") or 1.0)
+                gs_d = float(dd.get_attribute("guidance_scale_div") or 0.5)
+                ddpm_output = guided_inpaint(
+                    mi.best_model,
+                    input_image,
+                    missing_mask,
+                    n_samples=1,
+                    device=device,
+                    noise_strategy=dd.get_noise_strategy(),
+                    guidance_scale_boundary=gs_b,
+                    guidance_scale_div=gs_d,
+                )
+            else:
+                ddpm_output = inpaint_generate_new_images(
+                    mi.best_model,
+                    input_image,
+                    missing_mask,
+                    n_samples=1,
+                    device=device,
+                    resample_steps=resample_steps,
+                    noise_strategy=dd.get_noise_strategy(),
+                )
             ddpm_output = torch.unsqueeze(
                 dd.get_standardizer().unstandardize(torch.squeeze(ddpm_output, 0)).to(device),
                 0,
