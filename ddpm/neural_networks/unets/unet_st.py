@@ -479,6 +479,28 @@ class MyUNet_ST(MyUNet_Attn):
         n_total = sum(1 for _ in self.parameters())
         print(f"[MyUNet_ST] Unfroze all {n_total} parameters")
 
+    def param_groups(self, spatial_lr: float, temporal_lr: float) -> list:
+        """Return optimizer param groups with differential learning rates.
+
+        Parameters
+        ----------
+        spatial_lr : float
+            Learning rate for pretrained spatial parameters.
+        temporal_lr : float
+            Learning rate for temporal (``temp_*``) parameters.
+
+        Returns
+        -------
+        list[dict]
+            Two-element list suitable for ``torch.optim.Adam(param_groups)``.
+        """
+        spatial_params = [p for n, p in self.named_parameters() if "temp_" not in n]
+        temporal_params = [p for n, p in self.named_parameters() if "temp_" in n]
+        return [
+            {"params": spatial_params, "lr": spatial_lr, "name": "spatial"},
+            {"params": temporal_params, "lr": temporal_lr, "name": "temporal"},
+        ]
+
     @property
     def num_spatial_params(self) -> int:
         """Number of spatial (inherited) parameters."""

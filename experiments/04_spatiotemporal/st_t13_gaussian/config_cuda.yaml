@@ -10,8 +10,9 @@ pretrained_spatial_checkpoint: experiments/02_inpaint_algorithm/repaint_gaussian
 
 # ── Training ──────────────────────────────────────────────────────
 # Phase 1: train temporal layers only (spatial frozen)
-# Phase 2: unfreeze everything with cosine LR
-freeze_spatial_epochs: 50
+# Phase 2: unfreeze everything with differential LR
+freeze_spatial_epochs: 15
+spatial_lr_factor: 0.01          # spatial_lr = lr × 0.01 = 1e-5 at unfreeze
 epochs: 500
 batch_size: 4                    # RTX 5070 Ti (16GB) — conservative; try 6 if memory allows
 gradient_accumulation_steps: 2   # effective batch = 4×2 = 8

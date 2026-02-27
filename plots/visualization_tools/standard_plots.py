@@ -38,6 +38,7 @@ import numpy as np
 import torch
 
 from plots.visualization_tools.plot_vector_field_tool import plot_vector_field
+from ddpm.utils.eddy_detection import detect_eddies, detect_eddies_gamma
 
 # ── Constants ────────────────────────────────────────────────────────
 # Divisor for median_mag → quiver scale.  Larger = longer arrows.
@@ -159,6 +160,49 @@ def plot_single_field(
 
 # ── Multi-panel convenience ──────────────────────────────────────────
 
+def _detect_eddies_for_markers(
+    vel: torch.Tensor,
+    method: str = "gamma1",
+    **kwargs,
+) -> Optional[List]:
+    """Run eddy detection and return marker list, or None on failure.
+
+    Parameters
+    ----------
+    vel : (2, H, W) velocity field.
+    method : ``"gamma1"`` (default) or ``"ow"``.
+    **kwargs : Forwarded to the chosen detector.
+
+    Returns
+    -------
+    list of (center_x, center_y, is_cyclonic) tuples, or None.
+    """
+    try:
+        if method == "gamma1":
+            gamma_kw = dict(
+                radius=kwargs.get("eddy_radius", 8),
+                gamma_threshold=kwargs.get("eddy_gamma_threshold", 0.6),
+                min_area=kwargs.get("eddy_min_area", 25),
+                shore_buffer=kwargs.get("eddy_shore_buffer", 2),
+                smooth_sigma=kwargs.get("eddy_smooth_sigma", 2.0),
+                min_mean_speed_ratio=kwargs.get("eddy_min_speed_ratio", 0.3),
+                min_vorticity=kwargs.get("eddy_min_vorticity", 0.03),
+            )
+            eddies, _, _ = detect_eddies_gamma(vel, **gamma_kw)
+        else:
+            eddies, _, _ = detect_eddies(
+                vel,
+                threshold_sigma=kwargs.get("eddy_threshold_sigma", 0.2),
+                min_area=kwargs.get("eddy_min_area", 16),
+                shore_buffer=kwargs.get("eddy_shore_buffer", 2),
+            )
+        if eddies:
+            return [(e.center_x, e.center_y, e.is_cyclonic) for e in eddies]
+    except Exception:
+        pass
+    return None
+
+
 def plot_inpaint_panels(
     gt: torch.Tensor,
     missing_mask: torch.Tensor,
@@ -170,6 +214,17 @@ def plot_inpaint_panels(
     step: int = DEFAULT_STEP,
     divisor: float = DEFAULT_ARROW_SCALE_DIVISOR,
     extra_titles: Optional[Dict[str, str]] = None,
+    mark_eddies: bool = True,
+    mark_eddies_on_methods: bool = False,
+    eddy_method: str = "gamma1",
+    eddy_threshold_sigma: float = 0.2,
+    eddy_min_area: int = 25,
+    eddy_shore_buffer: int = 2,
+    eddy_radius: int = 8,
+    eddy_gamma_threshold: float = 0.65,
+    eddy_smooth_sigma: float = 2.0,
+    eddy_min_speed_ratio: float = 0.3,
+    eddy_min_vorticity: float = 0.03,
 ):
     """Generate a standard set of inpainting comparison plots.
 
@@ -189,6 +244,19 @@ def plot_inpaint_panels(
     prefix : Filename prefix.
     mask_label : Extra text for the mask panel title (e.g. "transect").
     extra_titles : Optional per-method extra title text.
+    mark_eddies : If True, detect eddies in GT and draw X markers on
+        the ground-truth panel.  Default True.
+    mark_eddies_on_methods : If True, also run eddy detection on each
+        method's output and draw markers on those panels.  Default False.
+    eddy_method : Detection method: ``"gamma1"`` (default) or ``"ow"``.
+    eddy_threshold_sigma : OW threshold σ multiplier (OW method only).
+    eddy_min_area : Minimum eddy area in pixels.
+    eddy_shore_buffer : Pixels to erode from ocean mask.
+    eddy_radius : Gamma1 neighbourhood radius in pixels.
+    eddy_gamma_threshold : Gamma1 |Γ₁| threshold.
+    eddy_smooth_sigma : Gaussian smoothing σ for Gamma1.
+    eddy_min_speed_ratio : Min mean-speed ratio filter for Gamma1.
+    eddy_min_vorticity : Min |vorticity| to keep an eddy candidate.
     """
     os.makedirs(out_dir, exist_ok=True)
     g = gt.cpu().squeeze()       # (2, H, W)
@@ -206,10 +274,30 @@ def plot_inpaint_panels(
     ocean = (~lm).float()
     mask_pct = float(mm_2d[ocean.bool()].sum() / (ocean.sum() + 1e-8) * 100)
 
+    # Common eddy kwargs forwarded to the detector
+    eddy_kw = dict(
+        eddy_radius=eddy_radius,
+        eddy_gamma_threshold=eddy_gamma_threshold,
+        eddy_min_area=eddy_min_area,
+        eddy_shore_buffer=eddy_shore_buffer,
+        eddy_smooth_sigma=eddy_smooth_sigma,
+        eddy_min_speed_ratio=eddy_min_speed_ratio,
+        eddy_min_vorticity=eddy_min_vorticity,
+        eddy_threshold_sigma=eddy_threshold_sigma,
+    )
+
+    # Detect eddies in GT for marker overlay
+    gt_eddy_markers = None
+    if mark_eddies:
+        gt_eddy_markers = _detect_eddies_for_markers(
+            g, method=eddy_method, **eddy_kw
+        )
+
     # 1. Ground truth
     plot_vector_field(
         g[0], g[1], title="Ground Truth",
         file=os.path.join(out_dir, f"{prefix}_01_ground_truth.png"),
+        eddy_markers=gt_eddy_markers,
         **kw,
     )
 
@@ -234,10 +322,18 @@ def plot_inpaint_panels(
             title_parts.append(extra_titles[name])
         title = "  ".join(title_parts)
 
+        # Per-method eddy markers
+        method_markers = None
+        if mark_eddies_on_methods:
+            method_markers = _detect_eddies_for_markers(
+                f, method=eddy_method, **eddy_kw
+            )
+
         safe_name = name.lower().replace(" ", "_").replace("+", "_")
         plot_vector_field(
             f[0], f[1], title=title,
             file=os.path.join(out_dir, f"{prefix}_{i:02d}_{safe_name}.png"),
+            eddy_markers=method_markers,
             **kw,
         )
 

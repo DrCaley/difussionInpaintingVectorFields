@@ -29,6 +29,7 @@ def plot_vector_field(
     missing_mask: torch.Tensor = None,
     missing_color: str = "red",
     missing_alpha: float = 0.25,
+    eddy_markers: list = None,
 ):
     assert vx.shape == vy.shape, "vx and vy must be the same shape"
 
@@ -166,6 +167,14 @@ def plot_vector_field(
         color='blue',
         zorder=2,
     )
+
+    # Eddy markers: list of (x_pixel, y_pixel, is_cyclonic) tuples
+    if eddy_markers:
+        for mx, my, is_cyc in eddy_markers:
+            color_e = '#D32F2F' if is_cyc else '#1565C0'
+            plt.plot(mx, my, 'x', color=color_e, ms=12, mew=2.5, zorder=5)
+            plt.plot(mx, my, 'o', color=color_e, ms=16, mew=1.5,
+                     fillstyle='none', zorder=4.5)
     #my_path = os.path.dirname(os.path.abspath(__file__))
 
     #plt.gca().invert_yaxis() THIS LINE WILL CONVERT ROTATIONAL FIELDS INTO RADIAL ONES AND VICE VERSA

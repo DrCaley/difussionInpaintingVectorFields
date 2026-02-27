@@ -119,6 +119,8 @@ class TrainInpaint:
         self.T = int(dd.get_attribute("T") or 1)
         self.pretrained_spatial = dd.get_attribute("pretrained_spatial_checkpoint") or None
         self.freeze_spatial_epochs = int(dd.get_attribute("freeze_spatial_epochs") or 0)
+        # Differential LR: spatial_lr_factor scales lr for pretrained spatial params after unfreeze
+        self.spatial_lr_factor = float(dd.get_attribute("spatial_lr_factor") or 0.01)
 
         # Build inpainting model
         if self.unet_type == "film":
@@ -392,6 +394,7 @@ class TrainInpaint:
         logging.info(f"Output dir: {self.output_dir}")
         if self.unet_type == "spatiotemporal":
             logging.info(f"Spatiotemporal: T={self.T}, freeze_spatial_epochs={self.freeze_spatial_epochs}")
+            logging.info(f"Spatial LR factor: {self.spatial_lr_factor} (spatial_lr={self.lr * self.spatial_lr_factor:.6f} at unfreeze)")
             if self.pretrained_spatial:
                 logging.info(f"Pretrained spatial checkpoint: {self.pretrained_spatial}")
 
@@ -512,8 +515,47 @@ class TrainInpaint:
                 if spatial_frozen and epoch >= start_epoch + self.freeze_spatial_epochs:
                     self.ddpm.network.unfreeze_spatial()
                     spatial_frozen = False
+
+                    # Rebuild optimizer with differential learning rates:
+                    # spatial params get spatial_lr_factor * lr, temporal keep lr
+                    spatial_lr = self.lr * self.spatial_lr_factor
+                    temporal_lr = self.lr
+                    param_groups = self.ddpm.network.param_groups(spatial_lr, temporal_lr)
+                    if self.weight_decay > 0:
+                        optimizer = AdamW(param_groups, weight_decay=self.weight_decay)
+                    else:
+                        optimizer = Adam(param_groups)
+
+                    # Reset cosine LR schedule for the remaining epochs
+                    remaining_epochs = self.n_epochs - self.freeze_spatial_epochs
+                    phase2_warmup = min(5, remaining_epochs // 10)  # brief warmup
+                    if self.lr_schedule == "cosine" and remaining_epochs > phase2_warmup:
+                        warmup_sched = LinearLR(
+                            optimizer,
+                            start_factor=0.1,
+                            end_factor=1.0,
+                            total_iters=phase2_warmup,
+                        )
+                        cosine_sched = CosineAnnealingLR(
+                            optimizer,
+                            T_max=remaining_epochs - phase2_warmup,
+                            eta_min=spatial_lr * 0.01,  # min LR based on smaller spatial LR
+                        )
+                        scheduler = SequentialLR(
+                            optimizer,
+                            schedulers=[warmup_sched, cosine_sched],
+                            milestones=[phase2_warmup],
+                        )
+                    elif self.lr_schedule == "cosine":
+                        scheduler = CosineAnnealingLR(
+                            optimizer, T_max=max(1, remaining_epochs),
+                            eta_min=spatial_lr * 0.01,
+                        )
+
                     logging.info(
-                        f"Phase 2: unfroze spatial weights at epoch {epoch + 1}"
+                        f"Phase 2: unfroze spatial weights at epoch {epoch + 1} | "
+                        f"spatial_lr={spatial_lr:.6f}, temporal_lr={temporal_lr:.6f} | "
+                        f"new cosine schedule for {remaining_epochs} remaining epochs"
                     )
 
                 epoch_loss = 0.0
@@ -638,7 +680,12 @@ class TrainInpaint:
                 self.ddpm.train()
 
                 # Get current LR for logging
-                current_lr = optimizer.param_groups[0]['lr']
+                if len(optimizer.param_groups) > 1:
+                    lr_parts = [f"{g.get('name', f'g{i}')}={g['lr']:.6f}"
+                                for i, g in enumerate(optimizer.param_groups)]
+                    current_lr_str = ", ".join(lr_parts)
+                else:
+                    current_lr_str = f"{optimizer.param_groups[0]['lr']:.6f}"
 
                 checkpoint = {
                     "epoch": epoch,
@@ -666,7 +713,7 @@ class TrainInpaint:
                 log_str = (
                     f"\nEpoch {epoch + 1}: epoch_loss={epoch_loss:.7f}, "
                     f"train={avg_train_loss:.7f}, test={avg_test_loss:.7f}"
-                    f"{ema_str}, lr={current_lr:.6f}"
+                    f"{ema_str}, lr={current_lr_str}"
                 )
 
                 if avg_test_loss < best_test_loss:
