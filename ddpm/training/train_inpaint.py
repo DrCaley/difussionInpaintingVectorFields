@@ -121,6 +121,8 @@ class TrainInpaint:
         self.freeze_spatial_epochs = int(dd.get_attribute("freeze_spatial_epochs") or 0)
         # Differential LR: spatial_lr_factor scales lr for pretrained spatial params after unfreeze
         self.spatial_lr_factor = float(dd.get_attribute("spatial_lr_factor") or 0.01)
+        # Max evaluation batches per loader (0 = evaluate all)
+        self.eval_max_batches = int(dd.get_attribute("eval_max_batches") or 0)
 
         # Build inpainting model
         if self.unet_type == "film":
@@ -306,7 +308,11 @@ class TrainInpaint:
         logging.info(f"Saved config to {config_path}")
 
     def evaluate(self, loader, fixed_seed=None):
-        """Evaluate average MSE loss on a loader."""
+        """Evaluate average MSE loss on a loader.
+
+        If ``self.eval_max_batches > 0``, only evaluate the first N batches
+        for speed (useful with large datasets).
+        """
         py_state = None
         np_state = None
         torch_state = None
@@ -322,10 +328,13 @@ class TrainInpaint:
         criterion = torch.nn.MSELoss()
         total_loss = 0.0
         count = 0
+        max_batches = self.eval_max_batches if self.eval_max_batches > 0 else float("inf")
 
         try:
             with torch.no_grad():
-                for batch in loader:
+                for batch_idx, batch in enumerate(loader):
+                    if batch_idx >= max_batches:
+                        break
                     # Handle both 3-tuple (sequence) and 5-tuple (inpaint) loaders
                     if len(batch) == 3:
                         x0, t, noise = batch

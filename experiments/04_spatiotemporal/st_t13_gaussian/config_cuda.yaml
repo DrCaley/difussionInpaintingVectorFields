@@ -22,6 +22,7 @@ warmup_epochs: 5
 weight_decay: 0.01
 max_grad_norm: 1.0
 use_ema: true
+eval_max_batches: 100            # cap evaluation to 100 batches (~400 samples) per loader
 
 # ── Noise (Gaussian, same as best 2D model) ──────────────────────
 noise_function: gaussian
