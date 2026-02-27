@@ -12,11 +12,10 @@ from scipy.ndimage import distance_transform_edt
 from pathlib import Path
 import random
 
-from ddpm.utils.noise_utils import get_noise_type_name
-
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent.parent))
 
+from ddpm.utils.noise_utils import get_noise_type_name
 from ddpm.helper_functions.masks.percentage_gaussian_mask import GaussianNoisePercentageMaskGenerator
 from ddpm.helper_functions.masks.robot_path import RobotPathGenerator
 from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator

@@ -13,8 +13,6 @@ from data_prep.data_initializer import DDInitializer
 from ddpm.vector_combination.combiner_unet import VectorCombinationUNet  # Importing your specific model
 from ddpm.vector_combination.combination_loss import PhysicsInformedLoss
 
-from ddpm.vector_combination.jacobi_solver import analytical_seam_projection
-
 def combine_fields(known, inpainted, mask, save_dir=""):
 
     #Get Config Data
