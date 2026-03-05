@@ -4,7 +4,7 @@ v_training_mean: -0.0323937796117541
 v_training_std: 0.08899177232117582
 mag_mean: 0.1446947511640557
 
-gpu_to_use: 0
+gpu_to_use: 1
 
 # === training ===
 retrain_mode: False
@@ -18,10 +18,11 @@ epochs: 2000 #usually 2000
 batch_size: 100  #use ~80 for server
 lr: 0.001
 
-standardizer_type: zscore
-                  # zscore
-                  # maxmag
-                  # units
+standardizer_type:
+  zscore
+  # zscore
+  # maxmag
+  # units
 
 noise_function: 
               # gaussian
@@ -30,10 +31,11 @@ noise_function:
               # hh_decomp_div_free
               # cached_div
 
-loss_function: mse
-              # mse
-              # physical
-              # best_loss
+loss_function:
+  mse
+  # mse
+  # physical
+  # best_loss
 w1: 0.6
 w2: 0.4
 num_workers: 0
@@ -49,8 +51,15 @@ num_images_to_process: 1
 n_samples: 1
 resample_nums: [5]
 save_pt_fields: True
-random_seed: 26
+random_seed: 42
 clear_all_previous_results: True
+enable_visualization: True
+
+max_iterations: 20
+allowable_error: 1e-4
+scaling_function:
+                # max
+                # average
 
 model_paths:
   - "trained_models/div_free_model.pt"

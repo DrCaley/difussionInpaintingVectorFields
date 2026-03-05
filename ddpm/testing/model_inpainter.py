@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from scipy.ndimage import distance_transform_edt
 from pathlib import Path
+import random
 
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.append(str(BASE_DIR.parent.parent))
@@ -23,6 +24,7 @@ from ddpm.neural_networks.unets.unet_xl import MyUNet
 from ddpm.helper_functions.death_messages import get_death_message
 from plots.visualization_tools.pt_visualizer_plus import PTVisualizer
 from ddpm.helper_functions.interpolation_tool import interpolate_masked_velocity_field, gp_fill
+from ddpm.utils.MetricsCalculator import MetricsCalculator
 from ddpm.utils.inpainting_utils import inpaint_generate_new_images, calculate_mse, top_left_crop, \
     calculate_percent_error
 
@@ -208,6 +210,10 @@ class ModelInpainter:
         n_samples = self.dd.get_attribute('n_samples')
         loader = self.val_loader
 
+        total_metrics = {}
+        total_images = 0
+        metrics_calc = MetricsCalculator(self.results_path, self.dd)
+
         with tqdm(total=min(len(loader.dataset), num_images_to_process),
                   desc=f"[{self.model_name}] Mask: {mask_generator}({mask_generator.get_num_lines()})", colour="#00ffff") as main_pbar:
 
@@ -279,7 +285,6 @@ class ModelInpainter:
                             torch.save(mask_cropped, self.results_path / f"mask{base_id}.pt")
                             torch.save(input_image_original_cropped, self.results_path / f"initial{base_id}.pt")
                             torch.save(gp_field_cropped, self.results_path / f"gp_field{base_id}.pt")
-                            # torch.save(final_noisy_image_cropped, self.results_path / f"final_noisy_image{base_id}.pt")
 
 
                             writer.writerow([self.model_name, image_counter, mask_generator, num_lines, resample, mse_ddpm.item(), mse_gp.item(), mask_percentage, avg_dist])
@@ -290,12 +295,46 @@ class ModelInpainter:
                                 self.mse_distance_ddpm.append((avg_dist, mse_ddpm.item()))
                                 self.mse_distance_gp.append((avg_dist, mse_gp.item()))
 
+                            viz_metrics = metrics_calc.calculate_all_metrics(
+                                batch[1].item(), 
+                                mask_generator, 
+                                resample, 
+                                num_lines
+                            )
+
                             if self.visualizer:
                                 ptv = PTVisualizer(mask_type=mask_generator, sample_num=batch[1].item(),
                                                    vector_scale=self.vector_scale, num_lines=num_lines,
                                                    resamples=resample, results_dir=self.results_path)
                                 ptv.visualize()
                                 ptv.calc()
+
+
+                            metrics = {
+                                "mse_ddpm": mse_ddpm.item(),
+                                "mse_gp": mse_gp.item(),
+                                "per_ddpm": per_ddpm.item(),
+                                "per_gp": per_gp.item(),
+                                "mask_percentage": mask_percentage,
+                                "avg_dist":avg_dist
+                            }
+                            metrics.update(viz_metrics)
+                            
+                            # accumulate all metrics
+                            for k, v in metrics.items():
+                                v = float(v)
+                                total_metrics[k] = total_metrics.get(k, 0.0) + v
+                            total_images += 1
+
+                            # Write image metrics to CSV
+                            csv_row = [
+                                self.model_name, image_counter, mask_generator, num_lines, resample
+                            ]
+
+                            for k, v in metrics.items():
+                                csv_row.append(float(v))
+
+                            writer.writerow(csv_row)
 
                             if not self.save_pt_fields:
                                 (self.results_path / f"ddpm{base_id}.pt").unlink()
@@ -310,13 +349,30 @@ class ModelInpainter:
 
                 image_counter += 1
                 main_pbar.update(1)
+        
+        # write summary file
+        if (total_images > 1):
+            timestamp = datetime.datetime.now().strftime("%H%M%S_%d%m%Y")
+            summary_path = self.results_path / f"summary_{self.model_name}_{timestamp}.txt"
+            
+            with open(summary_path, "w") as f:
+                f.write(f"Model: {self.model_name}\n")
+                f.write(f"Images processed: {total_images}\n\n")
+                f.write("AVERAGED METRICS:\n")
+
+                for k, total in total_metrics.items():
+                    avg = total / total_images
+                    f.write(f"  {k}: {avg}\n")
 
         return image_counter
 
     def write_header(self):
         with open(self.csv_file, 'w', newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "ddp_mse", "gp_mse", "mask_percent", "average_pixel_distance"])
+            writer.writerow(["model", "image_num", "mask", "num_lines", "resample_steps", "seed", "ddpm_mse1", "gp_mse1", "ddpm_per", "gp_per", "mask_percent", "average_pixel_distance",
+                             "ddpm_mse2", "ddpm_angular_error", "ddpm_scaled_error", "ddpm_percent_error","ddpm_magnitude_error", "ddpm_magnitude_percent_error",
+                             "gp_mse2", "gp_angular_error", "gp_scaled_error", "gp_percent_error","gp_magnitude_error", "gp_magnitude_percent_error",
+                             ])
 
     def _set_up_model(self, model_path):
         try:
@@ -373,7 +429,7 @@ class ModelInpainter:
                 continue
 
     def visualize_images(self, vector_scale=0.15):
-        self.visualizer = True
+        self.visualizer = self.dd.get_attribute("enable_visualization")
         self.vector_scale = vector_scale
 
     def find_coverage(self):
@@ -414,7 +470,7 @@ if __name__ == '__main__':
     if (mi.clear_all_previous_results): # clearing all files in results folder
         mi.clear_all_results() 
         
-    #set_seed(mi.random_seed)
+    set_seed(26)
 
     for _ in range (1): # adds a mask
         mi.add_mask(StraightLineMaskGenerator(1,1))

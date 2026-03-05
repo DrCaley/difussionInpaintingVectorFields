@@ -35,7 +35,7 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
             sigma_t = beta_t.sqrt()
             less_noised_img = less_noised_img + sigma_t * z
 
-        return less_noised_img, noise
+        return less_noised_img
 
     def noise_one_step(unnoised_img, t, noise_strat):
         epsilon = noise_strat(unnoised_img, None)
@@ -61,16 +61,70 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
             x = noised_images[ddpm.n_steps] * (1 - mask) + (noise * mask)
         else:
             x = masked_poisson_projection(noised_images[ddpm.n_steps], mask)
-
+        final_noised_image = x
 
 
         for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
             for i in range(resample_steps):
-                x, noise = denoise_one_step(x, noise_strat, t)
-                x = noised_images[t] * (1 - mask) + (x * mask) # remove snapping back to known areas
+                x = denoise_one_step(x, noise_strat, t) # temp used to be noise but wasn't be used at all
+                
+                x = noised_images[t] * (1 - mask) + (x * mask) # divergence caused by this snapping
+                
+                """
+                x_original = x 
+                x_prev = x
+                x = global_poisson_projection(x)
+                
+                change = known_region_change(x, x_original, mask)
+                iterations = 0
+                MAX_ITERATIONS = 5
+                
+                while (change.mean() > 1e-4 and iterations < MAX_ITERATIONS) :
+                    scale_prev = rms_magnitude(x_prev, mask)
+                    scale_cur = rms_magnitude(x, mask)
+                    x = x * (scale_prev/scale_cur)
+                    
+                    x = global_poisson_projection(x)
+                    change = known_region_change(x, x_original, mask)
+                    x = noised_images[t] * (1 - mask) + (x * mask)
+                    x_prev = x
+                    
+                    iterations += 1
+                """
+                
+                MAX_ITERS = 20
+                tol = 1e-5
+
+                known_pixels = noised_images[t]           # (N,2,H,W)
+                known_mask   = 1 - mask[:, 0:1]           # (N,1,H,W)
+
+                # snap first
+                x = known_pixels * (1 - mask) + x * mask
+
+                for _ in range(MAX_ITERS):
+                    x_old = x
+                    #print("div before proj:", div_rms(x))
+                    x_proj = global_poisson_projection_consistent(x)
+                    #print("div after proj :", div_rms(x_proj))
+
+                    pre  = max_magnitude(x)
+                    post = max_magnitude(x_proj)
+                    s = torch.clamp(pre / (post + 1e-8), 0.85, 1.15).view(-1,1,1,1)
+                    s = 1
+                    x_proj = x_proj * (1 - mask) + (x_proj * s) * mask
+
+                    # snap known pixels back
+                    x = known_pixels * (1 - mask) + x_proj * mask
+
+                    # known-only change check
+                    diff = (x - x_old) * known_mask
+                    rel_known = torch.norm(diff) / (torch.norm(x_old * known_mask) + 1e-8)
+                    if rel_known.item() < tol:
+                        break
+            
                 if (i + 1) < resample_steps:
                     x = noise_one_step(x, t, noise_strat)
-    return x, masked_poisson_projection(noised_images[ddpm.n_steps], mask)
+    return x, noised_images[ddpm.n_steps]
 
 def calculate_mse(original_image, predicted_image, mask, normalize=False):
     """
@@ -263,3 +317,179 @@ def masked_poisson_projection(vector_field, mask, num_iter=500, tol=1e-5):
 
     return torch.stack([vx_proj, vy_proj], dim=1)
 
+
+# Henry new functions
+
+
+def global_poisson_projection(vector_field, num_iter=50, tol=1e-4):
+    """
+    Global divergence-free projection of a 2D vector field.
+
+    Args:
+        vector_field: (N, 2, H, W) tensor (vx, vy)
+        num_iter: max Jacobi iterations
+        tol: early stopping tolerance on residual (RMS update of phi)
+
+    Returns:
+        projected_field: (N, 2, H, W) approximately divergence-free
+    """
+    N, _, H, W = vector_field.shape
+    device = vector_field.device
+
+    vx, vy = vector_field[:, 0], vector_field[:, 1]
+
+    # divergence: forward diff (same pattern you used)
+    div = torch.zeros(N, H, W, device=device)
+    div[:, :, :-1] += vx[:, :, 1:] - vx[:, :, :-1]
+    div[:, :-1, :] += vy[:, 1:, :] - vy[:, :-1, :]
+
+    # solve Laplacian(phi) = div  via Jacobi iterations
+    phi = torch.zeros(N, H, W, device=device)
+
+    for _ in range(num_iter):
+        # neighbor sum (up, down, left, right)
+        neighbor_sum = torch.zeros_like(phi)
+        neighbor_sum[:, 1:, :]  += phi[:, :-1, :]   # up
+        neighbor_sum[:, :-1, :] += phi[:, 1:, :]    # down
+        neighbor_sum[:, :, 1:]  += phi[:, :, :-1]   # left
+        neighbor_sum[:, :, :-1] += phi[:, :, 1:]    # right
+
+        phi_new = (div + neighbor_sum) / 4.0
+
+        # RMS update as residual
+        diff = phi_new - phi
+        residual = torch.sqrt((diff * diff).mean()).item()
+
+        phi = phi_new
+
+        if residual < tol:
+            break
+
+    # grad(phi): forward diff (same as you used)
+    dphix = torch.zeros_like(vx)
+    dphiy = torch.zeros_like(vy)
+    dphix[:, :, :-1] = phi[:, :, 1:] - phi[:, :, :-1]
+    dphiy[:, :-1, :] = phi[:, 1:, :] - phi[:, :-1, :]
+
+    vx_proj = vx - dphix
+    vy_proj = vy - dphiy
+
+    return torch.stack([vx_proj, vy_proj], dim=1)
+
+def vector_magnitude(field, eps=1e-12):
+    # field: (N, 2, H, W)
+    return torch.sqrt((field[:, 0]**2 + field[:, 1]**2) + eps)
+
+def rms_magnitude(field, mask=None, eps=1e-12):
+    mag_sq = field[:, 0]**2 + field[:, 1]**2
+
+    if mask is not None:
+        # use single-channel mask
+        m = mask[:, 0]
+        mag_sq = mag_sq * m
+        denom = m.sum(dim=(1, 2)) + eps
+    else:
+        denom = torch.tensor(field.shape[2] * field.shape[3], device=field.device)
+
+    mean_mag_sq = mag_sq.sum(dim=(1, 2)) / denom
+    return torch.sqrt(mean_mag_sq + eps)   # (N,)
+
+def max_magnitude(field, mask=None):
+    mag = vector_magnitude(field)
+
+    if mask is not None:
+        m = mask[:, 0]
+        mag = mag.masked_fill(m == 0, float("-inf"))
+
+    return mag.amax(dim=(1, 2))   # (N,)
+
+def known_region_change(field_a, field_b, mask, mode="rms", eps=1e-8):
+    """
+    Measures how much the KNOWN region changed between two vector fields.
+
+    Args:
+        field_a, field_b : (N, 2, H, W)
+        mask             : (N, 2, H, W)  1 = unknown, 0 = known
+        mode             : "rms", "mae", or "max"
+
+    Returns:
+        change_per_sample : (N,) tensor
+    """
+
+    # known region = mask == 0
+    known = 1 - mask[:, 0:1]   # single-channel mask
+
+    diff = field_a - field_b
+    diff_sq = diff[:, 0:1]**2 + diff[:, 1:2]**2   # |u|^2 per pixel
+
+    if mode == "rms":
+        num = (diff_sq * known).sum(dim=(2, 3))
+        denom = known.sum(dim=(2, 3)) + eps
+        return torch.sqrt(num / denom).squeeze(1)
+
+    elif mode == "mae":
+        mag = torch.sqrt(diff_sq + eps)
+        num = (mag * known).sum(dim=(2, 3))
+        denom = known.sum(dim=(2, 3)) + eps
+        return (num / denom).squeeze(1)
+
+    elif mode == "max":
+        mag = torch.sqrt(diff_sq + eps)
+        mag = mag.masked_fill(known == 0, 0)
+        return mag.amax(dim=(2, 3)).squeeze(1)
+
+    else:
+        raise ValueError("mode must be 'rms', 'mae', or 'max'")
+    
+    
+def global_poisson_projection_consistent(v, num_iter=200, tol=1e-5):
+    N, _, H, W = v.shape
+    device = v.device
+    vx, vy = v[:, 0], v[:, 1]
+
+    # backward divergence
+    div = torch.zeros(N, H, W, device=device)
+    div[:, :, 1:] += vx[:, :, 1:] - vx[:, :, :-1]
+    div[:, 1:, :] += vy[:, 1:, :] - vy[:, :-1, :]
+
+    # IMPORTANT: solvability for Neumann-ish solve
+    div = div - div.mean(dim=(1,2), keepdim=True)
+
+    phi = torch.zeros(N, H, W, device=device)
+    for _ in range(num_iter):
+        neighbor_sum = torch.zeros_like(phi)
+        neighbor_sum[:, 1:, :]  += phi[:, :-1, :]
+        neighbor_sum[:, :-1, :] += phi[:, 1:, :]
+        neighbor_sum[:, :, 1:]  += phi[:, :, :-1]
+        neighbor_sum[:, :, :-1] += phi[:, :, 1:]
+
+        phi_new = (neighbor_sum - div) / 4.0
+
+        # remove mean to prevent drift
+        phi_new = phi_new - phi_new.mean(dim=(1,2), keepdim=True)
+
+        res = torch.sqrt(((phi_new - phi) ** 2).mean()).item()
+        phi = phi_new
+        if res < tol:
+            break
+
+    # forward grad
+    dphix = torch.zeros_like(vx)
+    dphiy = torch.zeros_like(vy)
+    dphix[:, :, :-1] = phi[:, :, 1:] - phi[:, :, :-1]
+    dphiy[:, :-1, :] = phi[:, 1:, :] - phi[:, :-1, :]
+
+    return torch.stack([vx - dphix, vy - dphiy], dim=1)
+
+def div_backward(v):
+    vx, vy = v[:, 0], v[:, 1]
+
+    div = torch.zeros(v.shape[0], v.shape[2], v.shape[3], device=v.device)
+    div[:, :, 1:] += vx[:, :, 1:] - vx[:, :, :-1]
+    div[:, 1:, :] += vy[:, 1:, :] - vy[:, :-1, :]
+
+    return div
+
+def div_rms(v):
+    d = div_backward(v)
+    return torch.sqrt((d ** 2).mean(dim=(1, 2)))
