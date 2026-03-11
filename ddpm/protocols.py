@@ -354,6 +354,7 @@ _NOISE_STANDARDIZER_COMPAT = {
     "DivergenceFreeNoise": {"UnifiedZScoreStandardizer"},
     "DivergenceFreeGaussianNoise": {"UnifiedZScoreStandardizer"},
     "HH_Decomp_Div_Free": {"UnifiedZScoreStandardizer"},
+    "HelmholtzMatchedNoise": {"UnifiedZScoreStandardizer"},
     # Gaussian noise works with any standardizer
     "GaussianNoise": {
         "ZScoreStandardizer",
@@ -370,6 +371,8 @@ _NOISE_PROJECTION_COMPAT = {
     "SpectralDivFreeNoise": {"spectral_project_div_free"},
     "GaussianNoise": {"project_div_free_2d", "spectral_project_div_free",
                        "forward_diff_project_div_free"},
+    # Helmholtz matched — forward-diff curl + central-diff grad, no single projection
+    "HelmholtzMatchedNoise": {"forward_diff_project_div_free"},
     # Legacy strategies — no strict projection requirement
     "DivergenceFreeNoise": set(),
     "DivergenceFreeGaussianNoise": set(),
@@ -390,6 +393,9 @@ _UNET_TYPE_CLASS = {
     "concat": "MyUNet_Inpaint",
     "standard": "MyUNet",             # 2-channel unconditional (RePaint-style)
     "standard_attn": "MyUNet_Attn",   # 2-channel unconditional with self-attention
+    "helmholtz": "MyUNet_Helmholtz",  # 2ch unconditional, dual-head ψ/φ Helmholtz decomp
+    "helmholtz_split": "MyUNet_Helmholtz_Split",  # 2ch, split high-res decoder per head
+    "gp_context": "MyUNet_Attn",      # 8-channel GP-context conditioned (concat-style)
 }
 
 

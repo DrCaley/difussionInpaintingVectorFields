@@ -1,0 +1,556 @@
+\documentclass{article}
+
+\usepackage{arxiv}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{natbib}
+\usepackage{doi}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{subcaption}
+\usepackage{multirow}
+\usepackage{xcolor}
+
+\title{GP-Guided Diffusion Inpainting for Sparse Ocean Velocity Field Reconstruction and Eddy Detection}
+
+\author{
+  Jeff Caley \\
+  Department of Computer Science\\
+  Pacific Lutheran University\\
+  Tacoma, WA 98447 \\
+  \texttt{caleyjb@plu.edu} \\
+  %% Add co-authors here
+  %% \And
+  %% Co-Author Name \\
+  %% Department \\
+  %% University \\
+  %% \texttt{email} \\
+}
+
+\renewcommand{\headeright}{Technical Report}
+\renewcommand{\shorttitle}{GP-Guided Diffusion Inpainting for Ocean Velocity Fields}
+
+\hypersetup{
+  pdftitle={GP-Guided Diffusion Inpainting for Sparse Ocean Velocity Field Reconstruction and Eddy Detection},
+  pdfsubject={cs.LG, physics.ao-ph},
+  pdfauthor={Jeff Caley},
+  pdfkeywords={Diffusion Models, Inpainting, Ocean Currents, Gaussian Processes, Eddy Detection, AUV},
+}
+
+\begin{document}
+\maketitle
+
+% ============================================================================
+\begin{abstract}
+Autonomous Underwater Vehicles (AUVs) collecting sparse \textit{in situ} velocity measurements in coastal environments observe only a small fraction of the flow domain, yet real-time reconstruction of the full velocity field is essential for adaptive sampling of transient oceanographic features such as headland eddies. We present \textbf{GP-Guided Multi-Stage Diffusion Inpainting} (GP-Diff), a method that combines Gaussian Process (GP) warm-starting with a multi-stage denoising diffusion probabilistic model (DDPM) to reconstruct two-dimensional ocean velocity fields from observations covering approximately~2.4\% of the domain. Our approach trains an unconditional DDPM with self-attention on velocity fields from a high-resolution coastal circulation model, then at inference performs iterative variance-adaptive RePaint inpainting initialized from the GP posterior. On a 100-sample eddy-balanced evaluation set drawn from the Ram's Head, St.\ John, USVI domain, GP-Diff achieves a 16\% reduction in mean MSE and a 19\% reduction in median MSE compared to the GP baseline, winning on 79 of 100 samples (84\% on eddy-containing samples). For eddy detection using the $\Gamma_1$ vortex identification criterion, GP-Diff detects 14 of 57 ground-truth eddies (24.6\% recall, F1\,=\,0.373) compared to only 1 of 57 for the GP (1.8\% recall, F1\,=\,0.034), with a median center localization error of 1.71\,pixels. These results demonstrate that diffusion-based inpainting can recover coherent rotational structures invisible to standard interpolation, a critical capability for AUV-based characterization of transient coastal flow features.
+\end{abstract}
+
+\keywords{Denoising Diffusion Probabilistic Models \and Inpainting \and Ocean Currents \and Gaussian Processes \and Eddy Detection \and Autonomous Underwater Vehicles}
+
+% ============================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Strong tidal flows interacting with complex coastal geometry generate localized transient flow features---most notably headland eddies---that transport substantial water and momentum and significantly affect dispersal of pollutants, nutrients, and marine larvae~\citep{signell1991transient, pareja2024circulation, andutta2012sticky, wolanski2000sticky}. Characterizing the three-dimensional structure of these eddies is a fundamental challenge in coastal oceanography: they evolve on timescales of minutes to hours and spatial scales of hundreds of meters, placing them at or below the resolution of regional hydrodynamic models~\citep{caley2024domain}.
+
+Autonomous Underwater Vehicles (AUVs) offer an attractive observational platform for studying these features~\citep{kukulya2016development, allen1997remus, jones2005slocum}, but an individual AUV traversing a domain observes only a sparse transect of the velocity field at any given time. To enable real-time adaptive sampling---where AUVs adjust their trajectories based on predicted flow structures---the complete velocity field must be reconstructed from these sparse observations. This is fundamentally an \textbf{inpainting problem}: given known velocities along sparse measurement paths (typically $<$5\% of the domain), reconstruct the full two-component velocity field over the entire region.
+
+Classical approaches to this problem center on Gaussian Process (GP) regression~\citep{rasmussen2006gp}, which provides closed-form posterior estimates with principled uncertainty quantification. However, GPs encode only local spatial correlations through the kernel function and cannot capture the complex, nonlinear, multi-scale structures characteristic of tidally-driven coastal flows. In particular, GPs struggle to reconstruct coherent rotational features (eddies) far from observation points, as these require global understanding of the flow topology.
+
+Denoising Diffusion Probabilistic Models (DDPMs)~\citep{ho2020ddpm} have recently emerged as powerful generative models that learn rich data distributions through iterative denoising. When applied to inpainting via methods such as RePaint~\citep{lugmayr2022repaint}, DDPMs can fill missing regions with samples that are both locally coherent and globally consistent with the learned distribution. This makes them natural candidates for ocean velocity field reconstruction, where the model can internalize physically plausible flow patterns from training data and generate reconstructions that respect the large-scale dynamics even in regions far from observations.
+
+In this paper, we present \textbf{GP-Guided Multi-Stage Diffusion Inpainting (GP-Diff)}, a method that synergistically combines GP regression with DDPM-based inpainting for ocean velocity field reconstruction. Our key contributions are:
+
+\begin{enumerate}
+    \item \textbf{GP warm-starting}: We initialize the diffusion reverse process from the GP posterior mean rather than pure noise, providing a physically informed starting point that accelerates convergence and improves reconstruction quality in high-confidence regions.
+    \item \textbf{Variance-adaptive noise modulation}: We use the GP posterior variance map to spatially modulate the noise injected at every step of the diffusion process, preserving confident GP estimates while allowing the DDPM to refine uncertain regions.
+    \item \textbf{Multi-stage iterative refinement}: We cascade $S=6$ stages of adaptive RePaint, progressively decaying the variance map to allow increasingly confident refinement.
+    \item \textbf{Quantitative evaluation on eddy detection}: Beyond pixel-wise MSE, we evaluate reconstruction quality through the lens of eddy detection using the $\Gamma_1$ vortex criterion~\citep{graftieaux2001combining}, demonstrating that GP-Diff recovers coherent rotational structures largely invisible to GP interpolation.
+\end{enumerate}
+
+% ============================================================================
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Denoising Diffusion Probabilistic Models.}
+DDPMs~\citep{ho2020ddpm, sohl2015deep} define a forward process that gradually corrupts data with Gaussian noise and learn a reverse process to denoise. The forward process takes the form $q(x_t | x_0) = \mathcal{N}(x_t; \sqrt{\bar\alpha_t}\, x_0, (1-\bar\alpha_t)\mathbf{I})$, and the model $\epsilon_\theta$ is trained to predict the noise. Guided diffusion~\citep{dhariwal2021diffusion} demonstrated that attention-augmented architectures with Adaptive Group Normalization achieve state-of-the-art image generation. Classifier-free guidance~\citep{ho2022classifier} provides a training-time strategy for conditional generation without a separate classifier.
+
+\paragraph{Diffusion-Based Inpainting.}
+Several strategies exist for inpainting with pre-trained diffusion models. RePaint~\citep{lugmayr2022repaint} replaces known pixels at each reverse step and optionally re-noises to improve boundary coherence. Palette~\citep{saharia2022palette} trains a conditional model that takes the masked image and mask as additional input channels. Diffusion Posterior Sampling (DPS)~\citep{chung2022diffusion} uses gradient guidance to enforce data consistency during sampling. FiLM-based conditioning~\citep{perez2018film} provides an alternative to channel concatenation by modulating intermediate features via learned scale and shift parameters.
+
+\paragraph{Gaussian Processes for Spatial Interpolation.}
+GP regression~\citep{rasmussen2006gp} is a standard approach for spatial interpolation with uncertainty quantification. For vector fields, divergence-free GP kernels~\citep{macedo2010typing} constrain the posterior to lie on the solenoidal manifold, which is appropriate for incompressible flows. However, real coastal flows contain non-negligible divergent energy ($\sim$16\% in our domain), and GP reconstructions far from observations revert to the prior mean, obliterating any rotational structure.
+
+\paragraph{ML for Ocean Current Prediction.}
+Deep learning approaches for ocean data reconstruction include CNN-based super-resolution~\citep{fukami2021machine}, physics-informed neural networks~\citep{raissi2019physics}, and encoder-decoder architectures operating on Voronoi tessellations of sparse observations~\citep{fukami2021global}. Recent work has applied diffusion models to weather and climate data~\citep{price2024gencast, pathak2022fourcastnet, lam2023learning}, though primarily for global-scale forecasting rather than sparse coastal inpainting. To our knowledge, this is the first application of DDPM-based inpainting to reconstruct coastal velocity fields from AUV-like sparse observations with explicit evaluation of mesoscale feature (eddy) recovery.
+
+\paragraph{Eddy Detection Methods.}
+The $\Gamma_1$ function of \citet{graftieaux2001combining} identifies vortex centers as points where surrounding velocity vectors are tangential to the position vectors, yielding $|\Gamma_1| \approx 1$ at ideal vortex cores. The Okubo--Weiss parameter~\citep{okubo1970horizontal, weiss1991dynamics} classifies regions as vorticity-dominated ($W < 0$) or strain-dominated ($W > 0$), but tends to over-detect in complex coastal bathymetry. We adopt $\Gamma_1$ for its robustness to noise and its direct geometric interpretation.
+
+% ============================================================================
+\section{Methods}
+\label{sec:methods}
+
+Let $\mathbf{v} = (u, v) \in \mathbb{R}^{2 \times H \times W}$ denote a 2D velocity field on a grid of size $H \times W$ with a binary ocean mask $\Omega$ distinguishing ocean from land. An observation mask $M \in \{0,1\}^{H \times W}$ indicates which ocean pixels have known velocity values, with $M = 1$ for observed and $M = 0$ for unobserved. In our setting, observations come from a single horizontal transect (row 22 of a $44 \times 94$ ocean sub-domain), yielding $\sim$2.4\% observation coverage. The inpainting task is: given the known values $\mathbf{v}_{\text{known}} = \mathbf{v} \odot M$ and the mask $M$, reconstruct $\hat{\mathbf{v}}$ such that $\hat{\mathbf{v}} \odot M = \mathbf{v}_{\text{known}}$ (data fidelity) and $\hat{\mathbf{v}} \odot (1 - M)$ is a plausible completion of the velocity field.
+
+\subsection{DDPM Training and Gaussian Process Baseline}
+\label{sec:ddpm_gp}
+
+We train an unconditional DDPM on the full velocity field distribution. The forward process corrupts a sample $\mathbf{v}_0  \sim p_{\text{data}}$ as:
+\begin{equation}
+    \mathbf{v}_t = \sqrt{\bar\alpha_t}\, \mathbf{v}_0 + \sqrt{1 - \bar\alpha_t}\, \boldsymbol{\epsilon}, \quad \boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, \mathbf{I}),
+    \label{eq:forward}
+\end{equation}
+where $\bar\alpha_t = \prod_{s=1}^t (1 - \beta_s)$ and $\{\beta_t\}_{t=1}^T$ is a linear schedule from $\beta_1 = 10^{-4}$ to $\beta_T = 0.02$ with $T = 250$ steps.
+
+The denoiser $\boldsymbol{\epsilon}_\theta(\mathbf{v}_t, t)$ is trained to predict the noise $\boldsymbol{\epsilon}$ by minimizing:
+\begin{equation}
+    \mathcal{L} = \mathbb{E}_{t, \mathbf{v}_0, \boldsymbol{\epsilon}}\left[\|\boldsymbol{\epsilon} - \boldsymbol{\epsilon}_\theta(\mathbf{v}_t, t)\|^2\right].
+    \label{eq:loss}
+\end{equation}
+
+\paragraph{Architecture.} We use a U-Net with multi-head self-attention (4 heads) at $16 \times 32$, $8 \times 16$, and $4 \times 8$ resolutions, with channel dimensions $[64, 128, 256, 256, 256]$ and two residual blocks per level. Time conditioning uses sinusoidal positional encoding projected through a 2-layer MLP, injected via Adaptive Group Normalization~\citep{dhariwal2021diffusion}. The architecture has 23.2M parameters. Downsampling uses stride-2 convolutions; upsampling uses transposed convolutions; skip connections are concatenated at each decoder level.
+
+\paragraph{Training details.} We train for 1000 epochs with Adam ($\text{lr} = 10^{-3}$), batch size 80, on 9{,}180 training samples drawn from a COAWST/ROMS coastal circulation model of Ram's Head, St.\ John, USVI~\citep{caley2024domain}. Data is standardized using a unified z-score (shared $\sigma = 0.1148$) across both velocity components. This preserves the divergence structure of the flow: per-component standardization with different $\sigma_u, \sigma_v$ introduces artificial divergence.
+
+\paragraph{Gaussian Process baseline and initialization.}
+We employ GP regression as both a baseline comparison and a key component of our inference pipeline. Given $n$ observed velocity values $\mathbf{y} \in \mathbb{R}^{2n}$ at coordinates $X \in \mathbb{R}^{n \times 2}$ and $m$ unobserved locations $X_* \in \mathbb{R}^{m \times 2}$, the GP posterior is:
+\begin{align}
+    \boldsymbol{\mu}_* &= K(X_*, X)\left[K(X, X) + \sigma_n^2 I\right]^{-1}\mathbf{y}, \label{eq:gp_mean}\\
+    \boldsymbol{\Sigma}_* &= K(X_*, X_*) - K(X_*, X)\left[K(X, X) + \sigma_n^2 I\right]^{-1}K(X, X_*)^{\top}, \label{eq:gp_var}
+\end{align}
+where $K$ is a radial basis function kernel with lengthscale $\ell = 1.0$ and variance $\sigma^2 = 0.5$, tuned to match autocorrelation lengths ($\ell_u \approx 11.65$\,px, $\ell_v \approx 14.08$\,px) measured from the training data. The GP provides both the posterior mean $\boldsymbol{\mu}_*$ (used as a warm start) and the posterior variance $\text{diag}(\boldsymbol{\Sigma}_*)$ (used for adaptive noise modulation).
+
+\subsection{GP-Diff: GP-Guided Multi-Stage Diffusion Inpainting}
+\label{sec:gpdiff}
+
+The core of GP-Diff is a multi-stage inference procedure that begins from the GP posterior and iteratively refines using the trained DDPM. The procedure is detailed in Algorithm~\ref{alg:gpdiff}.
+
+\paragraph{Stage 1: GP-initialized adaptive RePaint.}
+We form a composite initialization by pasting known observations into the GP posterior mean:
+\begin{equation}
+    \mathbf{v}_{\text{init}} = M \odot \mathbf{v}_{\text{known}} + (1 - M) \odot \boldsymbol{\mu}_*. \label{eq:composite}
+\end{equation}
+Rather than starting the reverse process from $t = T$ (pure noise), we start from an intermediate timestep $t_{\text{start}} = 75$, forward-diffusing the composite:
+\begin{equation}
+    \mathbf{v}_{t_{\text{start}}} = \sqrt{\bar\alpha_{t_{\text{start}}}}\, \mathbf{v}_{\text{init}} + \mathbf{w} \odot \sqrt{1 - \bar\alpha_{t_{\text{start}}}}\, \boldsymbol{\epsilon},
+    \label{eq:init_noise}
+\end{equation}
+where $\mathbf{w}$ is a spatially-varying noise weight map derived from the GP variance.
+
+\paragraph{Variance-adaptive noise modulation.}
+The key insight is that GP predictions near observations are highly confident (low variance), while those far from observations are uncertain (high variance). We modulate the diffusion noise to preserve confident regions while allowing the DDPM to restructure uncertain regions:
+\begin{equation}
+    w_{i,j} = f + (1 - f) \cdot \left(\frac{\sigma^2_{i,j} - \sigma^2_{\min}}{\sigma^2_{\max} - \sigma^2_{\min}}\right)^\gamma,
+    \label{eq:weight}
+\end{equation}
+where $f$ is a noise floor, $\sigma^2_{i,j}$ is the GP posterior variance at pixel $(i,j)$, and $\gamma = 3.0$ is a nonlinearity parameter that concentrates noise reduction on the most confident pixels. This weight is applied at three points in the diffusion process:
+\begin{enumerate}
+    \item Forward-diffusion initialization (Eq.~\ref{eq:init_noise}),
+    \item Reverse-step sampling: $\mathbf{v}_{t-1} = \boldsymbol{\mu}_t + \mathbf{w} \odot \sigma_t \mathbf{z}$,
+    \item RePaint re-noising: $\mathbf{v}_t = \sqrt{\alpha_t}\,\mathbf{v}_{t-1} + \mathbf{w} \odot \sqrt{1-\alpha_t}\,\boldsymbol{\epsilon}$.
+\end{enumerate}
+
+\paragraph{Multi-stage refinement.}
+After Stage~1, we cascade $S-1 = 5$ additional refinement stages. Each stage uses the output of the previous stage as the new prior image, starts from a lower timestep $t_{\text{refine}} = 50$, and decays the variance map by a factor $\delta = 0.1$:
+\begin{equation}
+    \boldsymbol{\sigma}^2_{(s)} = \delta \cdot \boldsymbol{\sigma}^2_{(s-1)}, \quad s = 2, \dots, S.
+    \label{eq:decay}
+\end{equation}
+This progressive decay means that by Stage~6, the variance map is nearly zero everywhere, and the DDPM makes only small, high-confidence adjustments. All stages use $r = 5$ RePaint resampling steps. Table~\ref{tab:hyperparams} summarizes the full set of inference hyperparameters.
+
+\begin{algorithm}[t]
+\caption{GP-Diff: GP-Guided Multi-Stage Diffusion Inpainting}
+\label{alg:gpdiff}
+\begin{algorithmic}[1]
+\REQUIRE Trained DDPM $\boldsymbol{\epsilon}_\theta$, observations $\mathbf{v}_{\text{known}}$, mask $M$, stages $S=6$
+\STATE $\boldsymbol{\mu}_*, \boldsymbol{\sigma}^2_* \gets \text{GP}(\mathbf{v}_{\text{known}}, M)$ \COMMENT{GP posterior mean \& variance}
+\STATE $\mathbf{v}_{\text{init}} \gets M \odot \mathbf{v}_{\text{known}} + (1-M) \odot \boldsymbol{\mu}_*$
+\STATE $\boldsymbol{\sigma}^2 \gets \boldsymbol{\sigma}^2_*$
+\FOR{$s = 1$ to $S$}
+    \STATE $t_0 \gets t_{\text{start}}$ if $s=1$ else $t_{\text{refine}}$
+    \STATE $f \gets f_1$ if $s=1$ else $f_r$ \COMMENT{Noise floor}
+    \STATE $\mathbf{w} \gets f + (1-f) \cdot \text{normalize}(\boldsymbol{\sigma}^2)^\gamma$
+    \STATE $\mathbf{v}_{t_0} \gets \sqrt{\bar\alpha_{t_0}}\,\mathbf{v}_{\text{init}} + \mathbf{w} \cdot\sqrt{1-\bar\alpha_{t_0}}\,\boldsymbol{\epsilon}$
+    \FOR{$t = t_0$ down to $1$}
+        \FOR{$j = 1$ to $r$} \COMMENT{RePaint resampling}
+            \STATE $\hat{\boldsymbol{\epsilon}} \gets \boldsymbol{\epsilon}_\theta(\mathbf{v}_t, t)$
+            \STATE $\mathbf{v}_{t-1}^{\text{denoise}} \gets \text{DDPM\_step}(\mathbf{v}_t, \hat{\boldsymbol{\epsilon}}, t, \mathbf{w})$
+            \STATE $\mathbf{v}_{t-1}^{\text{known}} \gets \sqrt{\bar\alpha_{t-1}}\,\mathbf{v}_{\text{known}} + \sqrt{1-\bar\alpha_{t-1}}\,\boldsymbol{\epsilon}'$
+            \STATE $\mathbf{v}_{t-1} \gets M \odot \mathbf{v}_{t-1}^{\text{known}} + (1-M) \odot \mathbf{v}_{t-1}^{\text{denoise}}$
+            \IF{$j < r$ and $t > 1$}
+                \STATE $\mathbf{v}_t \gets \sqrt{\alpha_t}\,\mathbf{v}_{t-1} + \mathbf{w}\cdot\sqrt{1-\alpha_t}\,\boldsymbol{\epsilon}''$ \COMMENT{Re-noise}
+            \ENDIF
+        \ENDFOR
+    \ENDFOR
+    \STATE $\mathbf{v}_{\text{init}} \gets \mathbf{v}_0$ \COMMENT{Output becomes next stage's prior}
+    \STATE $\boldsymbol{\sigma}^2 \gets \delta \cdot \boldsymbol{\sigma}^2$ \COMMENT{Decay variance map}
+\ENDFOR
+\RETURN $\mathbf{v}_0$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{table}[t]
+\centering
+\caption{GP-Diff inference hyperparameters.}
+\label{tab:hyperparams}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Value} & \textbf{Description} \\
+\midrule
+$T$ & 250 & Total diffusion timesteps \\
+$t_{\text{start}}$ & 75 & Stage 1 starting timestep \\
+$t_{\text{refine}}$ & 50 & Stages 2--6 starting timestep \\
+$S$ & 6 & Number of refinement stages \\
+$r$ & 5 & RePaint resampling steps \\
+$\gamma$ & 3.0 & Variance nonlinearity exponent \\
+$f_1$ & 0.2 & Noise floor (Stage 1) \\
+$f_r$ & 0.3 & Noise floor (Stages 2--6) \\
+$\delta$ & 0.1 & Variance decay factor per stage \\
+\midrule
+$\ell$ & 1.0 & GP kernel lengthscale \\
+$\sigma^2$ & 0.5 & GP kernel variance \\
+$\sigma_n^2$ & $10^{-4}$ & GP observation noise \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Eddy detection via $\Gamma_1$.}
+To evaluate whether reconstructed fields preserve physically meaningful rotational structures, we apply the $\Gamma_1$ vortex identification criterion~\citep{graftieaux2001combining}. For each point $P$ in the field, $\Gamma_1$ computes the average sine of the angle between position vectors and velocity vectors within a disk of radius $R$:
+\begin{equation}
+    \Gamma_1(P) = \frac{1}{N} \sum_{M \in \mathcal{D}(P, R)} \frac{(\overrightarrow{PM}) \times \mathbf{v}(M)}{|\overrightarrow{PM}|\;|\mathbf{v}(M)|},
+    \label{eq:gamma1}
+\end{equation}
+where $\times$ denotes the 2D cross product and the sum is over $N$ grid points within the disk. At an ideal vortex center, $|\Gamma_1| = 1$ as all velocity vectors are perfectly tangential. We detect eddies as connected regions where $|\Gamma_1| > \tau$ with $\tau = 0.65$, minimum area of 25 pixels, and additional filters for minimum mean speed ratio ($0.3\times$ field mean) and minimum vorticity ($|\omega| > 0.03$). A shore buffer of 2 pixels eliminates spurious detections near land boundaries.
+
+% ============================================================================
+\section{Experimental Setup}
+\label{sec:experiments}
+
+We use hourly velocity fields from a COAWST/ROMS coastal circulation model of the Ram's Head reef system, St.\ John, US Virgin Islands. The domain is discretized on a $64 \times 128$ grid (of which $44 \times 94$ pixels are ocean, the remainder being land), at approximately 50\,m horizontal resolution. The dataset comprises 9{,}180 training samples and 1{,}965 validation samples spanning multiple tidal cycles. The velocity components have statistics $\bar{u} = -0.069$, $\sigma_u = 0.136$, $\bar{v} = -0.032$, $\sigma_v = 0.089$\,(m/s). The flow exhibits strong tidal modulation with transient headland eddies appearing in approximately 40\% of snapshots.
+
+We simulate AUV-like observations as a single horizontal transect at row~22 of the ocean sub-domain, spanning all 94 ocean columns. This yields approximately 2.4\% observation coverage---representative of a single AUV pass through the domain. Row~22 was chosen as it intersects the regions where headland eddies commonly form, providing partial information about eddy presence while leaving the vast majority of the eddy structure unobserved.
+
+We construct an \textbf{eddy-balanced evaluation set} of 100 samples: 50 samples containing at least one ground-truth eddy (detected by $\Gamma_1$ on the full velocity field) and 50 without eddies, drawn from the validation set. This balanced design ensures that eddy detection metrics are not dominated by the majority non-eddy class. We report mean squared error (MSE) over all \emph{missing} ocean pixels, computed as $\frac{1}{|\mathcal{M}|}\sum_{(i,j) \in \mathcal{M}} \|\hat{\mathbf{v}}_{i,j} - \mathbf{v}_{i,j}\|^2$ where $\mathcal{M} = \{(i,j) : M_{i,j} = 0, \Omega_{i,j} = 1\}$; the win rate (fraction of samples where GP-Diff achieves lower MSE than the GP baseline); and eddy detection precision, recall, and F1 score with center localization error and area ratio. An eddy detection is counted as a true positive if the predicted eddy overlaps with a ground-truth eddy (IoU $> 0$).
+
+% ============================================================================
+\section{Results}
+\label{sec:results}
+
+\subsection{Reconstruction Quality and Eddy Detection}
+\label{sec:main_results}
+
+Table~\ref{tab:mse} presents the MSE comparison between GP and GP-Diff on the 100-sample eddy-balanced evaluation set. GP-Diff achieves substantially lower reconstruction error, with particularly strong improvements on eddy-containing samples where global flow coherence matters most.
+
+\begin{table}[t]
+\centering
+\caption{MSE comparison on the eddy-balanced 100-sample evaluation set. ``Ratio'' is DDPM/GP (lower is better). ``Wins'' counts samples where GP-Diff has lower MSE.}
+\label{tab:mse}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Subset} & \textbf{GP Mean} & \textbf{GP-Diff Mean} & \textbf{Ratio} & \textbf{GP-Diff Wins} \\
+\midrule
+All 100 & 0.00522 & 0.00437 & 0.837$\times$ & 79/100 (79\%) \\
+Eddy (50) & 0.00550 & 0.00437 & 0.796$\times$ & 42/50 (84\%) \\
+Non-eddy (50) & 0.00495 & 0.00437 & 0.990$\times$ & 37/50 (74\%) \\
+\midrule
+\multicolumn{5}{l}{\textit{Median MSE}} \\
+All 100 & 0.00389 & 0.00302 & 0.809$\times$ & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The improvement is most pronounced for eddy-containing samples (20.4\% mean MSE reduction) compared to non-eddy samples (1.0\%), indicating that the DDPM's learned flow distribution provides the greatest benefit when reconstructing complex rotational structures that lie beyond the GP's interpolation capacity. The win rate is also higher for eddy samples (84\% vs.\ 74\%), further supporting this interpretation.
+
+On a larger evaluation spanning 270 samples from the full validation set, GP-Diff achieves an even stronger 22.5\% mean MSE reduction (ratio = 0.775$\times$) and wins on 89.3\% of samples, with the 10th percentile ratio reaching 0.509$\times$ (i.e., the best improvements cut MSE nearly in half).
+
+\paragraph{Eddy detection.}
+Table~\ref{tab:eddy} presents the eddy detection comparison, revealing a dramatic difference in the ability of the two methods to recover rotational structures.
+
+\begin{table}[t]
+\centering
+\caption{Eddy detection performance on the 50 eddy-containing samples (57 ground-truth eddies). Detections matched by spatial overlap.}
+\label{tab:eddy}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Method} & \textbf{TP} & \textbf{FP} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} \\
+\midrule
+GP & 1 & 0 & 100\% & 1.8\% & 0.034 \\
+GP-Diff & 14 & 4 & 77.8\% & 24.6\% & 0.373 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The GP detects only 1 of 57 ground-truth eddies. This is expected: GP interpolation produces smooth fields that rapidly regress toward the mean away from observations, eliminating the rotational velocity signatures needed for eddy identification. While the GP achieves perfect precision (the one detected eddy is correct), its near-zero recall renders it essentially useless for eddy characterization.
+
+GP-Diff detects 14 of 57 eddies (24.6\% recall) with 77.8\% precision and an F1 score of 0.373---an order-of-magnitude improvement over the GP. While absolute recall remains modest (reflecting the fundamental difficulty of reconstructing detailed rotational structure from 2.4\% observations), this represents a qualitative capability gap: GP-Diff can identify eddies in the reconstructed field, while the GP essentially cannot.
+
+\paragraph{Localization quality.} For the 14 true positive detections, the center localization error has a median of 1.71\,pixels and a mean of 2.09\,pixels, with 50\% of detections within 2\,pixels of the ground truth (Table~\ref{tab:eddy_localization}). The area ratio (predicted/ground-truth) has a mean of 1.01 and median of 0.98, indicating that detected eddies are accurately sized. These results demonstrate that when GP-Diff detects an eddy, it places it correctly.
+
+\begin{table}[t]
+\centering
+\caption{Eddy center localization accuracy for GP-Diff true positives.}
+\label{tab:eddy_localization}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Distance range} & \textbf{Count} & \textbf{Fraction} \\
+\midrule
+0--2\,px & 7 & 50\% \\
+2--4\,px & 6 & 43\% \\
+8--10\,px & 1 & 7\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Hallucinated eddies.} GP-Diff produces 4 false positive eddy detections: 2 in eddy-containing samples (where additional real eddies may be present but fall below detection thresholds in the ground truth) and 2 in non-eddy samples. The GP produces no false positives, consistent with its overly smooth reconstructions. This precision--recall trade-off is expected and favorable for our application: for AUV adaptive sampling, it is far more valuable to detect most eddies (at the cost of occasional false alarms) than to miss them entirely.
+
+\paragraph{Qualitative comparison.}
+Figure~\ref{fig:examples} shows representative reconstruction examples. In eddy cases, the GP produces a smooth interpolation that obliterates the rotational structure visible in the ground truth, while GP-Diff recovers the characteristic swirling pattern with correct location and approximate size. In non-eddy cases, both methods produce reasonable reconstructions, but GP-Diff shows finer spatial structure in the tidal flow patterns. The observation row (row~22) is perfectly reconstructed by both methods, with differences arising in the unobserved regions.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_velocity_comparison_all.png}
+    \caption{Velocity field reconstruction comparison at 5\% observation coverage across five representative samples. Columns show: ground truth, sparse observations, GP interpolation, GP-CNN prediction, variance-weighted GP-CNN/DDPM composite, and VCNN baseline. Rows~1--4 contain eddy-bearing snapshots; row~5 is a non-eddy tidal flow. Background colour indicates speed; arrows show flow direction; coloured contours mark detected eddies (green = ground truth, magenta = method detection). The GP produces overly smooth fields that obliterate rotational structure, while the learned methods recover coherent eddy signatures with varying fidelity.}
+    \label{fig:examples}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.75\textwidth]{figures/fig_single_eddy_vi460.png}
+    \caption{Detailed single-sample comparison (validation index~460, 5\% coverage) where all methods successfully detect the ground-truth eddy. Speed background with quiver overlay and eddy contours. Even when all methods detect the eddy, differences in the reconstructed velocity magnitude and spatial extent are visible.}
+    \label{fig:single_eddy}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/fig_gamma1_comparison.png}
+    \caption{$\Gamma_1$ vortex identification heatmaps for four eddy-containing samples at 5\% coverage. Columns show the ground truth, GP-CNN, composite, and VCNN $\Gamma_1$ fields. Warm colours indicate strong rotational signatures ($|\Gamma_1| \to 1$). The GP (not shown) produces uniformly low $|\Gamma_1| < 0.3$; the learned methods recover vortex cores with correct location and varying magnitude. VCNN consistently produces the strongest and most spatially coherent $\Gamma_1$ peaks.}
+    \label{fig:gamma1}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\textwidth]{figures/fig_gp_variance_weight.png}
+    \caption{GP posterior variance and variance-weighted compositing. \textbf{Left}: GP posterior standard deviation $\sigma_*$, highest far from sensors. \textbf{Centre}: Blending weight $w = \sigma_* / \max(\sigma_*)$, controlling the DDPM contribution. \textbf{Right}: Absolute difference $|\text{Composite} - \text{GP-CNN}|$, showing that the DDPM ensemble correction is concentrated in high-uncertainty regions far from observations.}
+    \label{fig:gp_variance}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.75\textwidth]{figures/fig_vcnn_advantage_vi566.png}
+    \caption{A sample (validation index~566) where only VCNN detects the two ground-truth eddies. The GP, GP-CNN, and composite methods fail to reconstruct sufficient rotational structure for $\Gamma_1$ detection, illustrating VCNN's stronger eddy recovery at 5\% coverage.}
+    \label{fig:vcnn_advantage}
+\end{figure}
+
+\subsection{Ablation Studies}
+\label{sec:ablation}
+
+To disentangle the contributions of GP initialization and adaptive noise modulation, we conducted a four-way ablation (Table~\ref{tab:ablation}).
+
+\begin{table}[t]
+\centering
+\caption{Ablation study on 8 samples. ``Random init'' starts from pure noise at $t=T$; ``GP init'' starts from the GP posterior at $t=75$. ``Fixed noise'' uses uniform noise; ``Adaptive'' uses GP-variance-weighted noise.}
+\label{tab:ablation}
+\begin{tabular}{llc}
+\toprule
+\textbf{Initialization} & \textbf{Noise} & \textbf{Wins (of 8)} \\
+\midrule
+Random & Fixed & 0 \\
+Random & Adaptive & 0 \\
+GP & Fixed & 0 \\
+GP & Adaptive & \textbf{8} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+GP initialization alone accounts for approximately 7\% MSE improvement, while adaptive noise provides an additional $\sim$3\% beyond that. Critically, adaptive noise without GP initialization provides no benefit, indicating that the variance map is effective only when paired with a meaningful prior image. The combination wins on all 8 test samples unanimously.
+
+\paragraph{Multi-stage benefit.}
+The multi-stage refinement (S6) provides approximately 10.6\% improvement over the single-stage variant (S1) at 6$\times$ the computational cost. For our target application of onboard AUV inference where compute is limited, S1 offers an attractive operating point. For shore-based analysis where compute is plentiful, S6 provides the best reconstruction quality.
+
+% ============================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\paragraph{Why DDPMs outperform GPs for eddy reconstruction.}
+The fundamental advantage of the DDPM is that it has internalized the statistical structure of the ocean velocity field during training, including the spatial patterns characteristic of headland eddies. When inpainting from sparse observations, it can ``imagine'' plausible rotational structures consistent with both the observed velocities and the learned distribution. The GP, by contrast, has no knowledge of what a velocity field ``should look like'' beyond the local correlation encoded in the kernel; it can only interpolate and extrapolate smoothly from observations.
+
+This distinction is most apparent in the eddy detection results: the 14$\times$ improvement in recall (24.6\% vs.\ 1.8\%) reflects not merely a quantitative improvement in pixel-wise accuracy but a qualitative difference in the \emph{type} of information that can be recovered. Eddies are nonlocal, nonlinear features that require global coherence---exactly the strength of trained generative models and the weakness of local interpolation.
+
+\paragraph{The role of GP initialization.}
+While the DDPM could in principle start from pure noise and converge to a good reconstruction, the GP prior provides critical guidance. By starting at an intermediate timestep ($t=75$ rather than $t=250$), we reduce the number of denoising steps by 70\% and provide the DDPM with a warm start that already satisfies broad spatial correlations. The variance map further focuses the DDPM's generative capacity on regions where the GP is least confident, avoiding unnecessary perturbation of well-interpolated regions near the observation transect.
+
+\paragraph{Limitations.}
+The 24.6\% eddy recall, while a dramatic improvement over the GP, means that most eddies are still missed. This reflects the fundamental information-theoretic challenge: with 2.4\% observation coverage, many eddies lie entirely in unobserved regions with no observational constraint on their presence. Increasing observation coverage (e.g., through multi-AUV coordinated sampling) would likely improve recall substantially. Additionally, GP-Diff produces 4 false positive eddies, which could trigger unnecessary AUV maneuvers. Future work on uncertainty-aware eddy detection could mitigate this by flagging low-confidence detections.
+
+The current method operates on individual 2D snapshots without temporal context. Incorporating temporal dynamics through spatiotemporal diffusion (a 3D U-Net operating on sequences of frames spanning a tidal cycle) is a natural next step and is currently under development.
+
+\paragraph{Implications for AUV adaptive sampling.}
+For the broader goal of real-time AUV-guided characterization of headland eddies, GP-Diff represents a significant advance. The ability to detect eddies from sparse single-transect observations provides the foundation for adaptive sampling: upon detecting an eddy in the reconstructed field, AUVs can redirect their trajectories to characterize its 3D structure. The GP posterior variance additionally provides a principled uncertainty map for sampling path planning, and the multi-stage architecture's compute--quality trade-off allows graceful adaptation to onboard computational constraints.
+
+% ============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented GP-Diff, a method that combines Gaussian Process regression with multi-stage DDPM inpainting for reconstructing ocean velocity fields from extremely sparse ($\sim$2.4\%) observations. On a coastal ocean domain with transient headland eddies, GP-Diff achieves 16--22\% lower MSE than GP interpolation and---critically---recovers eddy structures with 24.6\% recall compared to the GP's 1.8\%, with accurate center localization (median 1.71\,px error) and size estimation (median area ratio 0.98). The GP posterior variance provides both a warm start for the diffusion process and a spatially-adaptive noise schedule that preserves confident predictions while allowing the generative model to refine uncertain regions.
+
+These results establish diffusion-based inpainting as a viable approach for real-time ocean velocity field reconstruction from AUV observations, with the specific ability to identify transient rotational features that are invisible to standard interpolation methods. Future extensions to spatiotemporal sequences and multi-AUV observation geometries will further enhance the system's capability to characterize the 3D structure of coastal headland eddies.
+
+% ============================================================================
+
+\bibliographystyle{unsrtnat}
+\begin{thebibliography}{30}
+
+\bibitem[Signell and Geyer(1991)]{signell1991transient}
+Richard~P. Signell and W.~Rockwell Geyer.
+\newblock Transient eddy formation around headlands.
+\newblock \emph{Journal of Geophysical Research: Oceans}, 96(C2):2561--2575, 1991.
+
+\bibitem[Pareja-Roman et~al.(2024)]{pareja2024circulation}
+L.~Fernando Pareja-Roman, Brian~K. Haus, and Nick~J.~M. Laxague.
+\newblock Circulation and material transport around a coral reef headland.
+\newblock \emph{Journal of Geophysical Research: Oceans}, 129, 2024.
+
+\bibitem[Andutta et~al.(2012)]{andutta2012sticky}
+Fernando~P. Andutta, Peter~V. Ridd, and Eric Wolanski.
+\newblock The age and the flushing time of the {G}reat {B}arrier {R}eef waters.
+\newblock \emph{Continental Shelf Research}, 53:11--19, 2012.
+
+\bibitem[Wolanski et~al.(2000)]{wolanski2000sticky}
+Eric Wolanski, Robert~H. Richmond, Laurence McCook, and Hugh Sweatman.
+\newblock Mud, marine snow and coral reefs.
+\newblock \emph{American Scientist}, 91(1):44--51, 2000.
+
+\bibitem[Kukulya et~al.(2016)]{kukulya2016development}
+Amy Kukulya, Richard Stokey, Carl Fiester, Elizabeth~A. Litchendorf, Thomas~R. Thompson, W.~Basil Laferriere, Alexander~P. Sastry, and Steven Sideleau.
+\newblock Development of a shore-side monitoring system for autonomous underwater vehicles using satellite communications.
+\newblock \emph{OCEANS 2016 MTS/IEEE Monterey}, pages 1--6, 2016.
+
+\bibitem[Allen et~al.(1997)]{allen1997remus}
+Ned~A. Allen, James~J. Birch, Thomas~B. Curtin, Christopher von Alt, and Robert Stokey.
+\newblock {REMUS}: a small, low cost {AUV}; system description, field trials and performance results.
+\newblock \emph{OCEANS '97. MTS/IEEE Conference Proceedings}, 2:994--1000, 1997.
+
+\bibitem[Jones et~al.(2005)]{jones2005slocum}
+Clayton Jones, Doug Webb, and Bob Glenn.
+\newblock Slocum glider: Design considerations for a persistent autonomous platform.
+\newblock \emph{OCEANS 2005 MTS/IEEE}, pages 1--6, 2005.
+
+\bibitem[Ho et~al.(2020)]{ho2020ddpm}
+Jonathan Ho, Ajay Jain, and Pieter Abbeel.
+\newblock Denoising diffusion probabilistic models.
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, volume~33, pages 6840--6851, 2020.
+
+\bibitem[Sohl-Dickstein et~al.(2015)]{sohl2015deep}
+Jascha Sohl-Dickstein, Eric~A. Weiss, Niru Maheswaranathan, and Surya Ganguli.
+\newblock Deep unsupervised learning using nonequilibrium thermodynamics.
+\newblock In \emph{International Conference on Machine Learning (ICML)}, pages 2256--2265, 2015.
+
+\bibitem[Dhariwal and Nichol(2021)]{dhariwal2021diffusion}
+Prafulla Dhariwal and Alex Nichol.
+\newblock Diffusion models beat {GAN}s on image synthesis.
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, volume~34, pages 8780--8794, 2021.
+
+\bibitem[Ho and Salimans(2022)]{ho2022classifier}
+Jonathan Ho and Tim Salimans.
+\newblock Classifier-free diffusion guidance.
+\newblock In \emph{NeurIPS 2021 Workshop on Deep Generative Models and Downstream Applications}, 2022.
+
+\bibitem[Lugmayr et~al.(2022)]{lugmayr2022repaint}
+Andreas Lugmayr, Martin Danelljan, Andres Romero, Fisher Yu, Radu Timofte, and Luc Van~Gool.
+\newblock {RePaint}: Inpainting using denoising diffusion probabilistic models.
+\newblock In \emph{IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}, pages 11461--11471, 2022.
+
+\bibitem[Saharia et~al.(2022)]{saharia2022palette}
+Chitwan Saharia, William Chan, Huiwen Chang, Chris~A. Lee, Jonathan Ho, Tim Salimans, David~J. Fleet, and Mohammad Norouzi.
+\newblock Palette: Image-to-image diffusion models.
+\newblock In \emph{ACM SIGGRAPH 2022 Conference Proceedings}, pages 1--10, 2022.
+
+\bibitem[Chung et~al.(2023)]{chung2022diffusion}
+Hyungjin Chung, Jeongsol Kim, Michael~T. McCann, Marc~L. Klasky, and Jong~Chul Ye.
+\newblock Diffusion posterior sampling for general noisy inverse problems.
+\newblock In \emph{International Conference on Learning Representations (ICLR)}, 2023.
+
+\bibitem[Perez et~al.(2018)]{perez2018film}
+Ethan Perez, Florian Strub, Harm de~Vries, Vincent Dumoulin, and Aaron Courville.
+\newblock {FiLM}: Visual reasoning with a general conditioning layer.
+\newblock In \emph{AAAI Conference on Artificial Intelligence}, volume~32, 2018.
+
+\bibitem[Rasmussen and Williams(2006)]{rasmussen2006gp}
+Carl~Edward Rasmussen and Christopher K.~I. Williams.
+\newblock \emph{Gaussian Processes for Machine Learning}.
+\newblock MIT Press, 2006.
+
+\bibitem[Mac\^{e}do and Castro(2010)]{macedo2010typing}
+Ives Mac\^{e}do and Rener Castro.
+\newblock Learning divergence-free and curl-free vector fields with matrix-valued kernels.
+\newblock Technical report, Instituto Nacional de Matem\'{a}tica Pura e Aplicada, 2010.
+
+\bibitem[Fukami et~al.(2021)]{fukami2021machine}
+Kai Fukami, Romit Maulik, Nils Ramachandra, Koji Fukagata, and Kunihiko Taira.
+\newblock Global field reconstruction from sparse sensors with {V}oronoi tessellation-assisted deep learning.
+\newblock \emph{Nature Machine Intelligence}, 3(11):945--951, 2021.
+
+\bibitem[Fukami et~al.(2021)]{fukami2021global}
+Kai Fukami, Koji Fukagata, and Kunihiko Taira.
+\newblock Machine-learning-based spatio-temporal super resolution reconstruction of turbulent flows.
+\newblock \emph{Journal of Fluid Mechanics}, 909:A9, 2021.
+
+\bibitem[Raissi et~al.(2019)]{raissi2019physics}
+Maziar Raissi, Paris Perdikaris, and George~E. Karniadakis.
+\newblock Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations.
+\newblock \emph{Journal of Computational Physics}, 378:686--707, 2019.
+
+\bibitem[Price et~al.(2024)]{price2024gencast}
+Ilan Price, Alvaro Sanchez-Gonzalez, Ferran Alet, Tom~R. Ewalds, Andrew El-Nouby, Jacklynn Stott, Shakir Mohamed, Peter Battaglia, Remi Lam, and Matthew Willson.
+\newblock {GenCast}: Diffusion-based ensemble forecasting for medium-range weather.
+\newblock \emph{Nature}, 2024.
+
+\bibitem[Pathak et~al.(2022)]{pathak2022fourcastnet}
+Jaideep Pathak, Shashank Subramanian, Peter Harrington, Sanjeev Raja, Ashesh Chattopadhyay, Morteza Mardani, Thorsten Kurth, David Hall, Zongyi Li, Kamyar Azizzadenesheli, Pedram Hassanzadeh, Karthik Kashinath, and Animashree Anandkumar.
+\newblock {FourCastNet}: A global data-driven high-resolution weather forecasting model.
+\newblock \emph{arXiv preprint arXiv:2202.11214}, 2022.
+
+\bibitem[Lam et~al.(2023)]{lam2023learning}
+Remi Lam, Alvaro Sanchez-Gonzalez, Matthew~D. Willson, Peter Wirnsberger, Meire Fortunato, Ferran Alet, Suman~V. Ravuri, Timo~Ewalds, Zichen Zhang, Peter Battaglia, et~al.
+\newblock Learning skillful medium-range global weather forecasting.
+\newblock \emph{Science}, 382(6677):1416--1421, 2023.
+
+\bibitem[Graftieaux et~al.(2001)]{graftieaux2001combining}
+Laurent Graftieaux, Marc Michard, and Nathalie Grosjean.
+\newblock Combining {PIV}, {POD} and vortex identification algorithms for the study of unsteady turbulent swirling flows.
+\newblock \emph{Measurement Science and Technology}, 12(9):1422--1429, 2001.
+
+\bibitem[Okubo(1970)]{okubo1970horizontal}
+Akira Okubo.
+\newblock Horizontal dispersion of floatable particles in the vicinity of velocity singularities such as convergences.
+\newblock \emph{Deep-Sea Research}, 17(3):445--454, 1970.
+
+\bibitem[Weiss(1991)]{weiss1991dynamics}
+John Weiss.
+\newblock The dynamics of enstrophy transfer in two-dimensional hydrodynamics.
+\newblock \emph{Physica D: Nonlinear Phenomena}, 48(2--3):273--294, 1991.
+
+\bibitem[Caley et~al.(2024)]{caley2024domain}
+Jeff Caley et~al.
+\newblock {DDPM}-based inpainting for ocean velocity fields: Domain specification.
+\newblock Technical Report v1.0, Pacific Lutheran University, 2024.
+
+\bibitem[Mourre et~al.(2012)]{mourre2012benefit}
+Baptiste Mourre, Joaqu\'{\i}n Tintor\'{e}, and Bartolom\'{e} Aloy.
+\newblock Benefit of glider adaptive sampling for ocean circulation estimation.
+\newblock \emph{Journal of Atmospheric and Oceanic Technology}, 29(12):1872--1883, 2012.
+
+\end{thebibliography}
+
+\end{document}

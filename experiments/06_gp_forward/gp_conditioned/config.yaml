@@ -1,0 +1,34 @@
+# GP-conditioned training from scratch
+#
+# Key insight: noise GT normally (standard DDPM forward process), but
+# condition on the full GP field via the known_values channels.
+# This perfectly aligns training and inference:
+#   Training:  [noised_GT, mask, GP_field] → predict GT
+#   Inference: [x_t_reverse, mask, GP_field] → predict GT
+# Zero distribution mismatch because:
+#   1. Forward process is standard (noise GT)
+#   2. GP conditioning is computed identically at train & inference
+#   3. Same 5ch FiLM+Attn architecture, no changes needed
+
+model_name: gp_conditioned_film_attn
+unet_type: film_attn
+noise_function: gaussian
+prediction_target: x0
+mask_xt: true
+
+# GP-conditioned mode (NOT gp_forward)
+gp_forward: false
+gp_conditioned: true
+
+# ── Training (from scratch) ───────────────────────────────────────
+epochs: 1000
+batch_size: 16
+gradient_accumulation_steps: 5   # effective batch = 80
+lr: 0.0003
+max_grad_norm: 1.0
+weight_decay: 0.001              # increased 10x to fight overfitting
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.999                 # faster EMA (was 0.9999, took too long to converge)
+augment: true                    # velocity-aware flips (4x effective data)

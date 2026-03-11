@@ -438,6 +438,100 @@ class ForwardDiffEqualizedDivFreeNoise(NoiseStrategy):
         return True
 
 
+class HelmholtzMatchedNoise(NoiseStrategy):
+    """Operator-matched Helmholtz noise: curl(ψ) + grad(φ).
+
+    Generates noise that spans both the solenoidal and irrotational
+    subspaces, using the SAME discrete operators as the Helmholtz
+    dual-head UNet:
+
+      ε_sol = curl_fwd(ψ_noise)   — forward-diff curl (exactly div-free)
+      ε_irr = grad_cd(φ_noise)    — central-diff gradient (exactly curl-free)
+      ε = ε_sol + ε_irr
+
+    This ensures both heads see noise they can perfectly represent,
+    and both subspaces are fully noised at t=T so the reverse process
+    can reconstruct signal in both.
+
+    Requires unified standardizer (correlated u,v components).
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._variance_scale: dict[tuple[int, int, str], float] = {}
+
+    @staticmethod
+    def _curl_fwd(psi: torch.Tensor) -> torch.Tensor:
+        """Forward-diff curl: ψ (B, H+1, W+1) → (B, 2, H, W)."""
+        u = psi[:, 1:, :-1] - psi[:, :-1, :-1]
+        v = -(psi[:, :-1, 1:] - psi[:, :-1, :-1])
+        return torch.stack([u, v], dim=1)
+
+    @staticmethod
+    def _grad_cd(phi: torch.Tensor) -> torch.Tensor:
+        """Central-diff gradient: φ (B, H, W) → (B, 2, H, W).
+
+        Uses [0, -0.5, 0.5] stencil with zero-padding, matching the
+        φ head's Conv2d kernels in MyUNet_Helmholtz[_Split].
+        """
+        # ∂φ/∂x (column direction): pad cols, use [0, -0.5, 0.5]
+        phi_4d = phi.unsqueeze(1)  # (B, 1, H, W)
+        u_irr = torch.nn.functional.conv2d(
+            phi_4d,
+            torch.tensor([[[[0.0, -0.5, 0.5]]]], device=phi.device),
+            padding=(0, 1),
+        )
+        # ∂φ/∂y (row direction): pad rows, use [0, -0.5, 0.5]^T
+        v_irr = torch.nn.functional.conv2d(
+            phi_4d,
+            torch.tensor([[[[0.0], [-0.5], [0.5]]]], device=phi.device),
+            padding=(1, 0),
+        )
+        return torch.cat([u_irr, v_irr], dim=1)  # (B, 2, H, W)
+
+    def _get_variance_scale(
+        self,
+        H: int,
+        W: int,
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> float:
+        key = (H, W, str(dtype))
+        if key not in self._variance_scale:
+            rng_state = torch.random.get_rng_state()
+            torch.manual_seed(0)
+            psi = torch.randn(128, H + 1, W + 1, device=device, dtype=dtype)
+            phi = torch.randn(128, H, W, device=device, dtype=dtype)
+            test = self._curl_fwd(psi) + self._grad_cd(phi)
+            self._variance_scale[key] = test.std().item()
+            torch.random.set_rng_state(rng_state)
+        return self._variance_scale[key]
+
+    def generate(
+        self,
+        shape: torch.Size,
+        t: Optional[torch.Tensor] = None,
+        device: torch.device = None,
+    ) -> torch.Tensor:
+        B, C, H, W = shape
+        assert C == 2, "HelmholtzMatchedNoise requires 2 channels (u, v)"
+
+        psi = torch.randn(B, H + 1, W + 1, device=device)
+        phi = torch.randn(B, H, W, device=device)
+
+        noise = self._curl_fwd(psi) + self._grad_cd(phi)
+
+        # Rescale to unit per-element variance
+        scale = self._get_variance_scale(H, W, device, noise.dtype)
+        if scale > 0:
+            noise = noise / scale
+
+        return noise
+
+    def get_gaussian_scaling(self) -> bool:
+        return True
+
+
 NOISE_REGISTRY = {
     "gaussian": GaussianNoise,
     "div_free": DivergenceFreeNoise,
@@ -446,6 +540,7 @@ NOISE_REGISTRY = {
     "spectral_div_free": SpectralDivFreeNoise,
     "forward_diff_div_free": ForwardDiffDivFreeNoise,
     "fwd_diff_eq_divfree": ForwardDiffEqualizedDivFreeNoise,
+    "helmholtz_matched": HelmholtzMatchedNoise,
 }
 
 def get_noise_strategy(name: str) -> NoiseStrategy:

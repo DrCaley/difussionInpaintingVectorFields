@@ -1,0 +1,40 @@
+model_name: vor_topo_uncond_x0_bootstrap
+
+voronoi_forward: true
+voronoi_known_fracs: [0.001, 0.005, 0.01, 0.02, 0.05]
+
+bootstrap_rollout_training: true
+bootstrap_rollout_depth_probs:
+  0: 0.6
+  1: 0.3
+  2: 0.1
+
+unet_type: standard_attn
+prediction_target: x0
+noise_function: gaussian
+mask_xt: false
+
+retrain_mode: true
+model_to_retrain: experiments/10_topology_metrics/voronoi_topo_training/results/inpaint_gaussian_t250_best_checkpoint.pt
+reset_best: true
+
+batch_size: 16
+epochs: 200
+lr: 0.0001
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 5
+use_ema: true
+ema_decay: 0.9999
+augment: true
+
+loss_function: topology_aware
+
+topology_loss:
+  lambda_vort: 0.01
+  lambda_div: 0.005
+  lambda_speed: 0.0
+  t_max_frac: 0.1
+  warmup_epochs: 10
+  x0_clamp: 6.0

@@ -1,0 +1,42 @@
+model_name: vor_stage3_maskxt_hightmax
+
+voronoi_forward: true
+unet_type: standard_attn
+prediction_target: x0
+noise_function: gaussian
+mask_xt: true
+loss_function: topology_aware
+
+# Start from the best EMA weights of voronoi_detached_stage3 (epoch 192).
+init_from_weights: experiments/11_bootstrap_rollout/voronoi_detached_stage3/results/inpaint_gaussian_t250_best_ema_weights.pt
+
+# 3-stage detached rollout training.
+detached_rollout_training: true
+rollout_num_stages: 3
+rollout_stage_aware: true
+rollout_repaste_known: true
+rollout_stage_loss_weights: [1.0, 0.8, 0.6]
+# Higher t_max fractions to give the reverse chain more room to work.
+# Previous: [0.30, 0.20, 0.20] → t_max = [75, 50, 50]
+# New:      [0.50, 0.40, 0.30] → t_max = [125, 100, 75]
+rollout_stage_t_max_fractions: [0.50, 0.40, 0.30]
+
+# Fine-tuning recipe.
+batch_size: 16
+epochs: 200
+lr: 0.0001
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 5
+use_ema: true
+ema_decay: 0.9999
+augment: true
+
+topology_loss:
+  lambda_vort: 0.01
+  lambda_div: 0.005
+  lambda_speed: 0.0
+  t_max_frac: 0.1
+  warmup_epochs: 5
+  x0_clamp: 6.0

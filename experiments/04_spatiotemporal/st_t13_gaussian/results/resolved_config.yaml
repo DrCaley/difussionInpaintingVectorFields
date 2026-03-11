@@ -22,7 +22,7 @@ lr: 0.001
 max_grad_norm: 1.0
 weight_decay: 0.01
 lr_schedule: cosine
-warmup_epochs: 5
+warmup_epochs: 10
 use_ema: true
 ema_decay: 0.9999
 augment: false
@@ -48,11 +48,14 @@ loss_function: mse
 w1: 0.6
 w2: 0.4
 num_workers: 4
-model_name: st_t13_gaussian
+model_name: st_t13_lite
 T: 13
+temporal_mode: lite
+temporal_reduction: 4
 pretrained_spatial_checkpoint: experiments/02_inpaint_algorithm/repaint_gaussian_attn/results/inpaint_gaussian_t250_best_checkpoint.pt
-freeze_spatial_epochs: 15
+freeze_spatial_epochs: 100
 spatial_lr_factor: 0.01
+temporal_dropout: 0.05
 gradient_accumulation_steps: 2
 eval_max_batches: 100
-output_dir: /workspace/difussionInpaintingVectorFields/experiments/04_spatiotemporal/st_t13_gaussian/results
+output_dir: /Users/caleyjb/Library/Mobile Documents/com~apple~CloudDocs/JeffsStuff/PLU/Research/diffusionInpaintingVectorFields/experiments/04_spatiotemporal/st_t13_gaussian/results

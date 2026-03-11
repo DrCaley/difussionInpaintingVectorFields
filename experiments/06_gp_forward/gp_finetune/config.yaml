@@ -1,0 +1,24 @@
+# GP-forward training from scratch
+#
+# Key change: gp_forward=true makes the forward process noise the GP
+# posterior mean (instead of GT).  The model learns to refine GP errors
+# under diffusion noise, directly matching the inference distribution.
+
+model_name: gp_forward_film_attn
+unet_type: film_attn
+noise_function: forward_diff_div_free
+prediction_target: x0
+mask_xt: true
+gp_forward: true
+
+# ── Training (from scratch) ───────────────────────────────────────
+epochs: 1000
+batch_size: 16
+gradient_accumulation_steps: 5   # effective batch = 80
+lr: 0.0003
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: false
+augment: false

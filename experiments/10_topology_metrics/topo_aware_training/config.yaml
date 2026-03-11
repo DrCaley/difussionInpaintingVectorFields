@@ -1,0 +1,38 @@
+# Topology-aware training — unconditional eps-prediction
+#
+# Uses standard_attn (MyUNet_Attn) with multi-step diffusion and
+# topology-aware auxiliary loss on derived scalar fields (vorticity,
+# divergence, speed).
+#
+# The loss reconstructs x̂₀ from (x_t, ε̂, ᾱ_t) and computes MSE on
+# derived fields at low timesteps where the reconstruction is meaningful.
+
+model_name: topo_aware_uncond_eps
+
+# ── Training (recipe from exp08/repaint_gaussian_attn) ───────────
+batch_size: 16                  # RTX 3060 12GB constraint
+epochs: 1000
+lr: 0.0003                      # 3e-4 — proven stable for standard_attn (23M params)
+max_grad_norm: 1.0              # gradient clipping
+weight_decay: 0.0001            # AdamW regularization
+lr_schedule: cosine             # cosine annealing
+warmup_epochs: 10               # linear LR warmup from lr*0.001 → lr
+use_ema: true                   # EMA of weights for stable eval
+ema_decay: 0.9999               # standard DDPM EMA decay
+
+# ── Architecture ──────────────────────────────────────────────────
+unet_type: standard_attn       # unconditional UNet with self-attention
+prediction_target: eps          # noise prediction → multi-step denoising
+noise_function: gaussian        # standard Gaussian noise
+mask_xt: false                  # no conditioning channels
+
+# ── Loss ──────────────────────────────────────────────────────────
+loss_function: topology_aware
+
+topology_loss:
+  lambda_vort: 0.01             # vorticity MSE weight (10x lower than v1)
+  lambda_div: 0.005             # divergence MSE weight (10x lower than v1)
+  lambda_speed: 0.0             # speed MSE weight (disabled)
+  t_max_frac: 0.1               # only apply topo terms when t/T < 0.1
+  warmup_epochs: 10             # MSE-only for first 10 epochs
+  x0_clamp: 6.0                 # clamp reconstructed x̂₀ to [-6, 6]

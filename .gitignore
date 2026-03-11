@@ -69,3 +69,4 @@ models_to_train/spectral_*.yaml
 env/
 **/.DS_Store
 .rapid/
+hypocrispy-quantipsy/

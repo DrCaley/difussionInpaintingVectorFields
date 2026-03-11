@@ -474,6 +474,208 @@ def x0_predict_inpaint(
     return result
 
 
+def x0_film_gp_repaint(
+    ddpm,
+    input_image,
+    mask,
+    gp_image,
+    gp_variance_map,
+    t_start=75,
+    noise_floor=0.2,
+    n_samples=1,
+    device=None,
+    channels=2,
+    height=64,
+    width=128,
+    noise_strategy=None,
+    mask_xt=True,
+    resample_steps=5,
+    gamma=3.0,
+    project_div_free=False,
+    project_final_steps=0,
+    known_values_override=None,
+):
+    """GP-warm-started variance-adaptive RePaint for conditional FiLM x₀-prediction models.
+
+    Adapts the GP-Diff inference strategy (repaint_gp_init_adaptive) for
+    use with a CONDITIONAL FiLM model (5-channel input: [x, mask, known_values]).
+
+    Key differences from repaint_gp_init_adaptive:
+      - Builds 5-channel FiLM input at each step: [x_for_model, mask, known_values]
+      - Uses mask_xt: replaces known region in x_for_model with independent noise
+      - Model predicts x̂₀ directly (x0-prediction, not ε-prediction)
+      - Uses ddpm.network() directly (not ddpm.backward()) for 5-channel input
+
+    Key differences from x0_full_reverse_inpaint:
+      - GP warm-start: starts from GP posterior at t_start (not pure noise at t=T)
+      - Variance-adaptive noise: modulates noise at every step using GP confidence
+      - RePaint resampling: re-noises and re-denoises for boundary coherence
+      - Multi-stage support: call repeatedly with decaying variance map
+
+    Args:
+        ddpm: GaussianDDPM with x₀-predicting FiLM UNet (5-ch input).
+        input_image: (1, 2, H, W) standardised input.
+        mask: (1, 2, H, W) mask, 1=unknown / 0=known.
+        gp_image: (1, 2, H, W) GP estimate in STANDARDISED space.
+        gp_variance_map: (1, 2, H, W) or (1, 1, H, W) GP posterior variance
+            in PHYSICAL (unstandardised) space.
+        t_start: timestep to begin reverse process from (0..n_steps-1).
+        noise_floor: minimum noise weight for most-confident GP areas (0-1).
+        mask_xt: if True, replace known region of x_t with independent noise
+                 (must match training config).
+        resample_steps: RePaint resampling iterations per timestep.
+        gamma: exponent for nonlinear confidence mapping. Default 3.0.
+        project_div_free: if True, apply CG div-free projection after paste.
+        project_final_steps: if > 0, apply CG projection to final result.
+
+    Returns:
+        (1, 2, H, W) inpainted result in standardised space.
+    """
+    if noise_strategy is None:
+        raise ValueError("noise_strategy must be provided for x0_film_gp_repaint")
+    if device is None:
+        device = next(ddpm.parameters()).device
+
+    input_img = input_image.clone().to(device)
+    gp_img = gp_image.clone().to(device)
+    mask_dev = mask.to(device)
+    known_mask = 1.0 - mask_dev  # 1 where known
+
+    # Single-channel mask for FiLM conditioning
+    mask_single = mask_dev[:, 0:1]  # (1, 1, H, W)
+
+    # Known values in standardised space (zeroed in missing region)
+    if known_values_override is not None:
+        known_values = known_values_override.to(device)  # e.g. full GP field
+    else:
+        known_values = input_img * known_mask  # (1, 2, H, W)
+
+    # Clamp t_start to valid range
+    t_start = min(t_start, ddpm.n_steps - 1)
+
+    # Build composite: known = GT, unknown = GP (all in standardised space)
+    composite = input_img * known_mask + gp_img * mask_dev
+
+    # --- Build spatially-varying noise weight from GP variance ---
+    gp_var = gp_variance_map.to(device)
+    if gp_var.shape[1] == 1:
+        gp_var = gp_var.expand_as(mask_dev)
+
+    masked_var = gp_var * mask_dev
+    var_max = masked_var.max()
+    var_min = (masked_var[mask_dev > 0.5].min()
+               if (mask_dev > 0.5).any() else torch.tensor(0.0))
+    var_range = var_max - var_min
+    if var_range < 1e-12:
+        var_norm = torch.ones_like(mask_dev)
+    else:
+        var_norm = (masked_var - var_min) / var_range
+        var_norm = var_norm.clamp(0, 1)
+
+    noise_weight = noise_floor + (1.0 - noise_floor) * var_norm ** gamma
+    # Known region: weight = 1 (will be overwritten by RePaint paste anyway)
+    noise_weight = noise_weight * mask_dev + known_mask
+
+    # Forward-diffuse composite to t_start with variance-weighted noise
+    alpha_bar_t = ddpm.alpha_bars[t_start].to(device)
+    noise_init = noise_strategy(
+        torch.zeros(n_samples, channels, height, width, device=device),
+        torch.tensor([t_start], device=device),
+    )
+    x = (alpha_bar_t.sqrt() * composite
+         + noise_weight * (1 - alpha_bar_t).sqrt() * noise_init)
+
+    ddpm.eval()
+    with torch.no_grad():
+        for t in tqdm(range(t_start, -1, -1), desc=f"FiLM-GP(t={t_start})"):
+            n_resample = resample_steps if t > 0 else 1
+
+            for r in range(n_resample):
+                alpha_t = ddpm.alphas[t].to(device)
+                alpha_bar_t_cur = ddpm.alpha_bars[t].to(device)
+                beta_t = ddpm.betas[t].to(device)
+
+                time_tensor = torch.full(
+                    (n_samples, 1), t, device=device, dtype=torch.long
+                )
+
+                # ---- Build 5-channel FiLM input ----
+                if mask_xt:
+                    indep_noise = torch.randn_like(x)
+                    x_for_model = x * mask_dev[:, :2] + indep_noise * known_mask[:, :2]
+                else:
+                    x_for_model = x
+
+                x_cond = torch.cat([x_for_model, mask_single, known_values], dim=1)
+
+                # ---- Model predicts x̂₀ ----
+                x0_pred = ddpm.network(x_cond, time_tensor)
+
+                # ---- DDPM posterior: q(x_{t-1} | x_t, x̂₀) ----
+                if t > 0:
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+
+                    coeff_x0 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t_cur)
+                    coeff_xt = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t_cur)
+                    mu = coeff_x0 * x0_pred + coeff_xt * x
+
+                    beta_tilde = ((1 - alpha_bar_prev) / (1 - alpha_bar_t_cur)) * beta_t
+                    sigma_t = beta_tilde.sqrt()
+
+                    z = noise_strategy(
+                        torch.zeros_like(x),
+                        torch.tensor([t], device=device),
+                    )
+                    # Variance-weighted: less noise where GP is confident
+                    x_denoised = mu + noise_weight * sigma_t * z
+                else:
+                    x_denoised = x0_pred
+
+                # ---- RePaint: paste forward-noised known region ----
+                if t > 0:
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+                    noise_known = noise_strategy(
+                        torch.zeros_like(input_img),
+                        torch.tensor([t - 1], device=device),
+                    )
+                    x_known = (alpha_bar_prev.sqrt() * input_img
+                               + (1 - alpha_bar_prev).sqrt() * noise_known)
+                    x = x_known * known_mask + x_denoised * mask_dev
+                else:
+                    x = input_img * known_mask + x_denoised * mask_dev
+
+                # ---- CG div-free projection after paste ----
+                if project_div_free and t > 0:
+                    pre_energy = (x ** 2).sum()
+                    x = forward_diff_project_div_free(x)
+                    post_energy = (x ** 2).sum()
+                    if post_energy > 1e-12:
+                        x = x * (pre_energy / post_energy).sqrt()
+                    x = x_known * known_mask + x * mask_dev
+
+                # ---- Resample (variance-weighted re-noising) ----
+                if r < n_resample - 1 and t > 0:
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1].to(device)
+                    noise_back = noise_strategy(
+                        torch.zeros_like(x),
+                        torch.tensor([t], device=device),
+                    )
+                    x = (alpha_t.sqrt() * x
+                         + noise_weight * (1 - alpha_t).sqrt() * noise_back)
+
+    # --- Final CG projection ---
+    if project_final_steps > 0:
+        for _ in range(project_final_steps):
+            pre_energy = (x ** 2).sum()
+            x = forward_diff_project_div_free(x)
+            post_energy = (x ** 2).sum()
+            if post_energy > 1e-12:
+                x = x * (pre_energy / post_energy).sqrt()
+            x = input_img * known_mask + x * mask_dev
+
+    return x
+
+
 def x0_full_reverse_inpaint(
     ddpm,
     input_image,
@@ -487,6 +689,7 @@ def x0_full_reverse_inpaint(
     mask_xt=True,
     repaint_steps=0,
     project_steps=0,
+    known_values_override=None,
 ):
     """Full-reverse x₀-prediction inpainting (correct algorithm).
 
@@ -521,6 +724,10 @@ def x0_full_reverse_inpaint(
         project_steps: if > 0, apply spectral divergence-free projection
                  after the copy-paste step at each reverse step, cycling
                  project_steps times (project → restore-known → repeat).
+        known_values_override: (1, 2, H, W) optional override for the
+                 conditioning channel. If provided, used instead of
+                 input_img * known_mask. For GP-conditioned models, pass
+                 the full standardised GP field here.
 
     Returns:
         (1, 2, H, W) inpainted result in standardised space.
@@ -538,7 +745,10 @@ def x0_full_reverse_inpaint(
     mask_single = mask_dev[:, 0:1]                    # (1, 1, H, W)
 
     # Known values in standardised space, zeroed in missing region
-    known_values = input_img * known_mask             # (1, 2, H, W)
+    if known_values_override is not None:
+        known_values = known_values_override.to(device)  # e.g. full GP field
+    else:
+        known_values = input_img * known_mask             # (1, 2, H, W)
 
     # Start from pure noise
     x = noise_strategy(

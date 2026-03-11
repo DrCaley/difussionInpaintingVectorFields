@@ -1,0 +1,25 @@
+# GP-context conditioned UNet with eps prediction
+# Dense spatial context: GP mean (2ch) + GP variance (1ch) + distance (1ch) + ocean mask (1ch)
+# 8-channel input: [x_t(2), mask(1), gp_mean(2), gp_var(1), dist(1), ocean(1)]
+
+model_name: gp_context_eps
+unet_type: gp_context
+prediction_target: eps
+noise_function: gaussian
+mask_xt: true
+gp_conditioned: true
+augment: true
+
+# ── Training stabilization (v2 — resume after divergence at ep115) ──
+lr: 0.0003                # was 0.001 (default), caused divergence
+max_grad_norm: 1.0        # gradient clipping
+weight_decay: 0.0001      # AdamW regularization
+lr_schedule: cosine       # cosine annealing with warmup
+warmup_epochs: 10         # linear warmup from lr*0.001 → lr
+use_ema: true             # exponential moving average of weights
+ema_decay: 0.9999         # standard DDPM EMA decay
+
+# ── Resume from best checkpoint (ep~112, test_loss=0.053) ──
+retrain_mode: true
+model_to_retrain: experiments/09_gp_context/gp_context_eps/results/inpaint_gaussian_t250_best_checkpoint.pt
+reset_best: false         # keep the best=0.053 baseline

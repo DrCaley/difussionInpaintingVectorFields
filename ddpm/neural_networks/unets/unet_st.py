@@ -7,10 +7,12 @@ processing layers that learn cross-frame correlations.  Each frame is
 processed spatially (identically to ``MyUNet_Attn``), then temporal
 mixing layers share information across the T consecutive frames.
 
+Two temporal modes are available:
+
+**Full mode** (``temporal_mode='full'``, original architecture):
+
     ┌─────────────────── Per-frame spatial path ───────────────────┐
     │                                                              │
-    │  Input (B*T, 2, 64, 128)                                    │
-    │    │                                                         │
     │    ├─ Enc L1  (64ch,  no attn)  ─→  TemporalConv            │
     │    ├─ Enc L2  (128ch, no attn)  ─→  TemporalConv            │
     │    ├─ Enc L3  (256ch, ★ attn)   ─→  TemporalConv + TempAttn │
@@ -21,8 +23,28 @@ mixing layers share information across the T consecutive frames.
     │    ├─ Dec L2  (64ch,  no attn)  ─→  TemporalConv            │
     │    └─ Dec L1  (64ch,  no attn)  ─→  TemporalConv            │
     │                                                              │
-    │  Output (B*T, 2, 64, 128)                                   │
     └──────────────────────────────────────────────────────────────┘
+
+**Lite mode** (``temporal_mode='lite'``, anti-overfitting):
+
+    ┌─────────────────── Per-frame spatial path ───────────────────┐
+    │                                                              │
+    │    ├─ Enc L1  (64ch)   ─→  BottleneckConv (inner=16)        │
+    │    ├─ Enc L2  (128ch)  ─→  BottleneckConv (inner=32)        │
+    │    ├─ Enc L3  (256ch)  ─→  BottleneckConv (inner=64)        │
+    │    ├─ Enc L4  (256ch)  ─→  BottleneckConv (inner=64)        │
+    │    ├─ Bottleneck(256ch)─→  BottleneckConv (inner=64)        │
+    │    ├─ Dec L4  (256ch)  ─→  BottleneckConv (inner=64)        │
+    │    ├─ Dec L3  (128ch)  ─→  BottleneckConv (inner=32)        │
+    │    ├─ Dec L2  (64ch)   ─→  BottleneckConv (inner=16)        │
+    │    └─ Dec L1  (64ch)   ─→  BottleneckConv (inner=16)        │
+    │                                                              │
+    └──────────────────────────────────────────────────────────────┘
+
+Lite mode replaces full-rank Conv1d (C→C) with bottleneck factored
+Conv1d (C→C/r→C, r=4) and removes all temporal attention.  This
+reduces temporal parameters by ~12× (2.4M → ~190K) while preserving
+the temporal mixing capacity needed for tidal-cycle correlations.
 
 Temporal layers are **zero-initialized**, so at init the model behaves
 identically to running ``MyUNet_Attn`` independently on each frame.
@@ -40,9 +62,15 @@ Compatible with ``GaussianDDPM`` using ``image_chw = (T*2, 64, 128)``.
 
 Parameter budget (T=13)
 ───────────────────────
-    Spatial (inherited):  ~23.2 M  (identical to MyUNet_Attn)
-    Temporal (new):       ~2.4 M   (~10% overhead)
-    Total:                ~25.6 M
+    Full mode:
+        Spatial (inherited):  ~23.2 M
+        Temporal (new):       ~2.4 M   (~10% overhead)
+        Total:                ~25.6 M
+
+    Lite mode:
+        Spatial (inherited):  ~23.2 M
+        Temporal (new):       ~0.19 M  (~0.8% overhead)
+        Total:                ~23.4 M
 
 Weight loading
 ──────────────
@@ -51,7 +79,7 @@ direct weight loading from an existing checkpoint::
 
     model = MyUNet_ST.from_pretrained_spatial(
         "experiments/.../inpaint_gaussian_t250_best_checkpoint.pt",
-        T=13, n_steps=250,
+        T=13, n_steps=250, temporal_mode='lite',
     )
 
 Training strategy
@@ -124,6 +152,75 @@ class TemporalConvBlock(nn.Module):
               .permute(0, 3, 4, 2, 1)                    # (B, H, W, C, T)
               .reshape(B * H * W, C, T))
         h = self.dropout(F.silu(self.conv(h)))             # (B*H*W, C, T)
+        h = (h.reshape(B, H, W, C, T)
+              .permute(0, 4, 3, 1, 2)                     # (B, T, C, H, W)
+              .reshape(BT, C, H, W))
+        return x + h
+
+
+class TemporalBottleneckConv(nn.Module):
+    """Bottleneck temporal convolution: C → C//r → C along time axis.
+
+    Projects channels down to a narrow inner dimension before applying
+    a temporal Conv1d, then projects back up.  This forces temporal
+    information through a constrained bottleneck, preventing the model
+    from memorizing dataset-specific temporal patterns.
+
+    Parameter savings vs ``TemporalConvBlock`` (reduction=4):
+
+    ========  ===========  =============  ==========
+    Channels  ConvBlock    BottleneckConv Savings
+    ========  ===========  =============  ==========
+     64ch      12.3K        2.8K          4.4×
+    128ch      49.2K       11.3K          4.3×
+    256ch     197.1K       45.1K          4.4×
+    ========  ===========  =============  ==========
+
+    **Zero-initialized** output projection ensures identity residual
+    at initialization, preserving pretrained spatial behavior.
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        kernel_size: int = 3,
+        reduction: int = 4,
+        dropout: float = 0.0,
+    ):
+        super().__init__()
+        inner = max(channels // reduction, 16)
+        self.norm = nn.GroupNorm(min(8, channels), channels)
+        self.down = nn.Conv1d(channels, inner, 1)
+        self.conv = nn.Conv1d(
+            inner, inner,
+            kernel_size=kernel_size,
+            padding=kernel_size // 2,
+        )
+        self.up = nn.Conv1d(inner, channels, 1)
+        self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+        # Zero-init output → identity residual at start
+        nn.init.zeros_(self.up.weight)
+        nn.init.zeros_(self.up.bias)
+
+    def forward(self, x: torch.Tensor, B: int, T: int) -> torch.Tensor:
+        """
+        Args:
+            x: (B*T, C, H, W) — batched frames.
+            B: Original batch size.
+            T: Number of temporal frames.
+
+        Returns:
+            (B*T, C, H, W) with temporal mixing applied via residual.
+        """
+        BT, C, H, W = x.shape
+        h = self.norm(x)
+        # (B*T, C, H, W) → (B*H*W, C, T) for Conv1d along temporal dim
+        h = (h.reshape(B, T, C, H, W)
+              .permute(0, 3, 4, 2, 1)                    # (B, H, W, C, T)
+              .reshape(B * H * W, C, T))
+        h = F.silu(self.down(h))                          # (B*H*W, inner, T)
+        h = self.dropout(F.silu(self.conv(h)))             # (B*H*W, inner, T)
+        h = self.up(h)                                     # (B*H*W, C, T)
         h = (h.reshape(B, H, W, C, T)
               .permute(0, 4, 3, 1, 2)                     # (B, T, C, H, W)
               .reshape(BT, C, H, W))
@@ -207,11 +304,15 @@ class TemporalAttnBlock(nn.Module):
 
 
 class TemporalMixBlock(nn.Module):
-    """Combined temporal processing: temporal Conv3d + optional temporal attention.
+    """Combined temporal processing: temporal convolution + optional temporal attention.
 
     Always applies a temporal convolution; optionally follows it with
     temporal self-attention.  Both sub-layers are zero-initialized for
     identity behavior at initialization.
+
+    When ``bottleneck=True``, uses ``TemporalBottleneckConv`` (C→C/r→C)
+    instead of the full-rank ``TemporalConvBlock`` (C→C), reducing
+    parameters by ~4× per block.
     """
 
     def __init__(
@@ -222,9 +323,16 @@ class TemporalMixBlock(nn.Module):
         num_heads: int = 4,
         conv_kernel: int = 3,
         dropout: float = 0.0,
+        bottleneck: bool = False,
+        reduction: int = 4,
     ):
         super().__init__()
-        self.conv = TemporalConvBlock(channels, conv_kernel, dropout=dropout)
+        if bottleneck:
+            self.conv = TemporalBottleneckConv(
+                channels, conv_kernel, reduction, dropout=dropout,
+            )
+        else:
+            self.conv = TemporalConvBlock(channels, conv_kernel, dropout=dropout)
         self.attn = (
             TemporalAttnBlock(channels, T, num_heads, dropout=dropout)
             if use_attn else None
@@ -264,6 +372,14 @@ class MyUNet_ST(MyUNet_Attn):
         Dimension of the sinusoidal time embedding.
     in_channels : int
         Number of input channels per frame (default 2 for u, v).
+    temporal_dropout : float
+        Dropout probability applied inside temporal layers.
+    temporal_mode : str
+        ``'full'``: original architecture — Conv + Attention (~2.4M params).
+        ``'lite'``: bottleneck convs only, no attention (~190K params).
+    temporal_reduction : int
+        Channel reduction factor for bottleneck convs in lite mode
+        (default 4: inner_dim = channels // 4).
     """
 
     def __init__(
@@ -273,6 +389,8 @@ class MyUNet_ST(MyUNet_Attn):
         time_emb_dim: int = 256,
         in_channels: int = 2,
         temporal_dropout: float = 0.0,
+        temporal_mode: str = "full",
+        temporal_reduction: int = 4,
     ):
         # Initialize all spatial blocks from MyUNet_Attn
         super().__init__(
@@ -282,23 +400,60 @@ class MyUNet_ST(MyUNet_Attn):
         )
         self.T = T
         self.temporal_dropout = temporal_dropout
+        self.temporal_mode = temporal_mode
+        self.temporal_reduction = temporal_reduction
 
         ch = [64, 128, 256, 256]
+        use_bottleneck = (temporal_mode == "lite")
 
         # ── Temporal mixing layers ───────────────────────────────────
-        # Temporal attention mirrors spatial attention placement:
-        # levels 3, 4, and bottleneck (all ≤ 16×32 spatial resolution).
-        self.temp_enc1 = TemporalMixBlock(ch[0], T, use_attn=False, dropout=temporal_dropout)
-        self.temp_enc2 = TemporalMixBlock(ch[1], T, use_attn=False, dropout=temporal_dropout)
-        self.temp_enc3 = TemporalMixBlock(ch[2], T, use_attn=True, dropout=temporal_dropout)
-        self.temp_enc4 = TemporalMixBlock(ch[3], T, use_attn=True, dropout=temporal_dropout)
+        # Full mode: temporal attn mirrors spatial attn placement
+        #   (levels 3, 4, and bottleneck at ≤ 16×32 spatial res).
+        # Lite mode: bottleneck convs only, no attention anywhere.
 
-        self.temp_mid = TemporalMixBlock(ch[3], T, use_attn=True, dropout=temporal_dropout)
+        if use_bottleneck:
+            kw = dict(bottleneck=True, reduction=temporal_reduction)
+        else:
+            kw = dict(bottleneck=False)
 
-        self.temp_dec4 = TemporalMixBlock(ch[2], T, use_attn=True, dropout=temporal_dropout)   # dec4 out: 256ch
-        self.temp_dec3 = TemporalMixBlock(ch[1], T, use_attn=True, dropout=temporal_dropout)   # dec3 out: 128ch
-        self.temp_dec2 = TemporalMixBlock(ch[0], T, use_attn=False, dropout=temporal_dropout)  # dec2 out:  64ch
-        self.temp_dec1 = TemporalMixBlock(ch[0], T, use_attn=False, dropout=temporal_dropout)  # dec1 out:  64ch
+        self.temp_enc1 = TemporalMixBlock(
+            ch[0], T, use_attn=False if use_bottleneck else False,
+            dropout=temporal_dropout, **kw,
+        )
+        self.temp_enc2 = TemporalMixBlock(
+            ch[1], T, use_attn=False if use_bottleneck else False,
+            dropout=temporal_dropout, **kw,
+        )
+        self.temp_enc3 = TemporalMixBlock(
+            ch[2], T, use_attn=False if use_bottleneck else True,
+            dropout=temporal_dropout, **kw,
+        )
+        self.temp_enc4 = TemporalMixBlock(
+            ch[3], T, use_attn=False if use_bottleneck else True,
+            dropout=temporal_dropout, **kw,
+        )
+
+        self.temp_mid = TemporalMixBlock(
+            ch[3], T, use_attn=False if use_bottleneck else True,
+            dropout=temporal_dropout, **kw,
+        )
+
+        self.temp_dec4 = TemporalMixBlock(
+            ch[2], T, use_attn=False if use_bottleneck else True,
+            dropout=temporal_dropout, **kw,
+        )
+        self.temp_dec3 = TemporalMixBlock(
+            ch[1], T, use_attn=False if use_bottleneck else True,
+            dropout=temporal_dropout, **kw,
+        )
+        self.temp_dec2 = TemporalMixBlock(
+            ch[0], T, use_attn=False if use_bottleneck else False,
+            dropout=temporal_dropout, **kw,
+        )
+        self.temp_dec1 = TemporalMixBlock(
+            ch[0], T, use_attn=False if use_bottleneck else False,
+            dropout=temporal_dropout, **kw,
+        )
 
     # ------------------------------------------------------------------
     def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
@@ -416,12 +571,21 @@ class MyUNet_ST(MyUNet_Attn):
                 with ``network.``) and raw UNet state dicts.
             T: Number of temporal frames.
             n_steps: Diffusion timesteps (must match checkpoint).
-            **kwargs: Forwarded to ``MyUNet_ST.__init__``.
+            **kwargs: Forwarded to ``MyUNet_ST.__init__``.  Supports
+                ``temporal_dropout``, ``temporal_mode``, and
+                ``temporal_reduction``.
 
         Returns:
             ``MyUNet_ST`` with pretrained spatial weights loaded.
         """
-        model = cls(n_steps=n_steps, T=T, temporal_dropout=kwargs.pop('temporal_dropout', 0.0), **kwargs)
+        model = cls(
+            n_steps=n_steps,
+            T=T,
+            temporal_dropout=kwargs.pop('temporal_dropout', 0.0),
+            temporal_mode=kwargs.pop('temporal_mode', 'full'),
+            temporal_reduction=kwargs.pop('temporal_reduction', 4),
+            **kwargs,
+        )
 
         ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
 
@@ -448,6 +612,8 @@ class MyUNet_ST(MyUNet_Attn):
 
         total = len(model.state_dict())
         print(f"[MyUNet_ST] Loaded {len(spatial_sd)}/{total} params from checkpoint")
+        print(f"[MyUNet_ST] Temporal mode: {model.temporal_mode} "
+              f"({model.num_temporal_params:,} temporal params)")
         print(f"[MyUNet_ST] {len(missing)} missing keys "
               f"({n_temporal} temporal, {n_other} other)")
         if n_other > 0:

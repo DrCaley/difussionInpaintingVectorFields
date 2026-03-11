@@ -1,0 +1,45 @@
+# Resume ST lite training from epoch 50 checkpoint
+# Inherits all settings from config_lite.yaml via copy, adds retrain fields.
+
+model_name: st_t13_lite
+
+# ── Architecture ──────────────────────────────────────────────────
+unet_type: spatiotemporal
+T: 13
+temporal_mode: lite
+temporal_reduction: 4
+pretrained_spatial_checkpoint: experiments/02_inpaint_algorithm/repaint_gaussian_attn/results/inpaint_gaussian_t250_best_checkpoint.pt
+
+# ── Resume from epoch 50 checkpoint ──────────────────────────────
+retrain_mode: true
+model_to_retrain: experiments/04_spatiotemporal/st_t13_gaussian/results/inpaint_gaussian_t250_best_checkpoint.pt
+reset_best: false
+
+# ── Training ──────────────────────────────────────────────────────
+# Resume adjustments: training script adds freeze_spatial_epochs to start_epoch.
+# We did 50 freeze epochs already; set to 50 more so spatial unfreezes at ~epoch 101.
+# Set epochs to 450 so total = 50 (done) + 450 (resume) = 500.
+freeze_spatial_epochs: 50
+spatial_lr_factor: 0.01
+temporal_dropout: 0.05
+epochs: 450
+batch_size: 4
+gradient_accumulation_steps: 2
+lr: 0.001
+lr_schedule: cosine
+warmup_epochs: 10
+weight_decay: 0.01
+max_grad_norm: 1.0
+use_ema: true
+eval_max_batches: 100
+
+# ── Noise ─────────────────────────────────────────────────────────
+noise_function: gaussian
+prediction_target: eps
+
+# ── Unconditional ─────────────────────────────────────────────────
+mask_xt: false
+p_uncond: 0.0
+
+# ── Hardware ──────────────────────────────────────────────────────
+gpu_to_use: 0

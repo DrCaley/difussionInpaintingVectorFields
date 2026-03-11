@@ -1,0 +1,47 @@
+# Voronoi-forward topology-aware training
+#
+# Instead of noising clean GT during forward diffusion, we noise a
+# Voronoi (nearest-neighbour) fill computed on-the-fly from a random
+# sparse observation mask.  The model learns to map noised-Voronoi → GT,
+# so at inference it is specifically adapted to refine Voronoi warmstarts.
+#
+# Like gp_forward, this requires prediction_target: x0 because eps-
+# prediction would recover the Voronoi field, not ground truth.
+#
+# Architecture: same unconditional standard_attn (MyUNet_Attn, 23M params)
+# as the topo_aware_training experiment, with topology-aware loss.
+
+model_name: vor_topo_uncond_x0
+
+# ── Voronoi-forward ──────────────────────────────────────────────
+voronoi_forward: true
+voronoi_known_fracs: [0.001, 0.005, 0.01, 0.02, 0.05]
+
+# ── Architecture ── same as topo_aware_training ──────────────────
+unet_type: standard_attn
+prediction_target: x0          # REQUIRED for voronoi_forward
+noise_function: gaussian
+mask_xt: false
+
+# ── Training (same hyperparams as topo_aware_training) ───────────
+batch_size: 16
+epochs: 1000
+lr: 0.0003
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999
+augment: true                  # velocity-aware flips — more important with random masks
+
+# ── Loss ──────────────────────────────────────────────────────────
+loss_function: topology_aware
+
+topology_loss:
+  lambda_vort: 0.01
+  lambda_div: 0.005
+  lambda_speed: 0.0
+  t_max_frac: 0.1
+  warmup_epochs: 10
+  x0_clamp: 6.0

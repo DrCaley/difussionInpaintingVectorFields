@@ -1,0 +1,23 @@
+model_name: helmholtz_split_noise
+
+voronoi_forward: true
+unet_type: helmholtz
+prediction_target: x0
+noise_function: gaussian
+
+# Helmholtz-split noise schedule (Proposal 6)
+helmholtz_split_noise: true
+irr_speed: 2.0
+
+loss_function: topology_aware
+
+# Training recipe (matches helmholtz_baseline for fair comparison)
+batch_size: 64
+epochs: 400
+lr: 0.0005
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999

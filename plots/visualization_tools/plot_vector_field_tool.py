@@ -23,7 +23,7 @@ def plot_vector_field(
     crop_top_right_zero_pad: bool = False,
     zero_eps: float = 1e-8,
     auto_rescale_for_display: bool = True,
-    target_median_arrow_len: float = 0.15,
+    target_median_arrow_len: float = 0.9,
     lon_bounds: tuple[float, float] | None = None,
     lat_bounds: tuple[float, float] | None = None,
     missing_mask: torch.Tensor = None,

@@ -1,0 +1,19 @@
+model_name: helmholtz_baseline
+
+voronoi_forward: true
+unet_type: helmholtz
+prediction_target: x0
+noise_function: gaussian
+
+loss_function: topology_aware
+
+# Training recipe
+batch_size: 64
+epochs: 400
+lr: 0.0005
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999

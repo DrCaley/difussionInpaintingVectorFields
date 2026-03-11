@@ -1,0 +1,34 @@
+model_name: vor_stage3_selfcond
+
+voronoi_forward: true
+unet_type: standard_attn
+prediction_target: x0
+noise_function: gaussian
+mask_xt: true
+loss_function: topology_aware
+
+# Self-conditioning: feed previous x0 prediction back as UNet input.
+self_conditioning: true
+p_self_cond: 0.5
+
+# Start from the best EMA weights of voronoi_detached_stage3 (epoch 192).
+init_from_weights: experiments/11_bootstrap_rollout/voronoi_detached_stage3/results/inpaint_gaussian_t250_best_ema_weights.pt
+
+# 3-stage detached rollout training.
+detached_rollout_training: true
+rollout_num_stages: 3
+rollout_stage_aware: true
+rollout_repaste_known: true
+rollout_stage_loss_weights: [1.0, 0.8, 0.6]
+# Higher t_max fractions (same as maskxt_hightmax).
+rollout_stage_t_max_fractions: [0.50, 0.40, 0.30]
+
+# Fine-tuning recipe.
+batch_size: 16
+epochs: 200
+lr: 0.0001
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+use_ema: true
+ema_decay: 0.9999

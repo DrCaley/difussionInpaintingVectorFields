@@ -173,9 +173,28 @@ class DDInitializer:
         loss_type = self._config.get("loss_function", "mse")
         w1 = self._config.get("w1", 1.0)
         w2 = self._config.get("w2", 0.0)
+        # Collect kwargs for the loss constructor
+        loss_kwargs = {}
+        if loss_type in ("topology_aware", "helmholtz_supervised"):
+            topo_cfg = self._config.get("topology_loss", {})
+            loss_kwargs = {
+                "lambda_vort": topo_cfg.get("lambda_vort", 0.01),
+                "lambda_div": topo_cfg.get("lambda_div", 0.005),
+                "lambda_speed": topo_cfg.get("lambda_speed", 0.0),
+                "t_max_frac": topo_cfg.get("t_max_frac", topo_cfg.get("t_fraction_max", 0.1)),
+                "warmup_epochs": topo_cfg.get("warmup_epochs", 10),
+                "x0_clamp": topo_cfg.get("x0_clamp", 6.0),
+            }
+            if loss_type == "helmholtz_supervised":
+                helm_cfg = self._config.get("helmholtz_loss", {})
+                loss_kwargs["lambda_decomp"] = helm_cfg.get("lambda_decomp", 0.1)
+                loss_kwargs["lambda_orth"] = helm_cfg.get("lambda_orth", 0.01)
+                loss_kwargs["decomp_t_max_frac"] = helm_cfg.get("decomp_t_max_frac", 1.0)
+        elif loss_type in ("physical", "best_loss"):
+            loss_kwargs = {"w1": w1, "w2": w2}
         try:
-            self.loss_strategy: LossStrategy = get_loss_strategy(loss_type)
-            print(f"Loaded loss strategy: {loss_type} (w1={w1}, w2={w2})")
+            self.loss_strategy: LossStrategy = get_loss_strategy(loss_type, **loss_kwargs)
+            print(f"Loaded loss strategy: {loss_type} (kwargs={loss_kwargs})")
         except KeyError:
             raise ValueError(f"Unknown loss strategy: {loss_type}")
 

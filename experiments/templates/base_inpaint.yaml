@@ -20,8 +20,7 @@ gpu_to_use: 0
 unet_type: film              # film | concat | standard
 mask_xt: true                # replace known region of x_t with independent noise
 prediction_target: x0        # x0 | eps
-p_uncond: 0.0                # classifier-free guidance dropout probability
-
+p_uncond: 0.0                # classifier-free guidance dropout probabilitygp_forward: false            # noise GP posterior (not GT) → fixes train/inference mismatch
 # ── Training ──────────────────────────────────────────────────────
 retrain_mode: false
 model_to_retrain: null
@@ -48,6 +47,7 @@ standardizer_by_noise:
   spectral_div_free: zscore_unified
   forward_diff_div_free: zscore_unified
   fwd_diff_eq_divfree: zscore_unified
+  helmholtz_matched: zscore_unified
 
 # ── Noise ─────────────────────────────────────────────────────────
 noise_function: forward_diff_div_free
@@ -63,6 +63,7 @@ projection_by_noise:
   spectral_div_free: true
   forward_diff_div_free: true
   fwd_diff_eq_divfree: true
+  helmholtz_matched: true
 
 # ── Loss ──────────────────────────────────────────────────────────
 loss_function: mse

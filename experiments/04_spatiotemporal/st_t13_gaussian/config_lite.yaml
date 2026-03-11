@@ -1,0 +1,51 @@
+# Spatiotemporal UNet LITE, T=13, Gaussian noise — CUDA config (RTX 5070 Ti, 16GB)
+# Overrides only — merged with experiments/templates/base_inpaint.yaml
+#
+# KEY CHANGE from config_cuda.yaml:
+#   temporal_mode: lite  →  bottleneck convs only, no temporal attention
+#   Temporal params: ~2.4M → ~190K (12× reduction)
+#   Rationale: with 7,598 training sequences, the original 2.4M temporal
+#   params consistently overfit (best at epoch 2-4 across all runs).
+#   The lite architecture forces temporal info through a C/4 bottleneck,
+#   giving ~25 params/sample — a sustainable ratio.
+
+model_name: st_t13_lite
+
+# ── Architecture ──────────────────────────────────────────────────
+unet_type: spatiotemporal
+T: 13
+temporal_mode: lite              # bottleneck convs, no temporal attention (~190K params)
+temporal_reduction: 4            # inner_dim = channels // 4 (64→16, 128→32, 256→64)
+pretrained_spatial_checkpoint: experiments/02_inpaint_algorithm/repaint_gaussian_attn/results/inpaint_gaussian_t250_best_checkpoint.pt
+
+# ── Training ──────────────────────────────────────────────────────
+# With 12× fewer temporal params, we can train more aggressively:
+#   - Higher LR (0.001 vs 0.0003) — small param count needs stronger signal
+#   - Longer freeze phase (100 epochs) — let temporal layers converge first
+#   - Lower temporal dropout (0.05) — less regularization needed with fewer params
+#   - Unfreeze spatial after 100 epochs for joint fine-tuning
+freeze_spatial_epochs: 100       # Phase 1: temporal only
+spatial_lr_factor: 0.01          # Phase 2: spatial at 1/100 of temporal LR
+temporal_dropout: 0.05           # light regularization (lite arch is already constrained)
+epochs: 500
+batch_size: 4                    # RTX 5070 Ti (16GB)
+gradient_accumulation_steps: 2   # effective batch = 8
+lr: 0.001                        # full LR for temporal layers (only ~190K params)
+lr_schedule: cosine
+warmup_epochs: 10
+weight_decay: 0.01
+max_grad_norm: 1.0
+use_ema: true
+eval_max_batches: 100
+
+# ── Noise (Gaussian, same as best 2D model) ──────────────────────
+noise_function: gaussian
+prediction_target: eps
+
+# ── Unconditional model (no mask/known conditioning) ──────────────
+mask_xt: false
+p_uncond: 0.0
+
+# ── Hardware ──────────────────────────────────────────────────────
+gpu_to_use: 0
+num_workers: 4

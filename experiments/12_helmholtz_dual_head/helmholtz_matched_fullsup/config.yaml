@@ -1,0 +1,24 @@
+model_name: helmholtz_matched_fullsup
+
+voronoi_forward: true
+unet_type: helmholtz_split
+prediction_target: x0
+noise_function: helmholtz_matched
+
+loss_function: helmholtz_supervised
+
+helmholtz_loss:
+  lambda_decomp: 0.5
+  lambda_orth: 0.1
+  decomp_t_max_frac: 1.0   # Apply decomp supervision at ALL timesteps
+
+# Training recipe (matches previous helmholtz experiments)
+batch_size: 16
+epochs: 400
+lr: 0.0005
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999

@@ -156,9 +156,12 @@ class MyUNet_Attn(nn.Module):
     """
 
     def __init__(self, n_steps: int = 1000, time_emb_dim: int = 256,
-                 in_channels: int = 2):
+                 in_channels: int = 2, n_stage_tokens: int = 0,
+                 self_cond_channels: int = 0):
         super().__init__()
         self.in_channels = in_channels
+        self.n_stage_tokens = int(n_stage_tokens)
+        self.self_cond_channels = self_cond_channels
 
         # Channel schedule: base 64, multipliers [1, 2, 4, 4]
         ch = [64, 128, 256, 256]
@@ -172,6 +175,21 @@ class MyUNet_Attn(nn.Module):
             nn.SiLU(),
             nn.Linear(time_emb_dim * 4, time_emb_dim),
         )
+        if self.n_stage_tokens > 0:
+            self.stage_embed = nn.Embedding(self.n_stage_tokens, time_emb_dim)
+            nn.init.normal_(self.stage_embed.weight, mean=0.0, std=0.02)
+        else:
+            self.stage_embed = None
+
+        # ── self-conditioning projection (additive to first hidden) ──
+        if self.self_cond_channels > 0:
+            self.self_cond_proj = nn.Sequential(
+                nn.Conv2d(self_cond_channels, ch[0], 3, 1, 1),
+                nn.SiLU(),
+                nn.Conv2d(ch[0], ch[0], 3, 1, 1),
+            )
+        else:
+            self.self_cond_proj = None
 
         # ── encoder ──────────────────────────────────────────────────
         # Level 1: 64×128, 64 ch  (no attention — 8 192 positions too large)
@@ -243,17 +261,33 @@ class MyUNet_Attn(nn.Module):
         self.out_conv = nn.Conv2d(ch[0], 2, 3, 1, 1)
 
     # ------------------------------------------------------------------
-    def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        t: torch.Tensor,
+        stage: torch.Tensor | None = None,
+        self_cond: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         # Time embedding
         t_emb = self.time_embed_table(t)
         if t_emb.dim() == 3:              # (N,1,D) from some callers
             t_emb = t_emb.squeeze(1)
         t_emb = self.time_mlp(t_emb)      # (N, time_emb_dim)
+        if self.stage_embed is not None:
+            if stage is None:
+                stage = torch.zeros(x.shape[0], device=x.device, dtype=torch.long)
+            elif stage.dim() > 1:
+                stage = stage.reshape(stage.shape[0])
+            stage = stage.long().clamp(min=0, max=self.n_stage_tokens - 1)
+            t_emb = t_emb + self.stage_embed(stage)
 
         # ── Encoder ──────────────────────────────────────────────────
         h = x
         for block in self.enc1:
             h = block(h, t_emb)
+        # Self-conditioning: add projected previous x0 prediction (after enc1 maps to ch[0])
+        if self.self_cond_proj is not None and self_cond is not None:
+            h = h + self.self_cond_proj(self_cond)
         skip1 = h                          # (N, 64, 64, 128)
 
         h = self.down1(h)

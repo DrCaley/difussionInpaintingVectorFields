@@ -41,7 +41,14 @@ boundary divergence by construction.
 |------------|------|--------------------|-------|-------------------|
 | `repaint_cg` | `standard` (2ch unconditional) | `eps` | `forward_diff_div_free` | `repaint_standard` with `project_div_free=True` |
 | `repaint_gaussian` | `standard` (2ch unconditional) | `eps` | `gaussian` | `repaint_standard` (no projection) |
-| `repaint_gaussian_attn` | `standard_attn` (2ch unconditional + self-attention) | `eps` | `gaussian` | `repaint_standard` (no projection) |
+| `adaptive_gp_divfree` | `standard` (2ch unconditional) | `eps` | `forward_diff_div_free` | `repaint_gp_init_adaptive()` with CG projection |
+| `dps_divfree` | `standard` (2ch unconditional) | `eps` | `forward_diff_div_free` | DPS (Diffusion Posterior Sampling) |
+| `dps_divfree_attn` | `standard_attn` | `eps` | `fwd_diff_eq_divfree` | DPS on attention model |
+| `dps_guided` | `standard_attn` | `eps` | `gaussian` | DPS with soft gradient guidance |
+
+> **Note (2026-03-03):** Architecture-focused experiments (`repaint_gaussian_attn`,
+> `repaint_gaussian_attn_mid`, `repaint_gaussian_attn_slim`, `repaint_gaussian_attn_v2`,
+> `repaint_gaussian_attn_vanilla`) were moved to `08_network_architecture/`.
 
 ## Key Hypothesis
 

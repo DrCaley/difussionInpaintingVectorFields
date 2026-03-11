@@ -50,4 +50,4 @@ w2: 0.4
 num_workers: 0
 model_name: film_attn_divfree_x0_t250
 gradient_accumulation_steps: 5
-output_dir: /Users/caleyjb/Library/Mobile Documents/com~apple~CloudDocs/JeffsStuff/PLU/Research/diffusionInpaintingVectorFields/experiments/03_conditioning/film_attn_divfree/results
+output_dir: /workspace/difussionInpaintingVectorFields/experiments/03_conditioning/film_attn_divfree/results

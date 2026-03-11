@@ -1,0 +1,26 @@
+model_name: helmholtz_split_matched_noise_continued
+
+voronoi_forward: true
+unet_type: helmholtz_split
+prediction_target: x0
+noise_function: helmholtz_matched
+
+loss_function: helmholtz_supervised
+
+helmholtz_loss:
+  lambda_decomp: 0.1
+  lambda_orth: 0.01
+
+# Warm restart: load weights, fresh optimizer + cosine schedule
+init_from_weights: experiments/12_helmholtz_dual_head/helmholtz_split_matched_noise/results/inpaint_helmholtz_matched_t250_best_weights.pt
+
+# Training recipe — 200 more epochs with fresh cosine LR
+batch_size: 16
+epochs: 200
+lr: 0.0003
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 5
+use_ema: true
+ema_decay: 0.9999

@@ -92,7 +92,7 @@ class GaussianDDPM(nn.Module):
 
         return noisy
 
-    def backward(self, x, t):
+    def backward(self, x, t, **kwargs):
         """Run the denoiser network: predict noise from noisy input.
 
         Parameters
@@ -104,4 +104,4 @@ class GaussianDDPM(nn.Module):
         -------
         (B, 2, H, W) predicted noise (or x0, depending on training target).
         """
-        return self.network(x, t)
+        return self.network(x, t, **kwargs)
