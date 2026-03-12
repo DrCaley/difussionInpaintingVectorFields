@@ -24,3 +24,8 @@ lr_schedule: cosine
 warmup_epochs: 10
 use_ema: true
 ema_decay: 0.9999
+
+# Resume from best checkpoint (epoch 8) after NaN fix
+retrain_mode: true
+model_to_retrain: experiments/12_helmholtz_dual_head/helmholtz_film_fullsup/results/inpaint_helmholtz_matched_t250_best_checkpoint.pt
+reset_best: false

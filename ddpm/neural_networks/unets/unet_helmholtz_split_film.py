@@ -62,7 +62,7 @@ class FiLMLayer(nn.Module):
         nn.init.zeros_(self.shift_conv.bias)
 
     def forward(self, h, cond):
-        gamma = self.scale_conv(cond)
+        gamma = self.scale_conv(cond).clamp(-5, 5)
         beta = self.shift_conv(cond)
         return gamma * h + beta
 
