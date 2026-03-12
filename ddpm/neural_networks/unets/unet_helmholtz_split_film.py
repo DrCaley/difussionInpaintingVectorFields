@@ -4,17 +4,19 @@ Combines two proven ideas:
   1. Helmholtz Split architecture (unet_helmholtz_split.py) — dual decoder
      heads producing ψ (stream function → curl → v_sol) and φ (velocity
      potential → grad → v_irr), with independent high-res decoders
-  2. FiLM conditioning (unet_film.py) — Feature-wise Linear Modulation
-     injects observation info [mask(1ch), known_u(1ch), known_v(1ch)] at
-     every resolution level, rather than concatenating extra input channels
+  2. AdaGN-style FiLM conditioning — Adaptive Group Normalization with
+     Feature-wise Linear Modulation injects observation info [mask(1ch),
+     known_u(1ch), known_v(1ch)] at every resolution level, rather than
+     concatenating extra input channels
 
-Why FiLM over concat:
+Why AdaGN-FiLM over concat:
   - The UNet's encoder processes only x_t (2ch), keeping the noisy-signal
     pathway clean and identical to the unconditional version
-  - Conditioning enters as multiplicative/additive modulation (γ·h + β),
-    which cannot be ignored — the model *must* attend to the mask/observations
-  - FiLM layers are initialized to identity (γ=1, β=0), so the model starts
-    as the unconditional version and smoothly learns to exploit conditioning
+  - Conditioning is pooled to channel-wise vectors and modulates via
+    (1+γ)·GroupNorm(h)+β — stable because: (a) no per-pixel drift,
+    (b) features are normalized before scaling, (c) residual γ=0 init
+  - FiLM layers start as pure GroupNorm (γ=0, β=0) and smoothly learn
+    to exploit conditioning
 
 Architecture:
   Input:  (N, 5, H, W) = [x_t(2ch), mask(1ch), cond_u(1ch), cond_v(1ch)]
@@ -44,27 +46,32 @@ from ddpm.neural_networks.unets.unet_xl_attn import (
 
 
 class FiLMLayer(nn.Module):
-    """Feature-wise Linear Modulation: h_out = γ(cond) * h + β(cond).
+    """Adaptive Group Normalization + FiLM (AdaGN-style).
 
-    Initialized to identity (γ=1, β=0) so the model starts as if
-    there is no conditioning and gradually learns to use it.
+    Stable modulation via three design choices from ADM / DiT / Palette:
+      1. Pool spatial conditioning → channel-wise vectors (no per-pixel drift)
+      2. GroupNorm on features before modulation (bounded activations)
+      3. Residual formulation: (1 + γ) · GroupNorm(h) + β  (γ init 0 → identity)
     """
 
-    def __init__(self, cond_channels, feature_channels):
+    def __init__(self, cond_channels, feature_channels, num_groups=32):
         super().__init__()
-        self.scale_conv = nn.Conv2d(cond_channels, feature_channels, 1)
-        self.shift_conv = nn.Conv2d(cond_channels, feature_channels, 1)
+        self.norm = nn.GroupNorm(num_groups, feature_channels)
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.scale_fc = nn.Linear(cond_channels, feature_channels)
+        self.shift_fc = nn.Linear(cond_channels, feature_channels)
 
-        # γ = 1, β = 0 at init → FiLM is identity
-        nn.init.zeros_(self.scale_conv.weight)
-        nn.init.ones_(self.scale_conv.bias)
-        nn.init.zeros_(self.shift_conv.weight)
-        nn.init.zeros_(self.shift_conv.bias)
+        # γ = 0, β = 0 at init → (1+0)·norm(h)+0 = norm(h) ≈ identity
+        nn.init.zeros_(self.scale_fc.weight)
+        nn.init.zeros_(self.scale_fc.bias)
+        nn.init.zeros_(self.shift_fc.weight)
+        nn.init.zeros_(self.shift_fc.bias)
 
     def forward(self, h, cond):
-        gamma = self.scale_conv(cond).clamp(-5, 5)
-        beta = self.shift_conv(cond)
-        return gamma * h + beta
+        cond_vec = self.pool(cond).flatten(1)                   # (B, C_cond)
+        gamma = self.scale_fc(cond_vec)[:, :, None, None]       # (B, C_feat, 1, 1)
+        beta = self.shift_fc(cond_vec)[:, :, None, None]
+        return (1 + gamma) * self.norm(h) + beta
 
 
 class HelmholtzCondEncoder(nn.Module):
@@ -119,14 +126,14 @@ class HelmholtzCondEncoder(nn.Module):
 
 
 class MyUNet_Helmholtz_Split_FiLM(nn.Module):
-    """FiLM-conditioned Helmholtz UNet with independent high-res decoders.
+    """AdaGN-FiLM-conditioned Helmholtz UNet with independent high-res decoders.
 
     Input:  (N, 5, H, W) = [x_t(2ch), mask(1ch), cond_u(1ch), cond_v(1ch)]
     Output: (N, 2, H, W) — v = curl(ψ) + grad(φ)
 
     Internally splits input: UNet backbone sees only x_t (2ch),
-    conditioning [mask, cond] enters through FiLM modulation at every level.
-    Use dense Voronoi-fill fields for the conditioning channels.
+    conditioning [mask, cond] enters through AdaGN-FiLM modulation at every
+    level.  Use dense Voronoi-fill fields for the conditioning channels.
     """
 
     def __init__(self, n_steps: int = 1000, time_emb_dim: int = 256,
