@@ -17,12 +17,17 @@ Why FiLM over concat:
     as the unconditional version and smoothly learns to exploit conditioning
 
 Architecture:
-  Input:  (N, 5, H, W) = [x_t(2ch), mask(1ch), known_u(1ch), known_v(1ch)]
+  Input:  (N, 5, H, W) = [x_t(2ch), mask(1ch), cond_u(1ch), cond_v(1ch)]
   Cond encoder: 3ch → multi-scale features at 4 resolution levels + bottleneck
   Shared: encoder → bottleneck → dec4 (8×16) → dec3 (16×32)   [all FiLM'd]
   ψ branch: dec2_psi (32×64) → dec1_psi (64×128) → psi_conv → curl → v_sol
   φ branch: dec2_phi (32×64) → dec1_phi (64×128) → phi_conv → grad → v_irr
   Output: (N, 2, H, W) — v = curl(ψ) + grad(φ)
+
+Conditioning channels:
+  The conditioning [mask, cond_u, cond_v] should be **dense** signals.
+  Use Voronoi-interpolated fields rather than sparse known observations —
+  with 99%+ missing data the sparse signal washes out in the CNN encoder.
 """
 
 import torch
@@ -116,11 +121,12 @@ class HelmholtzCondEncoder(nn.Module):
 class MyUNet_Helmholtz_Split_FiLM(nn.Module):
     """FiLM-conditioned Helmholtz UNet with independent high-res decoders.
 
-    Input:  (N, 5, H, W) = [x_t(2ch), mask(1ch), known_u(1ch), known_v(1ch)]
+    Input:  (N, 5, H, W) = [x_t(2ch), mask(1ch), cond_u(1ch), cond_v(1ch)]
     Output: (N, 2, H, W) — v = curl(ψ) + grad(φ)
 
     Internally splits input: UNet backbone sees only x_t (2ch),
-    conditioning [mask, known] enters through FiLM modulation at every level.
+    conditioning [mask, cond] enters through FiLM modulation at every level.
+    Use dense Voronoi-fill fields for the conditioning channels.
     """
 
     def __init__(self, n_steps: int = 1000, time_emb_dim: int = 256,
@@ -278,14 +284,15 @@ class MyUNet_Helmholtz_Split_FiLM(nn.Module):
     def forward(self, x: torch.Tensor, t: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Args:
-            x: (N, 5, H, W) — [x_t(2ch), mask(1ch), known_u(1ch), known_v(1ch)]
+            x: (N, 5, H, W) — [x_t(2ch), mask(1ch), cond_u(1ch), cond_v(1ch)]
+               cond channels should be dense (e.g. Voronoi fill), not sparse.
             t: (N,) or (N, 1) time step indices
         Returns:
             (N, 2, H, W) predicted x₀ = curl(ψ) + grad(φ)
         """
         # Split: UNet sees only x_t; conditioning goes through FiLM
         x_t = x[:, :2]     # (N, 2, H, W) — noisy field
-        cond = x[:, 2:]    # (N, 3, H, W) — [mask, known_u, known_v]
+        cond = x[:, 2:]    # (N, 3, H, W) — [mask, cond_u, cond_v]
 
         # Encode conditioning at 5 resolution scales
         c1, c2, c3, c4, c5 = self.cond_encoder(cond)

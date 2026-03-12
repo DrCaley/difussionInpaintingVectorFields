@@ -872,7 +872,7 @@ class TrainInpaint:
             epoch=epoch,
         )
 
-    def _predict_denoised(self, noisy, t, mask=None, known=None, stage_idx=None, self_cond=None):
+    def _predict_denoised(self, noisy, t, mask=None, known=None, stage_idx=None, self_cond=None, gp_source=None):
         n = len(noisy)
         stage_tensor = self._build_stage_tensor(n, stage_idx=stage_idx)
 
@@ -888,7 +888,15 @@ class TrainInpaint:
             indep_noise = torch.randn_like(noisy_in)
             noisy_in = noisy_in * mask + indep_noise * known_mask
 
-        x_cond = torch.cat([noisy_in, mask, known], dim=1)
+        # For FiLM-conditioned Helmholtz UNet, use Voronoi fill (dense) as
+        # conditioning instead of sparse known observations.  Sparse known has
+        # 99.9%+ zeros, which washes out in the conditioning encoder.
+        if self.unet_type == "helmholtz_split_film" and gp_source is not None:
+            cond_field = gp_source
+        else:
+            cond_field = known
+
+        x_cond = torch.cat([noisy_in, mask, cond_field], dim=1)
         return self.ddpm.network(x_cond, t.reshape(n, -1), stage=stage_tensor, self_cond=self_cond)
 
     def _compute_detached_rollout_loss(self, x0, source, mask, known, epoch=0):
@@ -1006,10 +1014,10 @@ class TrainInpaint:
         sc = None
         if self.self_conditioning and random.random() < self.p_self_cond:
             with torch.no_grad():
-                first_pass = self._predict_denoised(noisy, t, mask=mask, known=known, self_cond=None)
+                first_pass = self._predict_denoised(noisy, t, mask=mask, known=known, self_cond=None, gp_source=gp_source)
                 sc = first_pass.detach()
 
-        pred = self._predict_denoised(noisy, t, mask=mask, known=known, self_cond=sc)
+        pred = self._predict_denoised(noisy, t, mask=mask, known=known, self_cond=sc, gp_source=gp_source)
         loss = self._prediction_loss(pred, x0, noise, noisy, t, mask=mask, epoch=epoch)
         return loss, n
 

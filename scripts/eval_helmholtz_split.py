@@ -207,15 +207,16 @@ def load_model(weights_path):
     return ddpm
 
 
-def _model_input(x_t, miss_mask, known_mask, known_std):
+def _model_input(x_t, miss_mask, known_mask, known_std, vor_std=None):
     """Build network input: 2ch for unconditional, 5ch for FiLM.
 
     For FiLM models, applies mask_xt (replaces known region with noise)
-    and concatenates [x_t_masked, miss_mask(1ch), known_obs(2ch)].
+    and concatenates [x_t_masked, miss_mask(1ch), cond(2ch)].
+    Uses Voronoi fill (dense) as conditioning to avoid sparse-signal washout.
 
     Training convention:
       - miss_mask: 1=missing, 0=known  (matches dataset mask_single)
-      - known_obs: GT values at known locations, zeros elsewhere
+      - vor_std: Voronoi-interpolated field (dense), or known_std as fallback
     """
     if not is_film_model:
         return x_t
@@ -224,9 +225,9 @@ def _model_input(x_t, miss_mask, known_mask, known_std):
     x_t_masked = x_t * miss_mask + noise_replace * known_mask
     # miss channel: 1 where missing (matches training mask convention)
     miss_ch = miss_mask[:, :1]  # (1, 1, H, W) — both channels are identical
-    # known_obs: GT values only at observed locations, zeros elsewhere
-    known_obs = known_std * known_mask
-    return torch.cat([x_t_masked, miss_ch, known_obs], dim=1)  # (1, 5, H, W)
+    # conditioning: use Voronoi fill (dense signal) for FiLM
+    cond_field = vor_std if vor_std is not None else known_std * known_mask
+    return torch.cat([x_t_masked, miss_ch, cond_field], dim=1)  # (1, 5, H, W)
 
 
 # ── Mask building ────────────────────────────────────────────────────
@@ -270,7 +271,7 @@ def run_single_step(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_val):
         alpha_bar_t = ddpm.alpha_bars[t_val]
         eps = noise_fn(current.shape, device)
         x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
-        x0_pred = ddpm.network(_model_input(x_t, miss_mask, known_mask, known_std), time_tensor)
+        x0_pred = ddpm.network(_model_input(x_t, miss_mask, known_mask, known_std, vor_std), time_tensor)
         result = known_std * known_mask + x0_pred * miss_mask
 
     result_phys = standardizer.unstandardize(result.squeeze(0).cpu())
@@ -294,7 +295,7 @@ def run_reverse_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
             n_resample = resample_steps if t > 0 else 1
             for r in range(n_resample):
                 time_tensor = torch.full((1, 1), t, device=device, dtype=torch.long)
-                x0_pred = ddpm.network(_model_input(x, miss_mask, known_mask, known_std), time_tensor)
+                x0_pred = ddpm.network(_model_input(x, miss_mask, known_mask, known_std, vor_std), time_tensor)
 
                 if t > 0:
                     alpha_bar_t = ddpm.alpha_bars[t]
@@ -354,7 +355,7 @@ def run_guided_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
     for t in range(t_start, -1, -1):
         x_in = x.detach().requires_grad_(True)
         time_tensor = torch.full((1, 1), t, device=device, dtype=torch.long)
-        x0_pred = ddpm.network(_model_input(x_in, miss_mask, known_mask, known_std), time_tensor)
+        x0_pred = ddpm.network(_model_input(x_in, miss_mask, known_mask, known_std, vor_std), time_tensor)
 
         # Boundary loss on known region
         diff = (x0_pred - known_std) * known_mask
@@ -419,7 +420,7 @@ def run_helmholtz_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
             n_resample = resample_steps if t > 0 else 1
             for r in range(n_resample):
                 time_tensor = torch.full((1, 1), t, device=device, dtype=torch.long)
-                _ = net(_model_input(x, miss_mask, known_mask, known_std), time_tensor)  # populates last_v_sol, last_v_irr
+                _ = net(_model_input(x, miss_mask, known_mask, known_std, vor_std), time_tensor)  # populates last_v_sol, last_v_irr
 
                 # Helmholtz-projected x₀: weighted blend of heads
                 x0_proj = sol_weight * net.last_v_sol + irr_weight * net.last_v_irr
@@ -469,7 +470,7 @@ def run_ensemble(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_val,
             alpha_bar_t = ddpm.alpha_bars[t_val]
             eps = noise_fn(current.shape, device)
             x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
-            x0_pred = ddpm.network(_model_input(x_t, miss_mask, known_mask, known_std), time_tensor)
+            x0_pred = ddpm.network(_model_input(x_t, miss_mask, known_mask, known_std, vor_std), time_tensor)
             x0_sum += x0_pred
 
     x0_avg = x0_sum / n_ensemble
@@ -492,7 +493,7 @@ def run_single_divfree(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_val):
         alpha_bar_t = ddpm.alpha_bars[t_val]
         eps = noise_fn(current.shape, device)
         x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
-        _ = net(_model_input(x_t, miss_mask, known_mask, known_std), time_tensor)  # populates last_v_sol
+        _ = net(_model_input(x_t, miss_mask, known_mask, known_std, vor_std), time_tensor)  # populates last_v_sol
 
         # Use only the solenoidal component (guaranteed div-free)
         x0_sol = net.last_v_sol
@@ -773,7 +774,7 @@ def main():
             alpha_bar_t = ddpm.alpha_bars[best_t]
             eps = noise_fn(current.shape, device)
             x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
-            x0_pred = ddpm.network(_model_input(x_t, miss_mask, known_mask, known_std), time_tensor)
+            x0_pred = ddpm.network(_model_input(x_t, miss_mask, known_mask, known_std, vor_std), time_tensor)
 
         # Get network's head outputs (in standardized space, full grid)
         pred_v_sol = net.last_v_sol.detach().cpu()  # (1, 2, H, W)
