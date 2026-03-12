@@ -428,6 +428,56 @@ class HelmholtzSupervisionLoss(TopologyAwareLossStrategy):
             self.lambda_decomp * decomp_loss + self.lambda_orth * orth_loss
         )
 
+    def helmholtz_aux(self, x0, t, ddpm, epoch=0):
+        """Return only the Helmholtz auxiliary loss terms (decomp + orth).
+
+        Used by the training pipeline when mask_xt=True: the masked MSE is
+        computed separately, and this method provides only the Helmholtz
+        supervision terms to add on top.
+        """
+        if epoch < self.warmup_epochs:
+            return torch.tensor(0.0, device=x0.device)
+
+        net = ddpm.network
+        if not hasattr(net, "last_v_sol") or net.last_v_sol is None:
+            return torch.tensor(0.0, device=x0.device)
+
+        v_sol = net.last_v_sol
+        v_irr = net.last_v_irr
+
+        decomp_threshold = int(self.decomp_t_max_frac * ddpm.n_steps)
+        decomp_mask = (t.squeeze() < decomp_threshold)
+        if not decomp_mask.any():
+            return torch.tensor(0.0, device=x0.device)
+
+        v_sol_sub = v_sol[decomp_mask]
+        v_irr_sub = v_irr[decomp_mask]
+        x0_sub = x0[decomp_mask]
+        B_sub = v_sol_sub.shape[0]
+        frac = decomp_mask.float().mean()
+
+        mask_2ch = self.ocean_mask.expand(B_sub, 2, 64, 128)
+
+        from ddpm.utils.helmholtz_split import helmholtz_decompose
+        with torch.no_grad():
+            gt_sol, gt_irr = helmholtz_decompose(x0_sub)
+
+        decomp_loss = (
+            self._masked_mse(v_sol_sub * mask_2ch, gt_sol * mask_2ch, mask_2ch)
+            + self._masked_mse(v_irr_sub * mask_2ch, gt_irr * mask_2ch, mask_2ch)
+        )
+
+        v_sol_ocean = v_sol_sub * mask_2ch
+        v_irr_ocean = v_irr_sub * mask_2ch
+        dot = (v_sol_ocean * v_irr_ocean).sum()
+        norm_sol = v_sol_ocean.pow(2).sum().sqrt().clamp(min=1e-8)
+        norm_irr = v_irr_ocean.pow(2).sum().sqrt().clamp(min=1e-8)
+        orth_loss = dot.abs() / (norm_sol * norm_irr)
+
+        return frac * (
+            self.lambda_decomp * decomp_loss + self.lambda_orth * orth_loss
+        )
+
 
 LOSS_REGISTRY = {
     "mse": MSELossStrategy,

@@ -53,6 +53,7 @@ from ddpm.neural_networks.unets.unet_attn_mid import MyUNet_Attn_Mid
 from ddpm.neural_networks.unets.unet_film_attn import MyUNet_FiLM_Attn
 from ddpm.neural_networks.unets.unet_helmholtz import MyUNet_Helmholtz
 from ddpm.neural_networks.unets.unet_helmholtz_split import MyUNet_Helmholtz_Split
+from ddpm.neural_networks.unets.unet_helmholtz_split_film import MyUNet_Helmholtz_Split_FiLM
 from ddpm.neural_networks.unets.unet_st import MyUNet_ST
 from data_prep.ocean_sequence_dataset import OceanSequenceDataset
 from ddpm.helper_functions.death_messages import get_death_message
@@ -339,6 +340,9 @@ class TrainInpaint:
             ).to(self.device)
             logging.info("Using Helmholtz split-decoder UNet (independent high-res decoders per head, 2-channel%s)",
                          ", self-cond" if self.self_conditioning else "")
+        elif self.unet_type == "helmholtz_split_film":
+            unet = MyUNet_Helmholtz_Split_FiLM(n_steps=self.n_steps).to(self.device)
+            logging.info("Using FiLM-conditioned Helmholtz split-decoder UNet (5-channel, FiLM conditioning)")
         elif self.unet_type == "spatiotemporal":
             if self.pretrained_spatial:
                 ckpt_path = Path(self.pretrained_spatial)
@@ -844,7 +848,18 @@ class TrainInpaint:
             mask_2ch = mask[:, :2]
             diff = (pred - target) ** 2
             masked_diff = diff * mask_2ch
-            return masked_diff.sum() / mask_2ch.sum().clamp(min=1.0)
+            mse_loss = masked_diff.sum() / mask_2ch.sum().clamp(min=1.0)
+
+            # For Helmholtz-supervised models with mask_xt, add decomposition
+            # and orthogonality terms (they use net.last_v_sol/last_v_irr and
+            # operate over the full ocean domain, not just the missing region)
+            if hasattr(self.loss_strategy, 'lambda_decomp'):
+                helm_aux = self.loss_strategy.helmholtz_aux(
+                    x0=x0, t=t, ddpm=self.ddpm, epoch=epoch,
+                )
+                return mse_loss + helm_aux
+
+            return mse_loss
 
         return self.loss_strategy(
             pred,

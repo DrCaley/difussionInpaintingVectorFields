@@ -24,6 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 from ddpm.neural_networks.ddpm import GaussianDDPM
 from ddpm.neural_networks.unets.unet_helmholtz_split import MyUNet_Helmholtz_Split
+from ddpm.neural_networks.unets.unet_helmholtz_split_film import MyUNet_Helmholtz_Split_FiLM
 from ddpm.helper_functions.standardize_data import ZScoreStandardizer, UnifiedZScoreStandardizer
 from ddpm.utils.noise_utils import HelmholtzMatchedNoise
 from ddpm.utils.helmholtz_split import helmholtz_decompose
@@ -173,9 +174,29 @@ def predict_vcnn(model, vel_obs, obs_mask, ocean_mask, dev):
 
 
 # ── Model loading ────────────────────────────────────────────────────
+is_film_model = False  # set during load_model()
+
 def load_model(weights_path):
-    net = MyUNet_Helmholtz_Split(n_steps=N_STEPS, time_emb_dim=256,
-                                 n_stage_tokens=0, self_cond_channels=0)
+    global is_film_model
+    # Auto-detect UNet type from resolved config
+    cfg_path = Path(weights_path).parent / "resolved_config.yaml"
+    unet_type = "helmholtz_split"  # default
+    if cfg_path.exists():
+        import yaml
+        with open(cfg_path) as f:
+            c = yaml.safe_load(f)
+        unet_type = c.get("unet_type", "helmholtz_split")
+
+    is_film_model = (unet_type == "helmholtz_split_film")
+
+    if is_film_model:
+        net = MyUNet_Helmholtz_Split_FiLM(n_steps=N_STEPS, time_emb_dim=256)
+        print("Loaded FiLM-conditioned Helmholtz split UNet")
+    else:
+        net = MyUNet_Helmholtz_Split(n_steps=N_STEPS, time_emb_dim=256,
+                                     n_stage_tokens=0, self_cond_channels=0)
+        print("Loaded unconditional Helmholtz split UNet")
+
     ddpm = GaussianDDPM(net, n_steps=N_STEPS,
                         min_beta=0.0001, max_beta=0.02, device=device)
     state = torch.load(str(BASE_DIR / weights_path), map_location="cpu",
@@ -184,6 +205,28 @@ def load_model(weights_path):
     ddpm.to(device)
     ddpm.eval()
     return ddpm
+
+
+def _model_input(x_t, miss_mask, known_mask, known_std):
+    """Build network input: 2ch for unconditional, 5ch for FiLM.
+
+    For FiLM models, applies mask_xt (replaces known region with noise)
+    and concatenates [x_t_masked, miss_mask(1ch), known_obs(2ch)].
+
+    Training convention:
+      - miss_mask: 1=missing, 0=known  (matches dataset mask_single)
+      - known_obs: GT values at known locations, zeros elsewhere
+    """
+    if not is_film_model:
+        return x_t
+    # mask_xt: replace known region of x_t with independent noise
+    noise_replace = torch.randn_like(x_t)
+    x_t_masked = x_t * miss_mask + noise_replace * known_mask
+    # miss channel: 1 where missing (matches training mask convention)
+    miss_ch = miss_mask[:, :1]  # (1, 1, H, W) — both channels are identical
+    # known_obs: GT values only at observed locations, zeros elsewhere
+    known_obs = known_std * known_mask
+    return torch.cat([x_t_masked, miss_ch, known_obs], dim=1)  # (1, 5, H, W)
 
 
 # ── Mask building ────────────────────────────────────────────────────
@@ -227,14 +270,14 @@ def run_single_step(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_val):
         alpha_bar_t = ddpm.alpha_bars[t_val]
         eps = noise_fn(current.shape, device)
         x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
-        x0_pred = ddpm.network(x_t, time_tensor)
+        x0_pred = ddpm.network(_model_input(x_t, miss_mask, known_mask, known_std), time_tensor)
         result = known_std * known_mask + x0_pred * miss_mask
 
     result_phys = standardizer.unstandardize(result.squeeze(0).cpu())
     return result_phys[:, :OCEAN_H, :OCEAN_W].numpy()
 
 
-# ── Reverse chain inference ──────────────────────────────────────────
+# ── Reverse chain inference (corrected RePaint) ─────────────────────
 def run_reverse_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
                       resample_steps=3):
     known_std, miss_mask, known_mask, vor_std = build_masks(
@@ -251,7 +294,7 @@ def run_reverse_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
             n_resample = resample_steps if t > 0 else 1
             for r in range(n_resample):
                 time_tensor = torch.full((1, 1), t, device=device, dtype=torch.long)
-                x0_pred = ddpm.network(x, time_tensor)
+                x0_pred = ddpm.network(_model_input(x, miss_mask, known_mask, known_std), time_tensor)
 
                 if t > 0:
                     alpha_bar_t = ddpm.alpha_bars[t]
@@ -264,10 +307,15 @@ def run_reverse_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
                     var = beta_t * (1 - alpha_bar_prev) / (1 - alpha_bar_t)
                     noise = noise_fn(x.shape, device)
                     x_denoised = mean + var.sqrt() * noise
+
+                    # Forward-noise known region to level t-1 before paste
+                    noise_known = noise_fn(known_std.shape, device)
+                    x_known_t = (alpha_bar_prev.sqrt() * known_std
+                                 + (1 - alpha_bar_prev).sqrt() * noise_known)
+                    x = x_known_t * known_mask + x_denoised * miss_mask
                 else:
                     x_denoised = x0_pred
-
-                x = known_std * known_mask + x_denoised * miss_mask
+                    x = known_std * known_mask + x_denoised * miss_mask
 
                 if r < n_resample - 1 and t > 0:
                     noise_back = noise_fn(x.shape, device)
@@ -280,20 +328,20 @@ def run_reverse_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
 # ── Gradient-guided reverse chain (DPS-style, x0-prediction) ────────
 def run_guided_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
                      guidance_scale=1.0):
-    """Reverse chain with gradient guidance instead of copy-paste.
+    """Reverse chain with gradient guidance + proper known-region noising.
 
     At each step:
-      1. Predict x̂₀ = network(x_t, t)   (x0 prediction, no Tweedie)
+      1. Predict x̂₀ = network(x_t, t)
       2. Compute boundary loss: L = ||( x̂₀ - known ) * known_mask||²
       3. Backprop to x_t → ∇_{x_t} L
       4. Shift posterior mean: μ ← μ − ζ · ∇_{x_t} L / ||residual||
-      5. Sample x_{t-1} ~ N(μ, σ²I)   — no copy-paste!
+      5. Sample x_{t-1} ~ N(μ, σ²I)
+      6. Paste forward-noised known region (hard constraint)
     """
     known_std, miss_mask, known_mask, vor_std = build_masks(
         gt_ocean, obs_mask, ocean_mask)
     current = known_std * known_mask + vor_std * miss_mask
 
-    # Disable param gradients — we only need grad w.r.t. x_t
     for p in ddpm.parameters():
         p.requires_grad_(False)
 
@@ -304,10 +352,9 @@ def run_guided_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
         x = alpha_bar_start.sqrt() * current + (1 - alpha_bar_start).sqrt() * eps
 
     for t in range(t_start, -1, -1):
-        # Forward with gradients w.r.t. x_t
         x_in = x.detach().requires_grad_(True)
         time_tensor = torch.full((1, 1), t, device=device, dtype=torch.long)
-        x0_pred = ddpm.network(x_in, time_tensor)
+        x0_pred = ddpm.network(_model_input(x_in, miss_mask, known_mask, known_std), time_tensor)
 
         # Boundary loss on known region
         diff = (x0_pred - known_std) * known_mask
@@ -316,7 +363,6 @@ def run_guided_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
         grad = torch.autograd.grad(loss, x_in)[0]
 
         with torch.no_grad():
-            # Recompute x0_pred without graph (for posterior mean)
             x0_hat = x0_pred.detach()
 
             if t > 0:
@@ -325,21 +371,134 @@ def run_guided_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
                 alpha_t = ddpm.alphas[t]
                 beta_t = ddpm.betas[t]
 
-                # Posterior mean from x0 parameterization
                 coef1 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t)
                 coef2 = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t)
                 mean = coef1 * x0_hat + coef2 * x_in.detach()
 
-                # DPS guidance: shift mean
+                # DPS guidance: shift mean (only in missing region)
                 mean = mean - guidance_scale * grad / residual_norm
 
                 var = beta_t * (1 - alpha_bar_prev) / (1 - alpha_bar_t)
                 z = noise_fn(x.shape, device)
-                x = mean + var.sqrt() * z
+                x_denoised = mean + var.sqrt() * z
+
+                # Paste forward-noised known region at level t-1
+                noise_known = noise_fn(known_std.shape, device)
+                x_known_t = (alpha_bar_prev.sqrt() * known_std
+                             + (1 - alpha_bar_prev).sqrt() * noise_known)
+                x = x_known_t * known_mask + x_denoised * miss_mask
             else:
-                x = x0_hat - guidance_scale * grad / residual_norm
+                x = known_std * known_mask + x0_hat * miss_mask
 
     result_phys = standardizer.unstandardize(x.squeeze(0).cpu())
+    return result_phys[:, :OCEAN_H, :OCEAN_W].numpy()
+
+
+# ── Helmholtz-projected reverse chain ────────────────────────────────
+def run_helmholtz_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
+                        resample_steps=3, sol_weight=1.0, irr_weight=0.0):
+    """Reverse chain exploiting the Helmholtz decomposition.
+
+    At each step, after x₀ prediction, extracts the solenoidal (div-free)
+    component from the ψ head and optionally blends the irrotational
+    component from the φ head with controllable weights. This constrains
+    the reverse process to stay near the div-free manifold.
+    """
+    known_std, miss_mask, known_mask, vor_std = build_masks(
+        gt_ocean, obs_mask, ocean_mask)
+    current = known_std * known_mask + vor_std * miss_mask
+    net = ddpm.network
+
+    torch.manual_seed(seed)
+    with torch.no_grad():
+        alpha_bar_start = ddpm.alpha_bars[t_start]
+        eps = noise_fn(current.shape, device)
+        x = alpha_bar_start.sqrt() * current + (1 - alpha_bar_start).sqrt() * eps
+
+        for t in range(t_start, -1, -1):
+            n_resample = resample_steps if t > 0 else 1
+            for r in range(n_resample):
+                time_tensor = torch.full((1, 1), t, device=device, dtype=torch.long)
+                _ = net(_model_input(x, miss_mask, known_mask, known_std), time_tensor)  # populates last_v_sol, last_v_irr
+
+                # Helmholtz-projected x₀: weighted blend of heads
+                x0_proj = sol_weight * net.last_v_sol + irr_weight * net.last_v_irr
+
+                if t > 0:
+                    alpha_bar_t = ddpm.alpha_bars[t]
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1]
+                    alpha_t = ddpm.alphas[t]
+                    beta_t = ddpm.betas[t]
+                    coef1 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t)
+                    coef2 = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t)
+                    mean = coef1 * x0_proj + coef2 * x
+                    var = beta_t * (1 - alpha_bar_prev) / (1 - alpha_bar_t)
+                    noise = noise_fn(x.shape, device)
+                    x_denoised = mean + var.sqrt() * noise
+
+                    # Forward-noise known region to level t-1
+                    noise_known = noise_fn(known_std.shape, device)
+                    x_known_t = (alpha_bar_prev.sqrt() * known_std
+                                 + (1 - alpha_bar_prev).sqrt() * noise_known)
+                    x = x_known_t * known_mask + x_denoised * miss_mask
+                else:
+                    x = known_std * known_mask + x0_proj * miss_mask
+
+                if r < n_resample - 1 and t > 0:
+                    noise_back = noise_fn(x.shape, device)
+                    x = alpha_t.sqrt() * x + (1 - alpha_t).sqrt() * noise_back
+
+    result_phys = standardizer.unstandardize(x.squeeze(0).cpu())
+    return result_phys[:, :OCEAN_H, :OCEAN_W].numpy()
+
+
+# ── Ensemble single-step averaging ──────────────────────────────────
+def run_ensemble(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_val,
+                 n_ensemble=10):
+    """Average N single-step predictions with different noise seeds."""
+    known_std, miss_mask, known_mask, vor_std = build_masks(
+        gt_ocean, obs_mask, ocean_mask)
+    current = known_std * known_mask + vor_std * miss_mask
+
+    x0_sum = torch.zeros_like(current)
+    with torch.no_grad():
+        for k in range(n_ensemble):
+            torch.manual_seed(seed + k * 1000)
+            time_tensor = torch.full((1, 1), t_val, device=device,
+                                     dtype=torch.long)
+            alpha_bar_t = ddpm.alpha_bars[t_val]
+            eps = noise_fn(current.shape, device)
+            x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
+            x0_pred = ddpm.network(_model_input(x_t, miss_mask, known_mask, known_std), time_tensor)
+            x0_sum += x0_pred
+
+    x0_avg = x0_sum / n_ensemble
+    result = known_std * known_mask + x0_avg * miss_mask
+    result_phys = standardizer.unstandardize(result.squeeze(0).cpu())
+    return result_phys[:, :OCEAN_H, :OCEAN_W].numpy()
+
+
+# ── Single-step div-free: use only the ψ head ───────────────────────
+def run_single_divfree(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_val):
+    """Single-step inference using only the solenoidal (div-free) head."""
+    known_std, miss_mask, known_mask, vor_std = build_masks(
+        gt_ocean, obs_mask, ocean_mask)
+    current = known_std * known_mask + vor_std * miss_mask
+    net = ddpm.network
+
+    torch.manual_seed(seed)
+    with torch.no_grad():
+        time_tensor = torch.full((1, 1), t_val, device=device, dtype=torch.long)
+        alpha_bar_t = ddpm.alpha_bars[t_val]
+        eps = noise_fn(current.shape, device)
+        x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
+        _ = net(_model_input(x_t, miss_mask, known_mask, known_std), time_tensor)  # populates last_v_sol
+
+        # Use only the solenoidal component (guaranteed div-free)
+        x0_sol = net.last_v_sol
+        result = known_std * known_mask + x0_sol * miss_mask
+
+    result_phys = standardizer.unstandardize(result.squeeze(0).cpu())
     return result_phys[:, :OCEAN_H, :OCEAN_W].numpy()
 
 
@@ -411,6 +570,9 @@ def main():
         method_names.append(f"1S@t={tv}")
     method_names.append("RevChain")
     method_names.append("Guided")
+    method_names.append("HelmProj")
+    method_names.append("Ens10")
+    method_names.append("1S-DivFree")
 
     all_results = {}  # {coverage: {method: [mse_list]}}
     all_divs = {}     # {coverage: {method: [div_rms_list]}}
@@ -476,6 +638,30 @@ def main():
             results["Guided"].append(ocean_mse(gc, gt, ocean_mask))
             divs["Guided"].append(ocean_div_rms(gc, ocean_mask))
             preds["Guided"].append(gc)
+
+            # Helmholtz-projected chain (solenoidal only)
+            hc = run_helmholtz_chain(ddpm, gt, obs_mask, ocean_mask, seed,
+                                     t_start=args.rev_t_start,
+                                     resample_steps=args.resample_steps,
+                                     sol_weight=1.0, irr_weight=0.0)
+            results["HelmProj"].append(ocean_mse(hc, gt, ocean_mask))
+            divs["HelmProj"].append(ocean_div_rms(hc, ocean_mask))
+            preds["HelmProj"].append(hc)
+
+            # Ensemble single-step (average 10 predictions)
+            best_t = t_vals[0] if len(t_vals) == 1 else 50
+            es = run_ensemble(ddpm, gt, obs_mask, ocean_mask, seed,
+                              t_val=best_t, n_ensemble=10)
+            results["Ens10"].append(ocean_mse(es, gt, ocean_mask))
+            divs["Ens10"].append(ocean_div_rms(es, ocean_mask))
+            preds["Ens10"].append(es)
+
+            # Single-step div-free (solenoidal head only)
+            sf = run_single_divfree(ddpm, gt, obs_mask, ocean_mask, seed,
+                                    t_val=best_t)
+            results["1S-DivFree"].append(ocean_mse(sf, gt, ocean_mask))
+            divs["1S-DivFree"].append(ocean_div_rms(sf, ocean_mask))
+            preds["1S-DivFree"].append(sf)
 
             elapsed = time.time() - t0
             row = f"{i+1:>3} {vi:>5}"
@@ -587,7 +773,7 @@ def main():
             alpha_bar_t = ddpm.alpha_bars[best_t]
             eps = noise_fn(current.shape, device)
             x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
-            x0_pred = ddpm.network(x_t, time_tensor)
+            x0_pred = ddpm.network(_model_input(x_t, miss_mask, known_mask, known_std), time_tensor)
 
         # Get network's head outputs (in standardized space, full grid)
         pred_v_sol = net.last_v_sol.detach().cpu()  # (1, 2, H, W)
