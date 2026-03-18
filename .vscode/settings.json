@@ -1,0 +1,8 @@
+{
+  "python.defaultInterpreterPath": "/Users/henryw/miniconda/envs/diff310/bin/python",
+  "python.terminal.executeInFileDir": false,
+  "python.terminal.activateEnvironment": true,
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": false,
+  "code-runner.enabled": false
+}

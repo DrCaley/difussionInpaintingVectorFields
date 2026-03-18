@@ -91,6 +91,31 @@ def test_inpaint_generate_new_images_runs():
     assert isinstance(out, torch.Tensor)
     assert out.shape == input_image.shape
 
+def test_iterative_projection_helper():
+    # verify that snapping+projection leaves known pixels untouched and
+    # roughly preserves the rms magnitude in the unknown region
+    import ddpm.utils.inpainting_utils as inpaint_utils
+
+    N, C, H, W = 1, 2, 4, 4
+    x = torch.randn(N, C, H, W)
+    known_pixels = x.clone()
+    mask = torch.zeros(N, C, H, W)
+    mask[:, :, :2, :] = 1.0   # top half unknown, bottom half known
+
+    out = inpaint_utils._iterative_projection_with_snap(
+        x.clone(), mask, known_pixels, max_iters=10, tol=1e-6
+    )
+
+    known_mask = (1 - mask[:, 0:1])
+    # known region should exactly match the original known_pixels
+    assert torch.allclose(out * known_mask, known_pixels * known_mask)
+
+    # magnitude of unknown region should be maintained (within tolerance)
+    pre = inpaint_utils.rms_magnitude(x, mask)
+    post = inpaint_utils.rms_magnitude(out, mask)
+    assert torch.allclose(pre, post, rtol=1e-2, atol=1e-5)
+
+
 def test_forward_reconstructs_image():
     # Setup
     device = torch.device(dd.get_device())

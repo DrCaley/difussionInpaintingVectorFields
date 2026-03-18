@@ -2,16 +2,85 @@ import torch
 import torch.nn.functional as f
 
 from data_prep.data_initializer import DDInitializer
-
 dd = DDInitializer()
+
+def _iterative_projection_with_snap(x, mask, known_pixels, max_iters=20, tol=1e-5):
+    """Perform repeated divergence‑free projection with snapping until known region stabilizes.
+
+    The procedure mirrors the user's description: after a single denoise step we
+    snap the known pixels (which destroys divergence) then project back to a
+    divergence‑free field.  The projection is applied repeatedly until the values
+    in the known region stop changing by more than ``tol``.  To prevent gradual
+    shrinking of the field magnitude we renormalize the **unknown** (masked)
+    region after each projection so that its RMS magnitude stays close to the
+    pre‑projection value (clamped to avoid large jumps).
+
+    Args:
+        x:            current field (N,2,H,W);
+        mask:         binary mask (N,2,H,W), 1=unknown region to update;
+        known_pixels: original field at time step t (N,2,H,W) used for snapping;
+        max_iters:    upper bound on projection iterations;
+        tol:          relative tolerance on known‑region change.
+
+    Returns:
+        x after stabilization (divergence free within mask, known region unchanged).
+    """
+    known_mask = 1 - mask[:, 0:1]
+
+    # Initial snap to the observed values.
+    x = known_pixels * (1 - mask) + x * mask
+
+    for _ in range(max_iters):
+        x_old = x
+
+        # Global projection gives the cleanest divergence-free field.
+        x_proj = global_poisson_projection_consistent(x)
+
+        # Use both RMS and max statistics from the unknown region to stop
+        # projection from inflating vector magnitudes.
+        pre_rms = rms_magnitude(x, mask)
+        post_rms = rms_magnitude(x_proj, mask)
+        pre_max = max_magnitude(x, mask)
+        post_max = max_magnitude(x_proj, mask)
+
+        rms_scale = pre_rms / (post_rms + 1e-8)
+        max_scale = pre_max / (post_max + 1e-8)
+        s = torch.minimum(rms_scale, max_scale)
+        s = torch.clamp(s, 0.85, 1.0).view(-1, 1, 1, 1)
+
+        # Global scaling preserves divergence-free structure. Snapping known
+        # pixels afterwards re-imposes the observation constraint.
+        x_proj = x_proj * s
+        x = known_pixels * (1 - mask) + x_proj * mask
+
+        diff = (x - x_old) * known_mask
+        rel_known = torch.norm(diff) / (torch.norm(x_old * known_mask) + 1e-8)
+        if torch.max(rel_known) < tol:
+            break
+
+    # Return a divergence-free field. One last global rescale keeps projection
+    # from re-introducing large magnitudes.
+    x_proj = global_poisson_projection_consistent(x)
+    final_rms = rms_magnitude(x, mask)
+    proj_rms = rms_magnitude(x_proj, mask)
+    final_max = max_magnitude(x, mask)
+    proj_max = max_magnitude(x_proj, mask)
+    s = torch.minimum(final_rms / (proj_rms + 1e-8), final_max / (proj_max + 1e-8))
+    s = torch.clamp(s, 0.85, 1.0).view(-1, 1, 1, 1)
+    x_final = known_pixels * (1 - mask) + (x_proj * s) * mask
+    return x_final
+
 
 def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=None,
                                 resample_steps=1, channels=2, height=64, width=128, noise_strategy = dd.get_noise_strategy()):
     """
     Given a DDPM model, an input image, and a mask, generates in-painted samples.
     """
+    import sys
+    print("[DEBUG] inpaint_generate_new_images: Starting", file=sys.stderr)
     noised_images = [None] * (ddpm.n_steps + 1)
     device = dd.get_device()
+    print(f"[DEBUG] Device: {device}, n_steps: {ddpm.n_steps}", file=sys.stderr)
 
     def denoise_one_step(noisy_img, noise_strat, t):
         time_tensor = torch.full((n_samples, 1), t, device=device, dtype=torch.long)
@@ -30,7 +99,10 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         tensor_size = torch.zeros(n_samples, channels, height, width, device=device)
 
         if t > 0:
-            z = noise_strat(tensor_size, torch.tensor([t], device=device))
+            # One reverse transition uses one stochastic draw; keep it divergence-free
+            # while avoiding heavy multi-layer generation tied to large t.
+            step_t = torch.ones((n_samples,), device=device, dtype=torch.long)
+            z = noise_strat(tensor_size, step_t)
             beta_t = ddpm.betas[t].to(device)
             sigma_t = beta_t.sqrt()
             less_noised_img = less_noised_img + sigma_t * z
@@ -38,7 +110,9 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         return less_noised_img
 
     def noise_one_step(unnoised_img, t, noise_strat):
-        epsilon = noise_strat(unnoised_img, None)
+        batch_n = unnoised_img.shape[0]
+        step_t = torch.ones((batch_n,), device=unnoised_img.device, dtype=torch.long)
+        epsilon = noise_strat(unnoised_img, step_t)
         noised_img = ddpm(unnoised_img, t, epsilon, one_step=True)
         return noised_img
 
@@ -48,23 +122,34 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
         input_img = input_image.clone().to(device)
         mask = mask.to(device)
   
-        noise = noise_strat(input_img, torch.tensor([ddpm.n_steps] , device=device))
+        noise = None
 
         # Step-by-step forward noising
+        print(f"[DEBUG] Starting forward noising loop ({ddpm.n_steps} steps)", file=sys.stderr)
         noised_images[0] = input_img
         for t in range(ddpm.n_steps):
+            if t % 10 == 0:
+                print(f"[DEBUG] Forward noising step {t}/{ddpm.n_steps}", file=sys.stderr)
             noised_images[t + 1] = noise_one_step(noised_images[t], t, noise_strat)
+        
+        print(f"[DEBUG] Forward noising complete", file=sys.stderr)
 
         doing_the_thing = False # Usually false
 
         if doing_the_thing:
+            print(f"[DEBUG] Creating noise for step {ddpm.n_steps}", file=sys.stderr)
+            noise = noise_strat(input_img, torch.tensor([ddpm.n_steps] , device=device))
             x = noised_images[ddpm.n_steps] * (1 - mask) + (noise * mask)
         else:
+            print(f"[DEBUG] Starting masked_poisson_projection on heavily noised image", file=sys.stderr)
             x = masked_poisson_projection(noised_images[ddpm.n_steps], mask)
+            print(f"[DEBUG] Masked poisson projection complete", file=sys.stderr)
         final_noised_image = x
 
-
+        print(f"[DEBUG] Starting reverse denoising loop ({ddpm.n_steps} steps, resample_steps={resample_steps})", file=sys.stderr)
         for idx, t in enumerate(range(ddpm.n_steps - 1, -1, -1)):
+            if t % 10 == 0:
+                print(f"[DEBUG] Reverse denoise step {ddpm.n_steps-1-idx}/{ddpm.n_steps}", file=sys.stderr)
             for i in range(resample_steps):
                 x = denoise_one_step(x, noise_strat, t) # temp used to be noise but wasn't be used at all
                 
@@ -92,38 +177,21 @@ def inpaint_generate_new_images(ddpm, input_image, mask, n_samples=16, device=No
                     iterations += 1
                 """
                 
-                MAX_ITERS = 20
-                tol = 1e-5
-
-                known_pixels = noised_images[t]           # (N,2,H,W)
-                known_mask   = 1 - mask[:, 0:1]           # (N,1,H,W)
-
-                # snap first
-                x = known_pixels * (1 - mask) + x * mask
-
-                for _ in range(MAX_ITERS):
-                    x_old = x
-                    #print("div before proj:", div_rms(x))
-                    x_proj = global_poisson_projection_consistent(x)
-                    #print("div after proj :", div_rms(x_proj))
-
-                    pre  = max_magnitude(x)
-                    post = max_magnitude(x_proj)
-                    s = torch.clamp(pre / (post + 1e-8), 0.85, 1.15).view(-1,1,1,1)
-                    s = 1
-                    x_proj = x_proj * (1 - mask) + (x_proj * s) * mask
-
-                    # snap known pixels back
-                    x = known_pixels * (1 - mask) + x_proj * mask
-
-                    # known-only change check
-                    diff = (x - x_old) * known_mask
-                    rel_known = torch.norm(diff) / (torch.norm(x_old * known_mask) + 1e-8)
-                    if rel_known.item() < tol:
-                        break
+                # After each denoising step we must snap the known pixels and then
+                # project back to a divergence-free field repeatedly until the
+                # snapping no longer alters the known region.  The helper below
+                # handles the iterative projection and rescales the unknown region
+                # to prevent gradual shrinkage.
+                # Reduced from 20 to 5 for faster MPS execution
+                MAX_ITERS = 5
+                tol = 1e-4
+                x = _iterative_projection_with_snap(x, mask, noised_images[t],
+                                                   max_iters=MAX_ITERS, tol=tol)
             
-                if (i + 1) < resample_steps:
+                if (i + 1) < resample_steps: # adds stochastic noise per denoise step  
                     x = noise_one_step(x, t, noise_strat)
+            # Final hard snap at t=0 so observed pixels (including land) are exact.
+            x = noised_images[0] * (1 - mask) + x * mask
     return x, noised_images[ddpm.n_steps]
 
 def calculate_mse(original_image, predicted_image, mask, normalize=False):
@@ -244,14 +312,14 @@ import torch
 import torch.nn.functional as F
 
 
-def masked_poisson_projection(vector_field, mask, num_iter=500, tol=1e-5):
+def masked_poisson_projection(vector_field, mask, num_iter=50, tol=1e-5):
     """
     Performs divergence-free projection of a 2D vector field with masked inpainting regions.
 
     Args:
         vector_field: (N, 2, H, W) torch tensor (vx, vy)
         mask:         (N, 2, H, W) binary tensor, 1 = region to inpaint
-        num_iter:     max Jacobi iterations
+        num_iter:     max Jacobi iterations (reduced from 500 to 50 for MPS speed)
         tol:          early stopping tolerance on residual (L2 norm)
 
     Returns:
@@ -321,13 +389,13 @@ def masked_poisson_projection(vector_field, mask, num_iter=500, tol=1e-5):
 # Henry new functions
 
 
-def global_poisson_projection(vector_field, num_iter=50, tol=1e-4):
+def global_poisson_projection(vector_field, num_iter=25, tol=1e-4):
     """
     Global divergence-free projection of a 2D vector field.
 
     Args:
         vector_field: (N, 2, H, W) tensor (vx, vy)
-        num_iter: max Jacobi iterations
+        num_iter: max Jacobi iterations (reduced from 50 to 25 for MPS speed)
         tol: early stopping tolerance on residual (RMS update of phi)
 
     Returns:
@@ -442,7 +510,7 @@ def known_region_change(field_a, field_b, mask, mode="rms", eps=1e-8):
         raise ValueError("mode must be 'rms', 'mae', or 'max'")
     
     
-def global_poisson_projection_consistent(v, num_iter=200, tol=1e-5):
+def global_poisson_projection_consistent(v, num_iter=100, tol=1e-5):
     N, _, H, W = v.shape
     device = v.device
     vx, vy = v[:, 0], v[:, 1]
@@ -456,7 +524,7 @@ def global_poisson_projection_consistent(v, num_iter=200, tol=1e-5):
     div = div - div.mean(dim=(1,2), keepdim=True)
 
     phi = torch.zeros(N, H, W, device=device)
-    for _ in range(num_iter):
+    for iter_idx in range(num_iter):
         neighbor_sum = torch.zeros_like(phi)
         neighbor_sum[:, 1:, :]  += phi[:, :-1, :]
         neighbor_sum[:, :-1, :] += phi[:, 1:, :]

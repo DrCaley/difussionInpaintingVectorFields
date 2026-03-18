@@ -84,7 +84,6 @@ def gp_fill(tensor, mask, lengthscale=1.5, variance=1.0, noise=1e-6, use_double=
 
         K = rbf_kernel(known_xy, known_xy, lengthscale, variance)
         K_s = rbf_kernel(unknown_xy, known_xy, lengthscale, variance)
-        K_ss = rbf_kernel(unknown_xy, unknown_xy, lengthscale, variance)
 
         # Cholesky solve
         jitter = max(noise, 1e-6)

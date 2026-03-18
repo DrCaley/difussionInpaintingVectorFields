@@ -2,11 +2,14 @@ import csv #csv file writing
 import sys #system path manipulation
 import random
 import shutil # clearing files in results folder
+import traceback
 
 import torch
 import logging
 import numpy as np
 from tqdm import tqdm
+import matplotlib
+matplotlib.use('Agg')  # Use non-GUI backend
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from scipy.ndimage import distance_transform_edt
@@ -244,7 +247,13 @@ class ModelInpainter:
                             standardizer = self.dd.get_standardizer()
                             final_image_ddpm = torch.unsqueeze(standardizer.unstandardize(torch.squeeze(final_image_ddpm, 0)).to(device), 0)
                             final_noisy_image = torch.unsqueeze(standardizer.unstandardize(torch.squeeze(final_noisy_image, 0)).to(device), 0)
-                            gp_field = gp_fill(input_image_original, mask)
+                            # GP baseline uses dense kernel algebra that is more stable on CPU
+                            # than on MPS (especially for Cholesky in float64).
+                            try:
+                                gp_field = gp_fill(input_image_original.cpu(), mask.cpu()).to(device)
+                            except Exception as e:
+                                print(f"[WARN] gp_fill failed, using input as fallback: {e}", file=sys.stderr)
+                                gp_field = input_image_original.clone()
 
                             input_image_original_cropped = top_left_crop(input_image_original, 44, 94).to(device)
                             final_noisy_image_cropped = top_left_crop(final_noisy_image, 44, 94).to(device)
@@ -426,6 +435,8 @@ class ModelInpainter:
 
             except Exception as e:
                 logging.error(f"Error inpainting model {model_path}: {e}", stack_info=True)
+                print(f"[ERROR] Error inpainting model {model_path}: {e}", file=sys.stderr)
+                traceback.print_exc()
                 continue
 
     def visualize_images(self, vector_scale=0.15):
@@ -465,7 +476,6 @@ class ModelInpainter:
 if __name__ == '__main__':
     mi = ModelInpainter()
     mi.load_models_from_yaml()
-    print(mi.model_paths)
     
     if (mi.clear_all_previous_results): # clearing all files in results folder
         mi.clear_all_results() 
