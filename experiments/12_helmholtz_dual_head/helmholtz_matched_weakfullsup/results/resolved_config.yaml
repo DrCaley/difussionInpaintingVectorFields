@@ -56,4 +56,4 @@ helmholtz_loss:
   lambda_decomp: 0.1
   lambda_orth: 0.01
   decomp_t_max_frac: 1.0
-output_dir: /Users/caleyjb/Library/Mobile Documents/com~apple~CloudDocs/JeffsStuff/PLU/Research/diffusionInpaintingVectorFields/experiments/12_helmholtz_dual_head/helmholtz_matched_weakfullsup/results
+output_dir: /workspace/difussionInpaintingVectorFields/experiments/12_helmholtz_dual_head/helmholtz_matched_weakfullsup/results

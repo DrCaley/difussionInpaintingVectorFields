@@ -165,6 +165,28 @@ Two reference documents describe every paper-based technique and our variants:
 | | FFT Helmholtz | Standard | `spectral_project_div_free()` |
 | | Jacobi Poisson | Standard | `project_div_free_2d()` |
 
+## Evaluation Baselines
+
+**V-CNN is the ONLY baseline** for all evaluation comparisons. **NEVER include
+Voronoi fill as a comparison method in any evaluation script.** Voronoi is a
+trivial nearest-neighbour interpolation that tells us nothing useful — it
+inflates the numbers table with meaningless rows and distracts from the real
+comparison. Do NOT add it, do NOT compute it, do NOT report it.
+
+There are two V-CNN checkpoints depending on the dataset:
+- **Original dataset**: `results/voronoi_cnn/voronoi_cnn_best.pt` (5ch input)
+- **Subframes dataset**: `results/vcnn_subframes/vcnn_subframes_best.pt` (6ch
+  input with bathymetry). Trained via `scripts/train_vcnn_subframes.py`.
+
+The model class is in `scripts/voronoi_cnn_model.py`. Always report DDPM
+results relative to V-CNN (e.g. "0.85× V-CNN MSE").
+
+**Every evaluation script must include V-CNN.** When writing new eval scripts
+or modifying existing ones, always load the appropriate V-CNN checkpoint and
+include it in the method list. The summary table's "vs" column must compare
+against V-CNN. See `scripts/eval_subframes_baseline.py` or
+`scripts/eval_helmholtz_split.py` for the standard pattern.
+
 ## Inference / Evaluation Scripts
 
 **Always separate computation from visualization.** Inference scripts must:

@@ -1,0 +1,31 @@
+# Multires with mask_xt=true: fix for standard diffusion inpainting
+# Same as multires_standard_diffusion but with mask_xt: true
+# This replaces known region in x_t with random noise, forcing the model
+# to learn from FiLM conditioning rather than the spatial structure of x_t.
+# Loss is computed ONLY on missing region (not whole image).
+model_name: multires_maskxt
+
+unet_type: helmholtz_split_film_multires
+prediction_target: x0
+noise_function: helmholtz_matched
+mask_xt: true
+
+loss_function: helmholtz_supervised
+
+epochs: 800
+batch_size: 16
+lr: 0.0005
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999
+
+retrain_mode: true
+model_to_retrain: experiments/12_helmholtz_dual_head/multires_maskxt/results/inpaint_helmholtz_matched_t250_best_checkpoint.pt
+reset_best: true
+
+helmholtz_loss:
+  lambda_decomp: 0.1
+  lambda_orth: 0.01

@@ -214,7 +214,7 @@ class MyUNet_FiLM(nn.Module):
         self.conv_out = nn.Conv2d(16, 2, 3, 1, 1)       # output: 2 channels (u, v)
 
     # ─── forward ─────────────────────────────────────────────────────
-    def forward(self, x, t):
+    def forward(self, x, t, **kwargs):
         """
         Args:
             x: (N, 5, H, W) — [x_t(2ch), mask(1ch), known_values(2ch)]

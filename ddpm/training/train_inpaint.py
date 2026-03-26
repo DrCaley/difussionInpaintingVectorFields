@@ -54,6 +54,8 @@ from ddpm.neural_networks.unets.unet_film_attn import MyUNet_FiLM_Attn
 from ddpm.neural_networks.unets.unet_helmholtz import MyUNet_Helmholtz
 from ddpm.neural_networks.unets.unet_helmholtz_split import MyUNet_Helmholtz_Split
 from ddpm.neural_networks.unets.unet_helmholtz_split_film import MyUNet_Helmholtz_Split_FiLM
+from ddpm.neural_networks.unets.unet_helmholtz_split_film_multires import MyUNet_Helmholtz_Split_FiLM_MultiRes
+from ddpm.neural_networks.unets.unet_helmholtz_split_film_crossattn import MyUNet_Helmholtz_Split_FiLM_CrossAttn
 from ddpm.neural_networks.unets.unet_st import MyUNet_ST
 from data_prep.ocean_sequence_dataset import OceanSequenceDataset
 from ddpm.helper_functions.death_messages import get_death_message
@@ -124,6 +126,15 @@ class TrainInpaint:
         # solenoidal and irrotational subspaces (Proposal 6)
         self.helmholtz_split_noise = bool(dd.get_attribute("helmholtz_split_noise") or False)
         self.irr_speed = float(dd.get_attribute("irr_speed") or 2.0)
+
+        # Split head loss: evaluate sol/irr heads independently against
+        # Helmholtz-decomposed GT rather than combined MSE on (v_sol+v_irr).
+        self.split_head_loss = bool(dd.get_attribute("split_head_loss") or False)
+
+        # Detach heads: block reconstruction MSE gradient from coupling the
+        # ψ/φ heads.  Only decomposition loss trains the heads independently.
+        self.detach_heads = bool(dd.get_attribute("detach_heads") or False)
+
         self.bootstrap_rollout_training = bool(dd.get_attribute("bootstrap_rollout_training") or False)
         rollout_probs_raw = dd.get_attribute("bootstrap_rollout_depth_probs") or {0: 1.0}
         self.bootstrap_rollout_depth_probs = {}
@@ -278,6 +289,13 @@ class TrainInpaint:
         # Data augmentation (velocity-field-aware flips)
         self.augment = bool(dd.get_attribute("augment") or False)
 
+        # V-CNN style distance-to-nearest-sensor field as extra conditioning channel
+        self.use_distance_field = bool(dd.get_attribute("use_distance_field") or False)
+        # Normalized bathymetry as extra dense conditioning channel
+        self.use_bathymetry = bool(dd.get_attribute("use_bathymetry") or False)
+        # Voronoi (nearest-neighbour) fill for dense conditioning instead of sparse obs
+        self.use_voronoi_fill = bool(dd.get_attribute("use_voronoi_fill") or False)
+
         # Spatiotemporal config
         self.T = int(dd.get_attribute("T") or 1)
         self.pretrained_spatial = dd.get_attribute("pretrained_spatial_checkpoint") or None
@@ -329,20 +347,53 @@ class TrainInpaint:
                 n_steps=self.n_steps,
                 n_stage_tokens=self.rollout_num_stages if self.rollout_stage_aware else 0,
                 self_cond_channels=2 if self.self_conditioning else 0,
+                detach_heads=self.detach_heads,
             ).to(self.device)
-            logging.info("Using Helmholtz dual-head UNet (ψ + φ → curl + grad, 2-channel%s)",
-                         ", self-cond" if self.self_conditioning else "")
+            logging.info("Using Helmholtz dual-head UNet (ψ + φ → curl + grad, 2-channel%s%s)",
+                         ", self-cond" if self.self_conditioning else "",
+                         ", detach-heads" if self.detach_heads else "")
         elif self.unet_type == "helmholtz_split":
             unet = MyUNet_Helmholtz_Split(
                 n_steps=self.n_steps,
                 n_stage_tokens=self.rollout_num_stages if self.rollout_stage_aware else 0,
                 self_cond_channels=2 if self.self_conditioning else 0,
+                detach_heads=self.detach_heads,
             ).to(self.device)
-            logging.info("Using Helmholtz split-decoder UNet (independent high-res decoders per head, 2-channel%s)",
-                         ", self-cond" if self.self_conditioning else "")
+            logging.info("Using Helmholtz split-decoder UNet (independent high-res decoders per head, 2-channel%s%s)",
+                         ", self-cond" if self.self_conditioning else "",
+                         ", detach-heads" if self.detach_heads else "")
+        elif self.unet_type == "helmholtz_split_concat":
+            unet = MyUNet_Helmholtz_Split(
+                n_steps=self.n_steps, in_channels=5,
+                detach_heads=self.detach_heads,
+            ).to(self.device)
+            logging.info("Using Helmholtz split-decoder UNet with Palette-style concat conditioning (5-channel%s)",
+                         ", detach-heads" if self.detach_heads else "")
         elif self.unet_type == "helmholtz_split_film":
-            unet = MyUNet_Helmholtz_Split_FiLM(n_steps=self.n_steps).to(self.device)
-            logging.info("Using FiLM-conditioned Helmholtz split-decoder UNet (5-channel, FiLM conditioning)")
+            unet = MyUNet_Helmholtz_Split_FiLM(n_steps=self.n_steps, detach_heads=self.detach_heads).to(self.device)
+            logging.info("Using FiLM-conditioned Helmholtz split-decoder UNet (5-channel, FiLM conditioning%s)",
+                         ", detach-heads" if self.detach_heads else "")
+        elif self.unet_type == "helmholtz_split_film_multires":
+            in_ch = 5
+            if self.use_distance_field:
+                in_ch += 1
+            if self.use_bathymetry:
+                in_ch += 1
+            unet = MyUNet_Helmholtz_Split_FiLM_MultiRes(
+                n_steps=self.n_steps, in_channels=in_ch,
+                detach_heads=self.detach_heads,
+                use_distance_field=self.use_distance_field,
+                use_bathymetry=self.use_bathymetry,
+            ).to(self.device)
+            logging.info("Using multi-res FPN FiLM-conditioned Helmholtz split-decoder UNet (%d-channel, sparse conditioning%s%s%s)",
+                         in_ch,
+                         ", distance-field" if self.use_distance_field else "",
+                         ", bathymetry" if self.use_bathymetry else "",
+                         ", detach-heads" if self.detach_heads else "")
+        elif self.unet_type == "helmholtz_split_film_crossattn":
+            unet = MyUNet_Helmholtz_Split_FiLM_CrossAttn(n_steps=self.n_steps, detach_heads=self.detach_heads).to(self.device)
+            logging.info("Using cross-attention FiLM-conditioned Helmholtz split-decoder UNet (5-channel, sparse point conditioning%s)",
+                         ", detach-heads" if self.detach_heads else "")
         elif self.unet_type == "spatiotemporal":
             if self.pretrained_spatial:
                 ckpt_path = Path(self.pretrained_spatial)
@@ -410,6 +461,7 @@ class TrainInpaint:
                 f"α_bar_sol[T-1]={self.split_schedule.alpha_bars_sol[-1]:.4f}, "
                 f"α_bar_irr[T-1]={self.split_schedule.alpha_bars_irr[-1]:.4f}"
             )
+            logging.info(f"Split head loss: {self.split_head_loss}")
 
         # Wrap datasets: use OceanSequenceDataset for spatiotemporal,
         # OceanInpaintDataset for everything else
@@ -685,12 +737,21 @@ class TrainInpaint:
                         dd.get_training_data(),
                         standardizer=self.standardizer,
                         augment=self.augment,
+                        use_distance_field=self.use_distance_field,
+                        use_bathymetry=self.use_bathymetry,
+                        use_voronoi_fill=self.use_voronoi_fill,
                     ),
                     batch_size=self.batch_size,
                     shuffle=True,
                 )
                 self.test_loader = DataLoader(
-                    OceanInpaintDataset(dd.get_test_data(), standardizer=self.standardizer),
+                    OceanInpaintDataset(
+                        dd.get_test_data(),
+                        standardizer=self.standardizer,
+                        use_distance_field=self.use_distance_field,
+                        use_bathymetry=self.use_bathymetry,
+                        use_voronoi_fill=self.use_voronoi_fill,
+                    ),
                     batch_size=self.batch_size,
                 )
 
@@ -846,6 +907,56 @@ class TrainInpaint:
 
         if self.mask_xt:
             mask_2ch = mask[:, :2]
+
+            # Split head loss: per-head MSE against Helmholtz-decomposed GT
+            # + topology penalties (vorticity, divergence) on combined output
+            if self.split_head_loss:
+                net = self.ddpm.network
+                if hasattr(net, 'last_v_sol') and net.last_v_sol is not None:
+                    from ddpm.utils.helmholtz_split import helmholtz_decompose
+                    decomp_target = target  # x0 or noise
+                    with torch.no_grad():
+                        gt_sol, gt_irr = helmholtz_decompose(decomp_target)
+
+                    v_sol = net.last_v_sol
+                    v_irr = net.last_v_irr
+
+                    loss_sol = ((v_sol - gt_sol) ** 2 * mask_2ch).sum() / mask_2ch.sum().clamp(min=1.0)
+                    loss_irr = ((v_irr - gt_irr) ** 2 * mask_2ch).sum() / mask_2ch.sum().clamp(min=1.0)
+                    mse_loss = loss_sol + loss_irr
+
+                    # Topology penalties on combined prediction
+                    topo_loss = torch.tensor(0.0, device=pred.device)
+                    ls = self.loss_strategy
+                    if hasattr(ls, 'lambda_vort') and epoch >= ls.warmup_epochs:
+                        v_combined = v_sol + v_irr
+                        t_threshold = int(ls.t_max_frac * self.n_steps)
+                        topo_mask = (t.squeeze() < t_threshold)
+                        if topo_mask.any():
+                            pred_sub = v_combined[topo_mask]
+                            x0_sub = x0[topo_mask]
+                            B_sub = pred_sub.shape[0]
+                            mask_1ch = ls.ocean_mask.expand(B_sub, 1, 64, 128)
+                            if ls.lambda_vort > 0:
+                                vp = ls._vorticity(pred_sub)
+                                vt = ls._vorticity(x0_sub)
+                                topo_loss = topo_loss + ls.lambda_vort * ls._masked_mse(vp, vt, mask_1ch)
+                            if ls.lambda_div > 0:
+                                dp = ls._divergence(pred_sub)
+                                dt = ls._divergence(x0_sub)
+                                topo_loss = topo_loss + ls.lambda_div * ls._masked_mse(dp, dt, mask_1ch)
+                            frac = topo_mask.float().mean()
+                            topo_loss = frac * topo_loss
+
+                    total_loss = mse_loss + topo_loss
+                    self._last_loss_components = {
+                        'mse': mse_loss.item(),
+                        'decomp': loss_sol.item() + loss_irr.item(),
+                        'orth': 0.0,
+                        'topo': topo_loss.item(),
+                    }
+                    return total_loss
+
             diff = (pred - target) ** 2
             masked_diff = diff * mask_2ch
             mse_loss = masked_diff.sum() / mask_2ch.sum().clamp(min=1.0)
@@ -856,7 +967,13 @@ class TrainInpaint:
             if hasattr(self.loss_strategy, 'lambda_decomp'):
                 helm_aux = self.loss_strategy.helmholtz_aux(
                     x0=x0, t=t, ddpm=self.ddpm, epoch=epoch,
+                    noise=noise, prediction_target=self.prediction_target,
                 )
+                self._last_loss_components = {
+                    'mse': mse_loss.item(),
+                    'decomp': getattr(self.loss_strategy, '_last_decomp_loss', 0.0),
+                    'orth': getattr(self.loss_strategy, '_last_orth_loss', 0.0),
+                }
                 return mse_loss + helm_aux
 
             return mse_loss
@@ -871,6 +988,22 @@ class TrainInpaint:
             prediction_target=self.prediction_target,
             epoch=epoch,
         )
+
+    def _get_loss_components(self):
+        """Return last loss component breakdown if available."""
+        # split_head_loss stores components directly on self
+        if hasattr(self, '_last_loss_components') and self._last_loss_components:
+            comps = self._last_loss_components
+            self._last_loss_components = None  # consume
+            return comps
+        ls = self.loss_strategy
+        if hasattr(ls, '_last_base_loss'):
+            return {
+                'mse': ls._last_base_loss,
+                'decomp': getattr(ls, '_last_decomp_loss', 0.0),
+                'orth': getattr(ls, '_last_orth_loss', 0.0),
+            }
+        return None
 
     def _predict_denoised(self, noisy, t, mask=None, known=None, stage_idx=None, self_cond=None, gp_source=None):
         n = len(noisy)
@@ -891,8 +1024,10 @@ class TrainInpaint:
         # For FiLM-conditioned Helmholtz UNet, use Voronoi fill (dense) as
         # conditioning instead of sparse known observations.  Sparse known has
         # 99.9%+ zeros, which washes out in the conditioning encoder.
-        if self.unet_type == "helmholtz_split_film" and gp_source is not None:
+        if self.unet_type in ("helmholtz_split_film", "helmholtz_split_concat") and gp_source is not None:
             cond_field = gp_source
+        elif self.unet_type in ("helmholtz_split_film_multires", "helmholtz_split_film_crossattn"):
+            cond_field = known  # sparse observations for multi-res/cross-attn encoder
         else:
             cond_field = known
 
@@ -1154,6 +1289,9 @@ class TrainInpaint:
         logging.info(f"Weight decay: {self.weight_decay}")
         logging.info(f"EMA: {self.use_ema} (decay={self.ema_decay}, warmup_steps={self.ema_warmup_steps})")
         logging.info(f"Augmentation: {self.augment}")
+        logging.info(f"Distance field conditioning: {self.use_distance_field}")
+        logging.info(f"Bathymetry conditioning: {self.use_bathymetry}")
+        logging.info(f"Voronoi fill conditioning: {self.use_voronoi_fill}")
         logging.info(f"Output dir: {self.output_dir}")
         if self.unet_type == "spatiotemporal":
             logging.info(f"Spatiotemporal: T={self.T}, freeze_spatial_epochs={self.freeze_spatial_epochs}")
@@ -1252,12 +1390,14 @@ class TrainInpaint:
             logging.info(f"EMA enabled (decay={self.ema_decay}, warmup_steps={self.ema_warmup_steps})")
 
         # CSV header
+        _has_helm_components = hasattr(self.loss_strategy, 'lambda_decomp')
         with self.csv_file.open("w", newline="") as f:
+            header = ["Epoch", "Epoch Loss", "Train Loss", "Test Loss"]
+            if _has_helm_components:
+                header.extend(["MSE", "Decomp", "Orth", "Topo"])
             if ema is not None:
-                csv.writer(f).writerow(["Epoch", "Epoch Loss", "Train Loss", "Test Loss",
-                                        "EMA Train Loss", "EMA Test Loss"])
-            else:
-                csv.writer(f).writerow(["Epoch", "Epoch Loss", "Train Loss", "Test Loss"])
+                header.extend(["EMA Train Loss", "EMA Test Loss"])
+            csv.writer(f).writerow(header)
 
         best_epoch = start_epoch
         accum_steps = self.gradient_accumulation_steps
@@ -1331,6 +1471,10 @@ class TrainInpaint:
                     )
 
                 epoch_loss = 0.0
+                epoch_mse = 0.0
+                epoch_decomp = 0.0
+                epoch_orth = 0.0
+                epoch_topo = 0.0
                 self.ddpm.train()
                 optimizer.zero_grad()  # zero once at start of epoch
 
@@ -1362,6 +1506,13 @@ class TrainInpaint:
                             ema.update()
 
                     epoch_loss += loss.item() * n / len(self.train_loader.dataset)
+                    comps = self._get_loss_components()
+                    if comps is not None:
+                        w = n / len(self.train_loader.dataset)
+                        epoch_mse += comps['mse'] * w
+                        epoch_decomp += comps['decomp'] * w
+                        epoch_orth += comps['orth'] * w
+                        epoch_topo += comps.get('topo', 0.0) * w
 
                 # Step LR scheduler (once per epoch)
                 if scheduler is not None:
@@ -1389,6 +1540,8 @@ class TrainInpaint:
                 try:
                     with self.csv_file.open("a", newline="") as f:
                         row = [epoch + 1, epoch_loss, avg_train_loss, avg_test_loss]
+                        if _has_helm_components:
+                            row.extend([epoch_mse, epoch_decomp, epoch_orth, epoch_topo])
                         if ema is not None:
                             row.extend([ema_train_loss, ema_test_loss])
                         csv.writer(f).writerow(row)

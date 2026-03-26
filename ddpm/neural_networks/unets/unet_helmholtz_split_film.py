@@ -46,31 +46,29 @@ from ddpm.neural_networks.unets.unet_xl_attn import (
 
 
 class FiLMLayer(nn.Module):
-    """Adaptive Group Normalization + FiLM (AdaGN-style).
+    """Spatial FiLM with GroupNorm (per-pixel modulation).
 
-    Stable modulation via three design choices from ADM / DiT / Palette:
-      1. Pool spatial conditioning → channel-wise vectors (no per-pixel drift)
-      2. GroupNorm on features before modulation (bounded activations)
-      3. Residual formulation: (1 + γ) · GroupNorm(h) + β  (γ init 0 → identity)
+    Per-pixel γ and β via 1×1 convolutions on conditioning feature maps,
+    preserving full spatial structure from the conditioning encoder.
+    GroupNorm before modulation keeps activations bounded.
+    Residual formulation: (1 + γ) · GroupNorm(h) + β  (γ,β init 0 → identity)
     """
 
     def __init__(self, cond_channels, feature_channels, num_groups=32):
         super().__init__()
         self.norm = nn.GroupNorm(num_groups, feature_channels)
-        self.pool = nn.AdaptiveAvgPool2d(1)
-        self.scale_fc = nn.Linear(cond_channels, feature_channels)
-        self.shift_fc = nn.Linear(cond_channels, feature_channels)
+        self.scale_conv = nn.Conv2d(cond_channels, feature_channels, 1)
+        self.shift_conv = nn.Conv2d(cond_channels, feature_channels, 1)
 
         # γ = 0, β = 0 at init → (1+0)·norm(h)+0 = norm(h) ≈ identity
-        nn.init.zeros_(self.scale_fc.weight)
-        nn.init.zeros_(self.scale_fc.bias)
-        nn.init.zeros_(self.shift_fc.weight)
-        nn.init.zeros_(self.shift_fc.bias)
+        nn.init.zeros_(self.scale_conv.weight)
+        nn.init.zeros_(self.scale_conv.bias)
+        nn.init.zeros_(self.shift_conv.weight)
+        nn.init.zeros_(self.shift_conv.bias)
 
     def forward(self, h, cond):
-        cond_vec = self.pool(cond).flatten(1)                   # (B, C_cond)
-        gamma = self.scale_fc(cond_vec)[:, :, None, None]       # (B, C_feat, 1, 1)
-        beta = self.shift_fc(cond_vec)[:, :, None, None]
+        gamma = self.scale_conv(cond)   # (B, C_feat, H, W) per-pixel
+        beta = self.shift_conv(cond)    # (B, C_feat, H, W) per-pixel
         return (1 + gamma) * self.norm(h) + beta
 
 
@@ -137,9 +135,10 @@ class MyUNet_Helmholtz_Split_FiLM(nn.Module):
     """
 
     def __init__(self, n_steps: int = 1000, time_emb_dim: int = 256,
-                 in_channels: int = 5):
+                 in_channels: int = 5, detach_heads: bool = False):
         super().__init__()
         self.in_channels = in_channels
+        self.detach_heads = detach_heads
 
         ch = [64, 128, 256, 256]
 
@@ -396,4 +395,6 @@ class MyUNet_Helmholtz_Split_FiLM(nn.Module):
         self.last_v_sol = v_sol
         self.last_v_irr = v_irr
 
+        if self.detach_heads:
+            return v_sol.detach() + v_irr.detach()
         return v_sol + v_irr

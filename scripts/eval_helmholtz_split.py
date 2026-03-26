@@ -25,6 +25,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 from ddpm.neural_networks.ddpm import GaussianDDPM
 from ddpm.neural_networks.unets.unet_helmholtz_split import MyUNet_Helmholtz_Split
 from ddpm.neural_networks.unets.unet_helmholtz_split_film import MyUNet_Helmholtz_Split_FiLM
+try:
+    from ddpm.neural_networks.unets.unet_helmholtz_split_film_crossattn import MyUNet_Helmholtz_Split_FiLM_CrossAttn
+except ImportError:
+    MyUNet_Helmholtz_Split_FiLM_CrossAttn = None
+from ddpm.neural_networks.unets.unet_helmholtz_split_film_multires import MyUNet_Helmholtz_Split_FiLM_MultiRes
 from ddpm.helper_functions.standardize_data import ZScoreStandardizer, UnifiedZScoreStandardizer
 from ddpm.utils.noise_utils import HelmholtzMatchedNoise
 from ddpm.utils.helmholtz_split import helmholtz_decompose
@@ -69,19 +74,20 @@ args = parser.parse_args()
 
 # ── Auto-detect standardizer and noise type from resolved config ─────
 use_matched_noise = False
-if not args.unified_std:
-    cfg_path = Path(args.weights).parent / "resolved_config.yaml"
-    if cfg_path.exists():
-        import yaml
-        with open(cfg_path) as f:
-            cfg = yaml.safe_load(f)
+cfg_path = Path(args.weights).parent / "resolved_config.yaml"
+cfg = {}
+if cfg_path.exists():
+    import yaml
+    with open(cfg_path) as f:
+        cfg = yaml.safe_load(f) or {}
+    if not args.unified_std:
         if cfg.get("noise_function") in ("helmholtz_matched", "div_free",
             "spectral_div_free", "forward_diff_div_free", "fwd_diff_eq_divfree"):
             args.unified_std = True
             print(f"Auto-detected unified standardizer from {cfg_path.name}")
-        if cfg.get("noise_function") == "helmholtz_matched":
-            use_matched_noise = True
-            print("Auto-detected helmholtz_matched noise → using matched inference")
+    if cfg.get("noise_function") == "helmholtz_matched":
+        use_matched_noise = True
+        print("Auto-detected helmholtz_matched noise → using matched inference")
 
 if args.unified_std:
     standardizer = UnifiedZScoreStandardizer(SHARED_MEAN, SHARED_STD)
@@ -90,6 +96,24 @@ else:
 
 # ── Noise generator (matched or Gaussian) ────────────────────────────
 _matched_gen = HelmholtzMatchedNoise() if use_matched_noise else None
+
+# Helmholtz split schedule: when training used helmholtz_split_noise: true
+# This applies regardless of noise_function (gaussian or helmholtz_matched)
+_split_schedule = None
+_use_split_schedule = False
+if cfg_path.exists():
+    if cfg.get("helmholtz_split_noise") is True:
+        _use_split_schedule = True
+        print(f"Auto-detected helmholtz_split_noise=true → using split schedule (irr_speed={cfg.get('irr_speed', 2.0)})")
+    elif use_matched_noise:
+        _use_split_schedule = True
+if _use_split_schedule:
+    from ddpm.utils.helmholtz_split import HelmholtzSplitSchedule
+    _irr_speed = cfg.get("irr_speed", 2.0)
+    _split_schedule = HelmholtzSplitSchedule(
+        n_steps=N_STEPS, min_beta=0.0001, max_beta=0.02,
+        irr_speed=_irr_speed, device=None,
+    )
 
 def noise_fn(shape, device):
     """Generate noise matching the training distribution."""
@@ -105,6 +129,13 @@ elif torch.cuda.is_available():
 else:
     device = torch.device("cpu")
 print(f"Device: {device}")
+
+# Move split schedule tensors to device
+if _split_schedule is not None:
+    for attr in ("betas_sol", "alphas_sol", "alpha_bars_sol",
+                 "betas_irr", "alphas_irr", "alpha_bars_irr"):
+        setattr(_split_schedule, attr, getattr(_split_schedule, attr).to(device))
+    _split_schedule.device = device
 
 
 # ── Data loading ─────────────────────────────────────────────────────
@@ -175,9 +206,13 @@ def predict_vcnn(model, vel_obs, obs_mask, ocean_mask, dev):
 
 # ── Model loading ────────────────────────────────────────────────────
 is_film_model = False  # set during load_model()
+is_concat_model = False  # set during load_model()
+is_crossattn_model = False  # set during load_model()
+is_multires_model = False  # set during load_model()
+film_mask_xt = True     # whether to replace known region in x_t (from config)
 
 def load_model(weights_path):
-    global is_film_model
+    global is_film_model, is_concat_model, is_crossattn_model, is_multires_model, film_mask_xt
     # Auto-detect UNet type from resolved config
     cfg_path = Path(weights_path).parent / "resolved_config.yaml"
     unet_type = "helmholtz_split"  # default
@@ -186,12 +221,28 @@ def load_model(weights_path):
         with open(cfg_path) as f:
             c = yaml.safe_load(f)
         unet_type = c.get("unet_type", "helmholtz_split")
+        film_mask_xt = c.get("mask_xt", True)
 
     is_film_model = (unet_type == "helmholtz_split_film")
+    is_concat_model = (unet_type == "helmholtz_split_concat")
+    is_crossattn_model = (unet_type == "helmholtz_split_film_crossattn")
+    is_multires_model = (unet_type == "helmholtz_split_film_multires")
+    print(f"  mask_xt: {film_mask_xt}")
 
-    if is_film_model:
+    if is_multires_model:
+        net = MyUNet_Helmholtz_Split_FiLM_MultiRes(n_steps=N_STEPS, time_emb_dim=256)
+        print("Loaded multi-resolution FPN-conditioned Helmholtz split UNet")
+    elif is_crossattn_model:
+        net = MyUNet_Helmholtz_Split_FiLM_CrossAttn(n_steps=N_STEPS, time_emb_dim=256)
+        print("Loaded cross-attention FiLM-conditioned Helmholtz split UNet")
+    elif is_film_model:
         net = MyUNet_Helmholtz_Split_FiLM(n_steps=N_STEPS, time_emb_dim=256)
         print("Loaded FiLM-conditioned Helmholtz split UNet")
+    elif is_concat_model:
+        net = MyUNet_Helmholtz_Split(n_steps=N_STEPS, time_emb_dim=256,
+                                     in_channels=5,
+                                     n_stage_tokens=0, self_cond_channels=0)
+        print("Loaded Palette-concat Helmholtz split UNet (5ch)")
     else:
         net = MyUNet_Helmholtz_Split(n_steps=N_STEPS, time_emb_dim=256,
                                      n_stage_tokens=0, self_cond_channels=0)
@@ -208,47 +259,61 @@ def load_model(weights_path):
 
 
 def _model_input(x_t, miss_mask, known_mask, known_std, vor_std=None):
-    """Build network input: 2ch for unconditional, 5ch for FiLM.
+    """Build network input: 2ch for unconditional, 5ch for FiLM/concat.
 
-    For FiLM models, applies mask_xt (replaces known region with noise)
-    and concatenates [x_t_masked, miss_mask(1ch), cond(2ch)].
+    For conditioned models (FiLM or concat), concatenates
+    [x_t (or masked), miss_mask(1ch), cond(2ch)].
+    If mask_xt=True, replaces known region of x_t with independent noise.
+    If mask_xt=False, x_t is passed through unchanged (model sees known signal).
     Uses Voronoi fill (dense) as conditioning to avoid sparse-signal washout.
 
     Training convention:
       - miss_mask: 1=missing, 0=known  (matches dataset mask_single)
       - vor_std: Voronoi-interpolated field (dense), or known_std as fallback
     """
-    if not is_film_model:
+    if not is_film_model and not is_concat_model and not is_crossattn_model and not is_multires_model:
         return x_t
-    # mask_xt: replace known region of x_t with independent noise
-    noise_replace = torch.randn_like(x_t)
-    x_t_masked = x_t * miss_mask + noise_replace * known_mask
+    if film_mask_xt:
+        # mask_xt: replace known region of x_t with independent noise
+        noise_replace = torch.randn_like(x_t)
+        x_t_in = x_t * miss_mask + noise_replace * known_mask
+    else:
+        x_t_in = x_t
     # miss channel: 1 where missing (matches training mask convention)
     miss_ch = miss_mask[:, :1]  # (1, 1, H, W) — both channels are identical
-    # conditioning: use Voronoi fill (dense signal) for FiLM
-    cond_field = vor_std if vor_std is not None else known_std * known_mask
-    return torch.cat([x_t_masked, miss_ch, cond_field], dim=1)  # (1, 5, H, W)
+    if is_crossattn_model or is_multires_model:
+        # Cross-attention / multi-res FPN: pass sparse observations
+        cond_field = known_std * known_mask
+    else:
+        # FiLM/concat: use Voronoi fill (dense signal)
+        cond_field = vor_std if vor_std is not None else known_std * known_mask
+    return torch.cat([x_t_in, miss_ch, cond_field], dim=1)  # (1, 5, H, W)
 
 
 # ── Mask building ────────────────────────────────────────────────────
 def build_masks(gt_ocean, obs_mask, ocean_mask):
-    """Return known_std, miss_mask, known_mask, vor_std (all on device)."""
+    """Return known_std, miss_mask, known_mask, vor_std (all on device).
+
+    Mask conventions match training (OceanVoronoiForwardDataset):
+      miss_mask = 1 everywhere EXCEPT observed ocean pixels (which are 0)
+      known_mask = 1 - miss_mask = 1 only at observed ocean pixels
+      known_std * known_mask = standardised GT at observations, zero elsewhere
+    Land and padding are treated as MISSING (miss_mask=1).
+    """
+    # ── Standardized GT in padded grid (zero-padded) ──
     gt_full = np.zeros((1, 2, FULL_H, FULL_W), dtype=np.float32)
     gt_full[0, :, :OCEAN_H, :OCEAN_W] = gt_ocean * ocean_mask[None]
     known_std = standardizer(
         torch.from_numpy(gt_full).squeeze(0)).unsqueeze(0).to(device)
 
-    border = make_border_mask((1, 2, FULL_H, FULL_W), device)
-    land_mask = (torch.from_numpy(gt_full).abs() > 1e-5).float().to(device)
-    raw_miss = np.ones((FULL_H, FULL_W), dtype=np.float32)
-    raw_miss[:OCEAN_H, :OCEAN_W] -= obs_mask
-    raw_miss[:OCEAN_H, :OCEAN_W] *= ocean_mask
-    raw_miss[OCEAN_H:, :] = 0.0
-    raw_miss[:, OCEAN_W:] = 0.0
-    miss_mask = (torch.from_numpy(raw_miss).unsqueeze(0).unsqueeze(0).to(device)
-                 * border * land_mask)
-    known_mask = 1.0 - miss_mask
+    # ── Miss mask: 1=missing, 0=known (training convention) ──
+    # Start with everything missing, mark only observed ocean as known
+    miss_np = np.ones((1, 1, FULL_H, FULL_W), dtype=np.float32)
+    miss_np[0, 0, :OCEAN_H, :OCEAN_W] = 1.0 - obs_mask  # 0 at observed pixels
+    miss_mask = torch.from_numpy(miss_np).to(device)
+    known_mask = 1.0 - miss_mask  # 1 only at observed ocean pixels
 
+    # ── Voronoi fill ──
     vel_obs = gt_ocean * obs_mask[None]
     vor_fill = voronoi_fill(vel_obs, obs_mask, ocean_mask)
     vor_full = np.zeros((1, 2, FULL_H, FULL_W), dtype=np.float32)
@@ -268,9 +333,14 @@ def run_single_step(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_val):
     torch.manual_seed(seed)
     with torch.no_grad():
         time_tensor = torch.full((1, 1), t_val, device=device, dtype=torch.long)
-        alpha_bar_t = ddpm.alpha_bars[t_val]
-        eps = noise_fn(current.shape, device)
-        x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
+        t_batch = torch.tensor([t_val], device=device)
+        if _split_schedule is not None:
+            # Use Helmholtz split forward process (matches training)
+            x_t, _, _ = _split_schedule.q_sample(current, t_batch)
+        else:
+            alpha_bar_t = ddpm.alpha_bars[t_val]
+            eps = noise_fn(current.shape, device)
+            x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
         x0_pred = ddpm.network(_model_input(x_t, miss_mask, known_mask, known_std, vor_std), time_tensor)
         result = known_std * known_mask + x0_pred * miss_mask
 
@@ -287,9 +357,13 @@ def run_reverse_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
 
     torch.manual_seed(seed)
     with torch.no_grad():
-        alpha_bar_start = ddpm.alpha_bars[t_start]
-        eps = noise_fn(current.shape, device)
-        x = alpha_bar_start.sqrt() * current + (1 - alpha_bar_start).sqrt() * eps
+        t_batch = torch.tensor([t_start], device=device)
+        if _split_schedule is not None:
+            x, _, _ = _split_schedule.q_sample(current, t_batch)
+        else:
+            alpha_bar_start = ddpm.alpha_bars[t_start]
+            eps = noise_fn(current.shape, device)
+            x = alpha_bar_start.sqrt() * current + (1 - alpha_bar_start).sqrt() * eps
 
         for t in range(t_start, -1, -1):
             n_resample = resample_steps if t > 0 else 1
@@ -298,29 +372,48 @@ def run_reverse_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
                 x0_pred = ddpm.network(_model_input(x, miss_mask, known_mask, known_std, vor_std), time_tensor)
 
                 if t > 0:
-                    alpha_bar_t = ddpm.alpha_bars[t]
-                    alpha_bar_prev = ddpm.alpha_bars[t - 1]
-                    alpha_t = ddpm.alphas[t]
-                    beta_t = ddpm.betas[t]
-                    coef1 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t)
-                    coef2 = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t)
-                    mean = coef1 * x0_pred + coef2 * x
-                    var = beta_t * (1 - alpha_bar_prev) / (1 - alpha_bar_t)
-                    noise = noise_fn(x.shape, device)
-                    x_denoised = mean + var.sqrt() * noise
+                    if _split_schedule is not None:
+                        t_b = torch.tensor([t], device=device)
+                        x_denoised = _split_schedule.p_step(x, x0_pred, t_b)
+                        # Forward-noise known region to level t-1 with split schedule
+                        t_prev_b = torch.tensor([t - 1], device=device)
+                        x_known_t, _, _ = _split_schedule.q_sample(known_std, t_prev_b)
+                    else:
+                        alpha_bar_t = ddpm.alpha_bars[t]
+                        alpha_bar_prev = ddpm.alpha_bars[t - 1]
+                        alpha_t = ddpm.alphas[t]
+                        beta_t = ddpm.betas[t]
+                        coef1 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t)
+                        coef2 = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t)
+                        mean = coef1 * x0_pred + coef2 * x
+                        var = beta_t * (1 - alpha_bar_prev) / (1 - alpha_bar_t)
+                        noise = noise_fn(x.shape, device)
+                        x_denoised = mean + var.sqrt() * noise
 
-                    # Forward-noise known region to level t-1 before paste
-                    noise_known = noise_fn(known_std.shape, device)
-                    x_known_t = (alpha_bar_prev.sqrt() * known_std
-                                 + (1 - alpha_bar_prev).sqrt() * noise_known)
+                        noise_known = noise_fn(known_std.shape, device)
+                        x_known_t = (alpha_bar_prev.sqrt() * known_std
+                                     + (1 - alpha_bar_prev).sqrt() * noise_known)
                     x = x_known_t * known_mask + x_denoised * miss_mask
                 else:
                     x_denoised = x0_pred
                     x = known_std * known_mask + x_denoised * miss_mask
 
                 if r < n_resample - 1 and t > 0:
-                    noise_back = noise_fn(x.shape, device)
-                    x = alpha_t.sqrt() * x + (1 - alpha_t).sqrt() * noise_back
+                    if _split_schedule is not None:
+                        t_b = torch.tensor([t], device=device)
+                        x, _, _ = _split_schedule.q_sample(x, t_b)
+                        # q_sample goes from clean → noisy at t, but for
+                        # RePaint re-noising we need one step back.
+                        # Actually, the standard RePaint re-noising formula
+                        # x ← √α_t · x + √(1-α_t) · ε works for both.
+                        # q_sample decomposes x and noises each component
+                        # as if from t=0, which is wrong for re-noising.
+                        # Use the Gaussian approximation here:
+                        pass  # x is already set by q_sample above
+                    else:
+                        noise_back = noise_fn(x.shape, device)
+                        alpha_t = ddpm.alphas[t]
+                        x = alpha_t.sqrt() * x + (1 - alpha_t).sqrt() * noise_back
 
     result_phys = standardizer.unstandardize(x.squeeze(0).cpu())
     return result_phys[:, :OCEAN_H, :OCEAN_W].numpy()
@@ -348,9 +441,13 @@ def run_guided_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
 
     torch.manual_seed(seed)
     with torch.no_grad():
-        alpha_bar_start = ddpm.alpha_bars[t_start]
-        eps = noise_fn(current.shape, device)
-        x = alpha_bar_start.sqrt() * current + (1 - alpha_bar_start).sqrt() * eps
+        t_batch = torch.tensor([t_start], device=device)
+        if _split_schedule is not None:
+            x, _, _ = _split_schedule.q_sample(current, t_batch)
+        else:
+            alpha_bar_start = ddpm.alpha_bars[t_start]
+            eps = noise_fn(current.shape, device)
+            x = alpha_bar_start.sqrt() * current + (1 - alpha_bar_start).sqrt() * eps
 
     for t in range(t_start, -1, -1):
         x_in = x.detach().requires_grad_(True)
@@ -367,26 +464,34 @@ def run_guided_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
             x0_hat = x0_pred.detach()
 
             if t > 0:
-                alpha_bar_t = ddpm.alpha_bars[t]
-                alpha_bar_prev = ddpm.alpha_bars[t - 1]
-                alpha_t = ddpm.alphas[t]
-                beta_t = ddpm.betas[t]
+                if _split_schedule is not None:
+                    t_b = torch.tensor([t], device=device)
+                    # DPS guidance: shift x0 prediction in gradient direction
+                    x0_guided = x0_hat - guidance_scale * grad / residual_norm
+                    x_denoised = _split_schedule.p_step(x_in.detach(), x0_guided, t_b)
+                    t_prev_b = torch.tensor([t - 1], device=device)
+                    x_known_t, _, _ = _split_schedule.q_sample(known_std, t_prev_b)
+                else:
+                    alpha_bar_t = ddpm.alpha_bars[t]
+                    alpha_bar_prev = ddpm.alpha_bars[t - 1]
+                    alpha_t = ddpm.alphas[t]
+                    beta_t = ddpm.betas[t]
 
-                coef1 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t)
-                coef2 = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t)
-                mean = coef1 * x0_hat + coef2 * x_in.detach()
+                    coef1 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t)
+                    coef2 = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t)
+                    mean = coef1 * x0_hat + coef2 * x_in.detach()
 
-                # DPS guidance: shift mean (only in missing region)
-                mean = mean - guidance_scale * grad / residual_norm
+                    # DPS guidance: shift mean (only in missing region)
+                    mean = mean - guidance_scale * grad / residual_norm
 
-                var = beta_t * (1 - alpha_bar_prev) / (1 - alpha_bar_t)
-                z = noise_fn(x.shape, device)
-                x_denoised = mean + var.sqrt() * z
+                    var = beta_t * (1 - alpha_bar_prev) / (1 - alpha_bar_t)
+                    z = noise_fn(x.shape, device)
+                    x_denoised = mean + var.sqrt() * z
 
-                # Paste forward-noised known region at level t-1
-                noise_known = noise_fn(known_std.shape, device)
-                x_known_t = (alpha_bar_prev.sqrt() * known_std
-                             + (1 - alpha_bar_prev).sqrt() * noise_known)
+                    # Paste forward-noised known region at level t-1
+                    noise_known = noise_fn(known_std.shape, device)
+                    x_known_t = (alpha_bar_prev.sqrt() * known_std
+                                 + (1 - alpha_bar_prev).sqrt() * noise_known)
                 x = x_known_t * known_mask + x_denoised * miss_mask
             else:
                 x = known_std * known_mask + x0_hat * miss_mask
@@ -412,9 +517,13 @@ def run_helmholtz_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
 
     torch.manual_seed(seed)
     with torch.no_grad():
-        alpha_bar_start = ddpm.alpha_bars[t_start]
-        eps = noise_fn(current.shape, device)
-        x = alpha_bar_start.sqrt() * current + (1 - alpha_bar_start).sqrt() * eps
+        t_batch = torch.tensor([t_start], device=device)
+        if _split_schedule is not None:
+            x, _, _ = _split_schedule.q_sample(current, t_batch)
+        else:
+            alpha_bar_start = ddpm.alpha_bars[t_start]
+            eps = noise_fn(current.shape, device)
+            x = alpha_bar_start.sqrt() * current + (1 - alpha_bar_start).sqrt() * eps
 
         for t in range(t_start, -1, -1):
             n_resample = resample_steps if t > 0 else 1
@@ -426,28 +535,38 @@ def run_helmholtz_chain(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_start,
                 x0_proj = sol_weight * net.last_v_sol + irr_weight * net.last_v_irr
 
                 if t > 0:
-                    alpha_bar_t = ddpm.alpha_bars[t]
-                    alpha_bar_prev = ddpm.alpha_bars[t - 1]
-                    alpha_t = ddpm.alphas[t]
-                    beta_t = ddpm.betas[t]
-                    coef1 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t)
-                    coef2 = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t)
-                    mean = coef1 * x0_proj + coef2 * x
-                    var = beta_t * (1 - alpha_bar_prev) / (1 - alpha_bar_t)
-                    noise = noise_fn(x.shape, device)
-                    x_denoised = mean + var.sqrt() * noise
+                    if _split_schedule is not None:
+                        t_b = torch.tensor([t], device=device)
+                        x_denoised = _split_schedule.p_step(x, x0_proj, t_b)
+                        t_prev_b = torch.tensor([t - 1], device=device)
+                        x_known_t, _, _ = _split_schedule.q_sample(known_std, t_prev_b)
+                    else:
+                        alpha_bar_t = ddpm.alpha_bars[t]
+                        alpha_bar_prev = ddpm.alpha_bars[t - 1]
+                        alpha_t = ddpm.alphas[t]
+                        beta_t = ddpm.betas[t]
+                        coef1 = (alpha_bar_prev.sqrt() * beta_t) / (1 - alpha_bar_t)
+                        coef2 = (alpha_t.sqrt() * (1 - alpha_bar_prev)) / (1 - alpha_bar_t)
+                        mean = coef1 * x0_proj + coef2 * x
+                        var = beta_t * (1 - alpha_bar_prev) / (1 - alpha_bar_t)
+                        noise = noise_fn(x.shape, device)
+                        x_denoised = mean + var.sqrt() * noise
 
-                    # Forward-noise known region to level t-1
-                    noise_known = noise_fn(known_std.shape, device)
-                    x_known_t = (alpha_bar_prev.sqrt() * known_std
-                                 + (1 - alpha_bar_prev).sqrt() * noise_known)
+                        noise_known = noise_fn(known_std.shape, device)
+                        x_known_t = (alpha_bar_prev.sqrt() * known_std
+                                     + (1 - alpha_bar_prev).sqrt() * noise_known)
                     x = x_known_t * known_mask + x_denoised * miss_mask
                 else:
                     x = known_std * known_mask + x0_proj * miss_mask
 
                 if r < n_resample - 1 and t > 0:
-                    noise_back = noise_fn(x.shape, device)
-                    x = alpha_t.sqrt() * x + (1 - alpha_t).sqrt() * noise_back
+                    if _split_schedule is not None:
+                        t_b = torch.tensor([t], device=device)
+                        x, _, _ = _split_schedule.q_sample(x, t_b)
+                    else:
+                        noise_back = noise_fn(x.shape, device)
+                        alpha_t = ddpm.alphas[t]
+                        x = alpha_t.sqrt() * x + (1 - alpha_t).sqrt() * noise_back
 
     result_phys = standardizer.unstandardize(x.squeeze(0).cpu())
     return result_phys[:, :OCEAN_H, :OCEAN_W].numpy()
@@ -467,9 +586,13 @@ def run_ensemble(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_val,
             torch.manual_seed(seed + k * 1000)
             time_tensor = torch.full((1, 1), t_val, device=device,
                                      dtype=torch.long)
-            alpha_bar_t = ddpm.alpha_bars[t_val]
-            eps = noise_fn(current.shape, device)
-            x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
+            t_batch = torch.tensor([t_val], device=device)
+            if _split_schedule is not None:
+                x_t, _, _ = _split_schedule.q_sample(current, t_batch)
+            else:
+                alpha_bar_t = ddpm.alpha_bars[t_val]
+                eps = noise_fn(current.shape, device)
+                x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
             x0_pred = ddpm.network(_model_input(x_t, miss_mask, known_mask, known_std, vor_std), time_tensor)
             x0_sum += x0_pred
 
@@ -490,9 +613,13 @@ def run_single_divfree(ddpm, gt_ocean, obs_mask, ocean_mask, seed, t_val):
     torch.manual_seed(seed)
     with torch.no_grad():
         time_tensor = torch.full((1, 1), t_val, device=device, dtype=torch.long)
-        alpha_bar_t = ddpm.alpha_bars[t_val]
-        eps = noise_fn(current.shape, device)
-        x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
+        t_batch = torch.tensor([t_val], device=device)
+        if _split_schedule is not None:
+            x_t, _, _ = _split_schedule.q_sample(current, t_batch)
+        else:
+            alpha_bar_t = ddpm.alpha_bars[t_val]
+            eps = noise_fn(current.shape, device)
+            x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
         _ = net(_model_input(x_t, miss_mask, known_mask, known_std, vor_std), time_tensor)  # populates last_v_sol
 
         # Use only the solenoidal component (guaranteed div-free)
@@ -563,8 +690,8 @@ def main():
         except Exception as e:
             print(f"  V-CNN not available ({e}), skipping")
 
-    # Method list
-    method_names = ["Voronoi"]
+    # Method list — V-CNN is the only baseline (no Voronoi comparison)
+    method_names = []
     if vcnn is not None:
         method_names.append("V-CNN")
     for tv in t_vals:
@@ -603,12 +730,7 @@ def main():
                                        np.random.default_rng(seed=seed))
             t0 = time.time()
 
-            # Voronoi baseline
             vel_obs = gt * obs_mask[None]
-            vor = voronoi_fill(vel_obs, obs_mask, ocean_mask)
-            results["Voronoi"].append(ocean_mse(vor, gt, ocean_mask))
-            divs["Voronoi"].append(ocean_div_rms(vor, ocean_mask))
-            preds["Voronoi"].append(vor)
 
             # V-CNN
             if vcnn is not None:
@@ -680,7 +802,7 @@ def main():
         # Summary for this coverage
         print(f"\n  SUMMARY — {cov}% coverage, {len(val_indices)} samples, "
               f"{total:.0f}s total")
-        ref_key = "V-CNN" if vcnn is not None else "Voronoi"
+        ref_key = "V-CNN"
         ref_mean = np.mean(results[ref_key])
         print(f"  {'Method':<20} {'Mean MSE':<14} {'vs '+ref_key:<12} "
               f"{'Div RMS':<12}")
@@ -771,9 +893,13 @@ def main():
         with torch.no_grad():
             time_tensor = torch.full((1, 1), best_t, device=device,
                                      dtype=torch.long)
-            alpha_bar_t = ddpm.alpha_bars[best_t]
-            eps = noise_fn(current.shape, device)
-            x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
+            t_batch = torch.tensor([best_t], device=device)
+            if _split_schedule is not None:
+                x_t, _, _ = _split_schedule.q_sample(current, t_batch)
+            else:
+                alpha_bar_t = ddpm.alpha_bars[best_t]
+                eps = noise_fn(current.shape, device)
+                x_t = alpha_bar_t.sqrt() * current + (1 - alpha_bar_t).sqrt() * eps
             x0_pred = ddpm.network(_model_input(x_t, miss_mask, known_mask, known_std, vor_std), time_tensor)
 
         # Get network's head outputs (in standardized space, full grid)

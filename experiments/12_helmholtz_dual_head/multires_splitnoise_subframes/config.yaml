@@ -1,0 +1,52 @@
+# Multires FiLM + split noise + subframes dataset + bathymetry
+# Same architecture as multires_splitnoise but trained on the expanded
+# St. John subframe dataset (29,400 samples) with bathymetry conditioning.
+model_name: multires_splitnoise_subframes
+
+# ── Data (subframes mmap dataset with bathymetry) ────────────────
+data_path: data_subframes
+
+u_training_mean: -0.12131775915622711
+u_training_std: 0.18608823418617249
+v_training_mean: 0.01599905826151371
+v_training_std: 0.09885834157466888
+mag_mean: 0.19007815420627594
+shared_mean: -0.0526593504473567
+shared_std: 0.14899966879396356
+
+# ── Architecture ─────────────────────────────────────────────────
+voronoi_forward: false
+voronoi_known_fracs: [0.001, 0.002, 0.005, 0.01]
+unet_type: helmholtz_split_film_multires
+prediction_target: x0
+noise_function: gaussian
+mask_xt: true
+use_bathymetry: true
+
+# Helmholtz-split noise schedule (Proposal 6)
+helmholtz_split_noise: true
+irr_speed: 2.0
+
+# Evaluate heads independently
+split_head_loss: true
+loss_function: helmholtz_supervised
+
+# ── Training ─────────────────────────────────────────────────────
+epochs: 800
+batch_size: 48
+lr: 0.0005
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999
+
+helmholtz_loss:
+  lambda_decomp: 0.1
+  lambda_orth: 0.01
+
+# ── Resume from epoch 88 with larger batch size ─────────────────
+retrain_mode: true
+model_to_retrain: experiments/12_helmholtz_dual_head/multires_splitnoise_subframes/results/inpaint_gaussian_t250_Mar24_1704.pt
+reset_best: false

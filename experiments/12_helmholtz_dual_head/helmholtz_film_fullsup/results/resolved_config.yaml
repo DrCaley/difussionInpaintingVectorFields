@@ -52,6 +52,11 @@ w2: 0.4
 num_workers: 0
 model_name: helmholtz_film_fullsup_smoke
 voronoi_forward: true
+voronoi_known_fracs:
+- 0.001
+- 0.002
+- 0.005
+- 0.01
 helmholtz_loss:
   lambda_decomp: 0.5
   lambda_orth: 0.1

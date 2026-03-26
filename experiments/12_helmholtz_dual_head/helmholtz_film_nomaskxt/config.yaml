@@ -1,0 +1,27 @@
+model_name: helmholtz_film_nomaskxt
+
+voronoi_forward: true
+voronoi_known_fracs: [0.001, 0.002, 0.005, 0.01]
+unet_type: helmholtz_split_film
+prediction_target: x0
+noise_function: helmholtz_matched
+mask_xt: false
+
+loss_function: helmholtz_supervised
+
+# Match weakfullsup Helmholtz penalty weights (lower than film_fullsup)
+helmholtz_loss:
+  lambda_decomp: 0.1
+  lambda_orth: 0.01
+  decomp_t_max_frac: 1.0
+
+# Training recipe — same as film_fullsup
+batch_size: 16
+epochs: 800
+lr: 0.0005
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999

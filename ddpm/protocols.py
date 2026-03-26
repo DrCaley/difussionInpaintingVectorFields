@@ -395,6 +395,9 @@ _UNET_TYPE_CLASS = {
     "standard_attn": "MyUNet_Attn",   # 2-channel unconditional with self-attention
     "helmholtz": "MyUNet_Helmholtz",  # 2ch unconditional, dual-head ψ/φ Helmholtz decomp
     "helmholtz_split": "MyUNet_Helmholtz_Split",  # 2ch, split high-res decoder per head
+    "helmholtz_split_concat": "MyUNet_Helmholtz_Split",  # 5ch Palette-style concat conditioning
+    "helmholtz_split_film_multires": "MyUNet_Helmholtz_Split_FiLM_MultiRes",  # 5ch FPN multi-res sparse conditioning
+    "helmholtz_split_film_crossattn": "MyUNet_Helmholtz_Split_FiLM_CrossAttn",  # 5ch cross-attention sparse point conditioning
     "gp_context": "MyUNet_Attn",      # 8-channel GP-context conditioned (concat-style)
 }
 

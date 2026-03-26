@@ -53,6 +53,11 @@ use_ema: true
 v_training_mean: -0.0323937796117541
 v_training_std: 0.08899177232117582
 voronoi_forward: true
+voronoi_known_fracs:
+- 0.001
+- 0.002
+- 0.005
+- 0.01
 w1: 0.6
 w2: 0.4
 warmup_epochs: 10

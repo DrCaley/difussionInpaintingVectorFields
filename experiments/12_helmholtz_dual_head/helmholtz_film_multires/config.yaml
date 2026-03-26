@@ -1,0 +1,26 @@
+model_name: helmholtz_film_multires
+
+voronoi_forward: true
+voronoi_known_fracs: [0.001, 0.002, 0.005, 0.01]
+unet_type: helmholtz_split_film_multires
+prediction_target: x0
+noise_function: helmholtz_matched
+mask_xt: false
+
+loss_function: helmholtz_supervised
+
+# Match helmholtz_film_spatial hyperparameters exactly
+epochs: 800
+batch_size: 16
+lr: 0.0005
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999
+
+# Match weakfullsup Helmholtz penalty weights
+helmholtz_loss:
+  lambda_decomp: 0.1
+  lambda_orth: 0.01

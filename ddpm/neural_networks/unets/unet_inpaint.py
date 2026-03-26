@@ -109,7 +109,7 @@ class MyUNet_Inpaint(nn.Module):
         self.conv_out = nn.Conv2d(16, 2, 3, 1, 1)       # output: 2 channels (u, v)
 
     # ─── forward ─────────────────────────────────────────────────────
-    def forward(self, x, t):
+    def forward(self, x, t, **kwargs):
         """
         Args:
             x: (N, 5, 64, 128) — concatenation of [x_t, mask, known_values]

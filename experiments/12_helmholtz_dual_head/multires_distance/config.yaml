@@ -1,0 +1,39 @@
+# Multires FiLM + split noise + V-CNN style distance-to-sensor field
+# Same as multires_splitnoise but adds a normalized distance-to-nearest-sensor
+# channel as extra conditioning input (6ch total instead of 5ch).
+# Tests whether explicit spatial awareness of sensor locations improves
+# inpainting, particularly at very sparse coverage levels.
+model_name: multires_distance
+
+voronoi_forward: false
+voronoi_known_fracs: [0.001, 0.002, 0.005, 0.01]
+unet_type: helmholtz_split_film_multires
+prediction_target: x0
+noise_function: gaussian
+mask_xt: true
+
+# V-CNN style distance field conditioning
+use_distance_field: true
+
+# Helmholtz-split noise schedule (same as splitnoise)
+helmholtz_split_noise: true
+irr_speed: 2.0
+
+# Evaluate heads independently
+split_head_loss: true
+
+loss_function: helmholtz_supervised
+
+epochs: 800
+batch_size: 16
+lr: 0.0005
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999
+
+helmholtz_loss:
+  lambda_decomp: 0.1
+  lambda_orth: 0.01

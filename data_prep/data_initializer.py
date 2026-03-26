@@ -42,6 +42,12 @@ class DDInitializer:
         self.config_name = config_path.stem
         self.full_boundaries_path = root / boundaries_path
         self._instance._setup_yaml_file(root / config_path)
+
+        # Allow config to override default data path
+        data_path = self._config.get("data_path", None)
+        if data_path is not None:
+            pickle_path = Path(data_path)
+
         self._instance._setup_tensors(root / pickle_path)
 
         self.gpu = self._config.get('gpu_to_use')
@@ -88,24 +94,89 @@ class DDInitializer:
         self.alpha_bars = torch.tensor([torch.prod(self.alphas[:i + 1]) for i in range(len(self.alphas))])
 
     def _setup_tensors(self, pickle_path : Path) -> None:
+        # Memory-mapped directory format (preferred for large datasets)
+        if pickle_path.is_dir():
+            self._load_mmap(pickle_path)
+            return
+
         if not pickle_path.exists():
             raise PickleNotFoundException("Pickle file that contains the data was not found, "
                                           "make sure you created it with the slitting datasets python script")
 
         with open(pickle_path, 'rb') as f:
-            training_data_np, validation_data_np, test_data_np = pickle.load(f)
+            data = pickle.load(f)
+
+        # Extended format (10 elements): vel×3, bathy×3, mask×3, stats
+        if isinstance(data, list) and len(data) >= 10:
+            (training_data_np, validation_data_np, test_data_np,
+             train_bathy_np, val_bathy_np, test_bathy_np,
+             train_mask_np, val_mask_np, test_mask_np,
+             self.pickle_stats) = data[:10]
+            del data  # free the list container early
+            self.training_ocean_mask = torch.from_numpy(train_mask_np).float()
+            self.validation_ocean_mask = torch.from_numpy(val_mask_np).float()
+            self.test_ocean_mask = torch.from_numpy(test_mask_np).float()
+            self.training_bathymetry = torch.from_numpy(train_bathy_np).float()
+            self.validation_bathymetry = torch.from_numpy(val_bathy_np).float()
+            self.test_bathymetry = torch.from_numpy(test_bathy_np).float()
+            print(f"Loaded extended pickle: {training_data_np.shape[-1]} train, "
+                  f"{validation_data_np.shape[-1]} val, {test_data_np.shape[-1]} test")
+        else:
+            # Legacy 3-element format
+            training_data_np, validation_data_np, test_data_np = data
+            del data
+            self.training_ocean_mask = None
+            self.validation_ocean_mask = None
+            self.test_ocean_mask = None
+            self.training_bathymetry = None
+            self.validation_bathymetry = None
+            self.test_bathymetry = None
+            self.pickle_stats = None
 
         self.training_tensor = torch.from_numpy(training_data_np).float()
         self.validation_tensor = torch.from_numpy(validation_data_np).float()
         self.test_tensor = torch.from_numpy(test_data_np).float()
 
+    def _load_mmap(self, data_dir: Path) -> None:
+        """Load memory-mapped .npy files for near-zero RAM usage."""
+        import json
+        meta_path = data_dir / "meta.json"
+        if not meta_path.exists():
+            raise FileNotFoundError(f"meta.json not found in {data_dir}")
+        with open(meta_path) as f:
+            meta = json.load(f)
+        self.pickle_stats = meta["stats"]
+
+        # Load as memory-mapped numpy arrays (OS pages in on demand)
+        self.training_tensor = np.load(data_dir / "train_velocity.npy", mmap_mode="r")
+        self.validation_tensor = np.load(data_dir / "val_velocity.npy", mmap_mode="r")
+        self.test_tensor = np.load(data_dir / "test_velocity.npy", mmap_mode="r")
+        self.training_ocean_mask = np.load(data_dir / "train_ocean_mask.npy", mmap_mode="r")
+        self.validation_ocean_mask = np.load(data_dir / "val_ocean_mask.npy", mmap_mode="r")
+        self.test_ocean_mask = np.load(data_dir / "test_ocean_mask.npy", mmap_mode="r")
+        self.training_bathymetry = np.load(data_dir / "train_bathymetry.npy", mmap_mode="r")
+        self.validation_bathymetry = np.load(data_dir / "val_bathymetry.npy", mmap_mode="r")
+        self.test_bathymetry = np.load(data_dir / "test_bathymetry.npy", mmap_mode="r")
+        print(f"Loaded mmap dataset from {data_dir}: "
+              f"{self.training_tensor.shape[-1]} train, "
+              f"{self.validation_tensor.shape[-1]} val, "
+              f"{self.test_tensor.shape[-1]} test")
+
     def _setup_datasets(self, boundaries_file):
+        bathy_stats = None
+        if self.pickle_stats is not None:
+            bathy_stats = (self.pickle_stats["bathy_min"],
+                           self.pickle_stats["bathy_max"])
+
         self.training_data = OceanImageDataset(
             n_steps=self.n_steps,
             noise_strategy=self.noise_strategy,
             data_tensor=self.training_tensor,
             boundaries=boundaries_file,
             transform=self.transform,
+            ocean_masks=self.training_ocean_mask,
+            bathymetry=self.training_bathymetry,
+            bathy_stats=bathy_stats,
         )
         self.test_data = OceanImageDataset(
             data_tensor=self.test_tensor,
@@ -113,6 +184,9 @@ class DDInitializer:
             noise_strategy=self.noise_strategy,
             boundaries=boundaries_file,
             transform=self.transform,
+            ocean_masks=self.test_ocean_mask,
+            bathymetry=self.test_bathymetry,
+            bathy_stats=bathy_stats,
         )
         self.validation_data = OceanImageDataset(
             data_tensor=self.validation_tensor,
@@ -120,6 +194,9 @@ class DDInitializer:
             noise_strategy=self.noise_strategy,
             boundaries=boundaries_file,
             transform=self.transform,
+            ocean_masks=self.validation_ocean_mask,
+            bathymetry=self.validation_bathymetry,
+            bathy_stats=bathy_stats,
         )
 
     def _resolve_noise_dependent_settings(self):
@@ -223,9 +300,17 @@ class DDInitializer:
             std_type = self._config.get('standardizer_type')
 
             if std_type == "auto":
-                noise_type = self._config.get("noise_function", "gaussian")
-                mapping = self._config.get("standardizer_by_noise", {})
-                std_type = mapping.get(noise_type, "zscore")
+                # Helmholtz-split noise decomposes the field via FFT and
+                # applies different noise rates to solenoidal vs irrotational
+                # components.  Per-component z-score (different std for u/v)
+                # breaks ∇·v = 0, so we must use the unified standardizer
+                # regardless of noise_function.
+                if self._config.get("helmholtz_split_noise", False):
+                    std_type = "zscore_unified"
+                else:
+                    noise_type = self._config.get("noise_function", "gaussian")
+                    mapping = self._config.get("standardizer_by_noise", {})
+                    std_type = mapping.get(noise_type, "zscore")
 
             std_class = STANDARDIZER_REGISTRY.get(std_type)
 

@@ -247,8 +247,9 @@ class TopologyAwareLossStrategy(LossStrategy):
             prediction_target: 'eps' | 'x0'
             epoch            : int, current epoch (0-indexed)
         """
-        # ── 1. Standard MSE on noise / x₀ ──────────────────────
-        mse_loss = self.mse_fn(predicted_noise, target_noise)
+        # ── 1. Standard MSE on noise / x₀ (ocean only) ────────
+        mask_2ch = self.ocean_mask.expand(predicted_noise.shape[0], 2, 64, 128)
+        mse_loss = self._masked_mse(predicted_noise, target_noise, mask_2ch)
 
         # ── 1b. Warmup gate: skip topo terms early on ──────────
         epoch = kwargs.get("epoch", 0)
@@ -373,18 +374,32 @@ class HelmholtzSupervisionLoss(TopologyAwareLossStrategy):
         base_loss = super().forward(predicted_noise, target_noise, noisy_img, **kwargs)
 
         epoch = kwargs.get("epoch", 0)
-        if epoch < self.warmup_epochs:
+        ddpm = kwargs.get("ddpm")
+
+        # When heads are detached the base MSE has no grad — decomp loss
+        # must always be active to provide gradient signal.
+        detached = ddpm is not None and hasattr(ddpm.network, "detach_heads") and ddpm.network.detach_heads
+        if epoch < self.warmup_epochs and not detached:
+            self._last_base_loss = base_loss.item()
+            self._last_decomp_loss = 0.0
+            self._last_orth_loss = 0.0
             return base_loss
 
-        ddpm = kwargs.get("ddpm")
         x0 = kwargs.get("x0")
         t = kwargs.get("t")
+        pred_target = kwargs.get("prediction_target", "x0")
 
         if ddpm is None or x0 is None or t is None:
+            self._last_base_loss = base_loss.item()
+            self._last_decomp_loss = 0.0
+            self._last_orth_loss = 0.0
             return base_loss
 
         net = ddpm.network
         if not hasattr(net, "last_v_sol") or net.last_v_sol is None:
+            self._last_base_loss = base_loss.item()
+            self._last_decomp_loss = 0.0
+            self._last_orth_loss = 0.0
             return base_loss
 
         v_sol = net.last_v_sol
@@ -394,48 +409,48 @@ class HelmholtzSupervisionLoss(TopologyAwareLossStrategy):
         decomp_threshold = int(self.decomp_t_max_frac * ddpm.n_steps)
         decomp_mask = (t.squeeze() < decomp_threshold)
         if not decomp_mask.any():
+            self._last_base_loss = base_loss.item()
+            self._last_decomp_loss = 0.0
+            self._last_orth_loss = 0.0
             return base_loss
 
         v_sol_sub = v_sol[decomp_mask]
         v_irr_sub = v_irr[decomp_mask]
-        x0_sub = x0[decomp_mask]
         B_sub = v_sol_sub.shape[0]
         frac = decomp_mask.float().mean()
 
         mask_2ch = self.ocean_mask.expand(B_sub, 2, 64, 128)
 
         # ── Decomposition supervision ──
-        # FFT Helmholtz decomposition of GT x0
+        # Heads decompose whatever the model predicts (x0 or noise).
+        # Supervise against Helmholtz decomposition of the matching target.
+        decomp_source = target_noise if pred_target == "eps" else x0
+        decomp_sub = decomp_source[decomp_mask]
         from ddpm.utils.helmholtz_split import helmholtz_decompose
         with torch.no_grad():
-            gt_sol, gt_irr = helmholtz_decompose(x0_sub)
+            gt_sol, gt_irr = helmholtz_decompose(decomp_sub)
 
         decomp_loss = (
             self._masked_mse(v_sol_sub * mask_2ch, gt_sol * mask_2ch, mask_2ch)
             + self._masked_mse(v_irr_sub * mask_2ch, gt_irr * mask_2ch, mask_2ch)
         )
 
-        # ── Orthogonality penalty ──
-        # Cosine similarity over ocean pixels: |<v_sol, v_irr>| / (||v_sol|| ||v_irr||)
-        v_sol_ocean = v_sol_sub * mask_2ch
-        v_irr_ocean = v_irr_sub * mask_2ch
-        dot = (v_sol_ocean * v_irr_ocean).sum()
-        norm_sol = v_sol_ocean.pow(2).sum().sqrt().clamp(min=1e-8)
-        norm_irr = v_irr_ocean.pow(2).sum().sqrt().clamp(min=1e-8)
-        orth_loss = dot.abs() / (norm_sol * norm_irr)
+        # Store raw component values for per-component logging
+        self._last_base_loss = base_loss.item()
+        self._last_decomp_loss = decomp_loss.item()
+        self._last_orth_loss = 0.0
 
-        return base_loss + frac * (
-            self.lambda_decomp * decomp_loss + self.lambda_orth * orth_loss
-        )
+        return base_loss + frac * self.lambda_decomp * decomp_loss
 
-    def helmholtz_aux(self, x0, t, ddpm, epoch=0):
+    def helmholtz_aux(self, x0, t, ddpm, epoch=0, noise=None, prediction_target="x0"):
         """Return only the Helmholtz auxiliary loss terms (decomp + orth).
 
         Used by the training pipeline when mask_xt=True: the masked MSE is
         computed separately, and this method provides only the Helmholtz
         supervision terms to add on top.
         """
-        if epoch < self.warmup_epochs:
+        detached = hasattr(ddpm.network, "detach_heads") and ddpm.network.detach_heads
+        if epoch < self.warmup_epochs and not detached:
             return torch.tensor(0.0, device=x0.device)
 
         net = ddpm.network
@@ -452,31 +467,29 @@ class HelmholtzSupervisionLoss(TopologyAwareLossStrategy):
 
         v_sol_sub = v_sol[decomp_mask]
         v_irr_sub = v_irr[decomp_mask]
-        x0_sub = x0[decomp_mask]
         B_sub = v_sol_sub.shape[0]
         frac = decomp_mask.float().mean()
 
         mask_2ch = self.ocean_mask.expand(B_sub, 2, 64, 128)
 
+        # Heads decompose whatever the model predicts.
+        # Supervise against Helmholtz decomposition of the matching target.
+        decomp_source = noise if prediction_target == "eps" and noise is not None else x0
+        decomp_sub = decomp_source[decomp_mask]
         from ddpm.utils.helmholtz_split import helmholtz_decompose
         with torch.no_grad():
-            gt_sol, gt_irr = helmholtz_decompose(x0_sub)
+            gt_sol, gt_irr = helmholtz_decompose(decomp_sub)
 
         decomp_loss = (
             self._masked_mse(v_sol_sub * mask_2ch, gt_sol * mask_2ch, mask_2ch)
             + self._masked_mse(v_irr_sub * mask_2ch, gt_irr * mask_2ch, mask_2ch)
         )
 
-        v_sol_ocean = v_sol_sub * mask_2ch
-        v_irr_ocean = v_irr_sub * mask_2ch
-        dot = (v_sol_ocean * v_irr_ocean).sum()
-        norm_sol = v_sol_ocean.pow(2).sum().sqrt().clamp(min=1e-8)
-        norm_irr = v_irr_ocean.pow(2).sum().sqrt().clamp(min=1e-8)
-        orth_loss = dot.abs() / (norm_sol * norm_irr)
+        # Store raw component values for per-component logging
+        self._last_decomp_loss = decomp_loss.item()
+        self._last_orth_loss = 0.0
 
-        return frac * (
-            self.lambda_decomp * decomp_loss + self.lambda_orth * orth_loss
-        )
+        return frac * self.lambda_decomp * decomp_loss
 
 
 LOSS_REGISTRY = {

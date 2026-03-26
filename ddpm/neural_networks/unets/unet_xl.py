@@ -140,7 +140,7 @@ class MyUNet(nn.Module):
 
         self.conv_out = nn.Conv2d(16, 2, 3, 1, 1)
 
-    def forward(self, x, t):
+    def forward(self, x, t, **kwargs):
         # Get the time embedding
         t = self.time_embed(t)
         n = len(x)

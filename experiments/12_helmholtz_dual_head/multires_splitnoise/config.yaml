@@ -1,0 +1,36 @@
+# Multires FiLM + split noise schedules
+# Same architecture as multires_maskxt but with dual independent noise
+# schedules: solenoidal (normal β) and irrotational (2× faster).
+# This tests whether destroying irrotational structure faster during
+# training helps the dual-head UNet learn a better decomposition.
+model_name: multires_splitnoise
+
+voronoi_forward: false
+voronoi_known_fracs: [0.001, 0.002, 0.005, 0.01]
+unet_type: helmholtz_split_film_multires
+prediction_target: x0
+noise_function: gaussian
+mask_xt: true
+
+# Helmholtz-split noise schedule (Proposal 6)
+helmholtz_split_noise: true
+irr_speed: 2.0
+
+# Evaluate heads independently: per-head MSE(v_sol, GT_sol) + MSE(v_irr, GT_irr)
+split_head_loss: true
+
+loss_function: helmholtz_supervised
+
+epochs: 800
+batch_size: 16
+lr: 0.0005
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999
+
+helmholtz_loss:
+  lambda_decomp: 0.1
+  lambda_orth: 0.01

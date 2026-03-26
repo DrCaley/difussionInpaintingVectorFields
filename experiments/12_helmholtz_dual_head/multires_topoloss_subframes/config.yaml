@@ -1,0 +1,47 @@
+# Multires FiLM + topology penalties + subframes dataset + bathymetry
+# Standard Gaussian noise (no split noise), Helmholtz dual-head with topo penalties.
+model_name: multires_topoloss_subframes
+
+# ── Data (subframes mmap dataset with bathymetry) ────────────────
+data_path: data_subframes
+
+u_training_mean: -0.12131775915622711
+u_training_std: 0.18608823418617249
+v_training_mean: 0.01599905826151371
+v_training_std: 0.09885834157466888
+mag_mean: 0.19007815420627594
+shared_mean: -0.0526593504473567
+shared_std: 0.14899966879396356
+
+# ── Architecture ─────────────────────────────────────────────────
+voronoi_forward: false
+voronoi_known_fracs: [0.001, 0.002, 0.005, 0.01]
+unet_type: helmholtz_split_film_multires
+prediction_target: x0
+noise_function: gaussian
+mask_xt: true
+use_bathymetry: true
+
+# Single combined loss through both heads (no split_head_loss)
+loss_function: helmholtz_supervised
+
+# ── Training ─────────────────────────────────────────────────────
+epochs: 800
+batch_size: 32
+lr: 0.0005
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999
+
+helmholtz_loss:
+  lambda_decomp: 0.1
+  lambda_orth: 0.01
+
+# Topology penalties (applied on combined v_sol + v_irr)
+topology:
+  lambda_vort: 0.01
+  lambda_div: 0.005
+  t_max_frac: 0.1

@@ -1,0 +1,29 @@
+# Same as weakfullsup_detach but with voronoi_forward: false
+# (standard diffusion — noise GT, not Voronoi fill)
+# Fixes train/inference distribution mismatch.
+model_name: weakfullsup_detach_stddiff
+
+voronoi_forward: false
+unet_type: helmholtz_split
+prediction_target: x0
+noise_function: helmholtz_matched
+
+loss_function: helmholtz_supervised
+
+detach_heads: true
+
+helmholtz_loss:
+  lambda_decomp: 1.0
+  lambda_orth: 0.0
+  decomp_t_max_frac: 1.0
+
+# Training recipe — identical to weakfullsup_detach
+batch_size: 16
+epochs: 800
+lr: 0.0005
+max_grad_norm: 1.0
+weight_decay: 0.0001
+lr_schedule: cosine
+warmup_epochs: 10
+use_ema: true
+ema_decay: 0.9999

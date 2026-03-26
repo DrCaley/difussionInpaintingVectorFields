@@ -49,11 +49,12 @@ class MyUNet_Helmholtz(nn.Module):
 
     def __init__(self, n_steps: int = 1000, time_emb_dim: int = 256,
                  in_channels: int = 2, n_stage_tokens: int = 0,
-                 self_cond_channels: int = 0):
+                 self_cond_channels: int = 0, detach_heads: bool = False):
         super().__init__()
         self.in_channels = in_channels
         self.n_stage_tokens = int(n_stage_tokens)
         self.self_cond_channels = self_cond_channels
+        self.detach_heads = detach_heads
 
         ch = [64, 128, 256, 256]
 
@@ -278,4 +279,6 @@ class MyUNet_Helmholtz(nn.Module):
         self.last_v_sol = v_sol
         self.last_v_irr = v_irr
 
+        if self.detach_heads:
+            return v_sol.detach() + v_irr.detach()
         return v_sol + v_irr
