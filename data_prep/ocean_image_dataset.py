@@ -26,6 +26,7 @@ class OceanImageDataset(Dataset):
         ocean_masks=None,
         bathymetry=None,
         bathy_stats: Optional[tuple] = None,
+        time_indices: Optional[list] = None,
     ):
         """
         Initializes the dataset.
@@ -85,6 +86,9 @@ class OceanImageDataset(Dataset):
         else:
             self.tensor_arr = [self.load_array(n) for n in self.tensor_labels]
             print(f"Loaded {len(self.tensor_arr)} time steps.")
+        # Original mat-file frame indices (for traceability). Falls back to 0..N-1
+        # if not provided (e.g. when dataset is constructed without index info).
+        self.time_indices = time_indices if time_indices is not None else list(range(max_size))
 
     def __len__(self) -> int:
         return len(self.tensor_labels)
@@ -99,7 +103,8 @@ class OceanImageDataset(Dataset):
         t = torch.randint(0, self.n_steps, (1,)).item()
 
         noise = self.noise_strategy(x0.unsqueeze(0), torch.tensor([t])).squeeze(0)
-        return x0, t, noise
+        data_sample_num = self.time_indices[idx]  # original mat-file frame index
+        return x0, t, noise, data_sample_num
 
     def load_array(self, n: int) -> Tensor:
         """

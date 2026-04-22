@@ -291,7 +291,8 @@ class ModelInpainter:
                             mask_percentage = self.compute_mask_percentage(missing_mask)
                             avg_dist = self.compute_avg_distance_to_seen(mask_cropped)
 
-                            base_id = f"{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}"
+                            data_sample_num = int(batch[3].item())  # original mat-file frame index
+                            base_id = f"{data_sample_num}_{mask_generator}_resample{resample}_num_lines_{num_lines}"
 
                             torch.save(final_image_ddpm_cropped, self.results_path / f"ddpm{base_id}.pt")
                             torch.save(mask_cropped, self.results_path / f"mask{base_id}.pt")
@@ -305,14 +306,14 @@ class ModelInpainter:
                                 self.mse_distance_gp.append((avg_dist, mse_gp.item()))
 
                             viz_metrics = metrics_calc.calculate_all_metrics(
-                                batch[1].item(), 
-                                mask_generator, 
+                                data_sample_num, 
+                                mask_generator,
                                 resample, 
                                 num_lines
                             )
 
                             if self.visualizer:
-                                ptv = PTVisualizer(mask_type=mask_generator, sample_num=batch[1].item(),
+                                ptv = PTVisualizer(mask_type=mask_generator, sample_num=data_sample_num,
                                                    vector_scale=self.vector_scale, num_lines=num_lines,
                                                    resamples=resample, results_dir=self.results_path)
                                 ptv.visualize()

@@ -26,7 +26,7 @@ def test_training_step_runs(trainer):
     optim = torch.optim.Adam(trainer.ddpm.parameters(), lr=trainer.lr)
     loss_fn = trainer.loss_strategy
 
-    x0, t, noise = next(iter(trainer.train_loader))
+    x0, t, noise, *_ = next(iter(trainer.train_loader))
     x0, t, noise = x0.to(trainer.device), t.to(trainer.device), noise.to(trainer.device)
     n = len(x0)
 

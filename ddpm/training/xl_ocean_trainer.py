@@ -9,7 +9,6 @@ from datetime import datetime
 from halo import Halo
 from pathlib import Path
 
-
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from torch.optim import Adam
@@ -293,7 +292,7 @@ class TrainOceanXL:
                 epoch_loss = 0.0
                 ddpm.train()
 
-                for _, (x0, t, noise), in enumerate(
+                for _, (x0, t, noise, *_), in enumerate(
                         tqdm(train_loader, leave=False, desc=f"Epoch {epoch + 1}/{start_epoch + n_epochs}",
                              colour="#005500")):
 

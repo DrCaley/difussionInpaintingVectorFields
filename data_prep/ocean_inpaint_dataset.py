@@ -112,7 +112,7 @@ class OceanInpaintDataset(Dataset):
         return len(self.base)
 
     def __getitem__(self, idx):
-        x0, t, noise = self.base[idx]
+        x0, t, noise, _data_sample_num = self.base[idx]
         # x0 is (2, 64, 128) — standardised [u, v]
         c, h, w = x0.shape
 

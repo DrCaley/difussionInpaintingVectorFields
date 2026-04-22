@@ -69,7 +69,7 @@ class TestOceanImageDataset:
             noise_strategy=simple_noise_strategy
         )
         
-        x0, t, noise = dataset[0]
+        x0, t, noise, data_sample_num = dataset[0]
         
         # x0 should be (3, H, W) - u, v, mask
         assert x0.dim() == 3
@@ -148,7 +148,7 @@ class TestDataLoader:
         loader = DataLoader(dataset, batch_size=4, shuffle=True)
         
         batch = next(iter(loader))
-        x0, t, noise = batch
+        x0, t, noise, *_ = batch
         
         assert x0.shape[0] == 4  # batch size
         
@@ -161,7 +161,7 @@ class TestDataLoader:
         )
         
         loader = DataLoader(dataset, batch_size=8)
-        x0, t, noise = next(iter(loader))
+        x0, t, noise, *_ = next(iter(loader))
         
         # Should be (batch, channels, H, W)
         assert x0.dim() == 4

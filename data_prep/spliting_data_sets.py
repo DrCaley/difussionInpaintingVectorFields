@@ -7,7 +7,7 @@ import datetime
 import h5py
 
 # ── Set the input file — format is auto-detected from the extension ───────────
-INPUT_FILE = "data/rams_head/stjohn_hourly_5m_velocity_ramhead_v2.mat"
+INPUT_FILE = "data/rams_head/stjohn_subset_ocean.pkl"
 
 pycharm_dumb_flag = False
 
@@ -31,13 +31,20 @@ def load_dataset(input_file):
         v = np.transpose(data['vs'], (2, 1, 0))
         return u, v, is_pycharm
 
+    elif ext in ('.h5', '.hdf5', '.he5'):
+        with h5py.File(file_path, 'r') as f:
+            # HDF5 stores (T, H, W); transpose to (W, H, T) to match mat convention
+            u = np.transpose(np.array(f['us']), (2, 1, 0))
+            v = np.transpose(np.array(f['vs']), (2, 1, 0))
+        return u, v, is_pycharm
+
     elif ext == '.mat':
         mat_data = loadmat(file_path)
         # mat stores (W, H, T) directly
         return mat_data['u'], mat_data['v'], is_pycharm
 
     else:
-        raise ValueError(f"Unrecognised file extension '{ext}'. Use .pkl, .pickle, or .mat.")
+        raise ValueError(f"Unrecognised file extension '{ext}'. Use .pkl, .pickle, .h5, .hdf5, or .mat.")
 
 u_tensors, v_tensors, pycharm_dumb_flag = load_dataset(INPUT_FILE)
 
@@ -84,12 +91,28 @@ magnitudes = np.sqrt(u ** 2 + v ** 2)
 avg_magnitude = np.nanmean(magnitudes)
 print("Average vector magnitude in training data:", avg_magnitude)
 
+# Compute unified stats for zscore_unified standardizer (preserves div-free property)
+uv_combined = np.concatenate([u[~np.isnan(u)], v[~np.isnan(v)]])
+shared_mean = float(np.nanmean(uv_combined))
+shared_std = float(np.nanstd(uv_combined))
+print(f"Shared mean: {shared_mean:.6f}, shared std: {shared_std:.6f}")
+
+stats = {
+    'u_training_mean': float(u_training_mean),
+    'u_training_std':  float(u_training_std),
+    'v_training_mean': float(v_training_mean),
+    'v_training_std':  float(v_training_std),
+    'shared_mean':     shared_mean,
+    'shared_std':      shared_std,
+    'mag_mean':        float(avg_magnitude),
+}
+
 try:
     path = '../data.pickle' if pycharm_dumb_flag else 'data.pickle'
     with open(path, 'wb') as file:
-        pickle.dump([training_data, validation_data, test_data], file)
+        pickle.dump([training_data, validation_data, test_data, stats], file)
     print(f"Pickle saved to: {path}")
 except Exception as e:
     print("Failed to pickle:", e)
 
-print ("you've been pickle'd")
+print("you've been pickle'd")

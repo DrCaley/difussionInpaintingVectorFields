@@ -106,7 +106,7 @@ class DDInitializer:
         with open(pickle_path, 'rb') as f:
             data = pickle.load(f)
 
-        # Extended format (10 elements): vel×3, bathy×3, mask×3, stats
+        # Extended format (10 elements): vel*3, bathy*3, mask*3, stats
         if isinstance(data, list) and len(data) >= 10:
             (training_data_np, validation_data_np, test_data_np,
              train_bathy_np, val_bathy_np, test_bathy_np,
@@ -119,8 +119,21 @@ class DDInitializer:
             self.training_bathymetry = torch.from_numpy(train_bathy_np).float()
             self.validation_bathymetry = torch.from_numpy(val_bathy_np).float()
             self.test_bathymetry = torch.from_numpy(test_bathy_np).float()
+            self._config.update(self.pickle_stats)
             print(f"Loaded extended pickle: {training_data_np.shape[-1]} train, "
                   f"{validation_data_np.shape[-1]} val, {test_data_np.shape[-1]} test")
+        elif len(data) == 4:
+            training_data_np, validation_data_np, test_data_np, stats = data
+            self.pickle_stats = stats
+            self._config.update(stats)
+            self.training_ocean_mask = None
+            self.validation_ocean_mask = None
+            self.test_ocean_mask = None
+            self.training_bathymetry = None
+            self.validation_bathymetry = None
+            self.test_bathymetry = None
+            print(f"Loaded training stats from pickle: u_mean={stats['u_training_mean']:.4f}, "
+                  f"v_mean={stats['v_training_mean']:.4f}, shared_std={stats['shared_std']:.4f}")
         else:
             # Legacy 3-element format
             training_data_np, validation_data_np, test_data_np = data
@@ -132,10 +145,37 @@ class DDInitializer:
             self.validation_bathymetry = None
             self.test_bathymetry = None
             self.pickle_stats = None
+            print("WARNING: pickle has no embedded stats - falling back to data.yaml values. "
+                  "Re-run spliting_data_sets.py to embed correct stats.")
 
         self.training_tensor = torch.from_numpy(training_data_np).float()
         self.validation_tensor = torch.from_numpy(validation_data_np).float()
         self.test_tensor = torch.from_numpy(test_data_np).float()
+        self._compute_time_indices()
+
+    def _compute_time_indices(self):
+        """Compute original mat-file frame indices for each data split.
+
+        The splitting formula (from spliting_data_sets.py) uses 130-frame chunks:
+          training  : frames  0–69  of each chunk  (70 frames)
+          validation: frames 80–94  of each chunk  (15 frames)
+          test      : frames 105–119 of each chunk  (15 frames)
+        So for chunk c starting at c*130:
+          training index i  → original frame c*130 + (i % 70)
+          validation index i → original frame c*130 + 80 + (i % 15)
+          test index i       → original frame c*130 + 105 + (i % 15)
+        """
+        n_train = self.training_tensor.shape[3]
+        n_chunks = n_train // 70
+        self.training_time_indices = [
+            c * 130 + j for c in range(n_chunks) for j in range(70)
+        ]
+        self.validation_time_indices = [
+            c * 130 + 80 + j for c in range(n_chunks) for j in range(15)
+        ]
+        self.test_time_indices = [
+            c * 130 + 105 + j for c in range(n_chunks) for j in range(15)
+        ]
 
     def _load_mmap(self, data_dir: Path) -> None:
         """Load memory-mapped .npy files for near-zero RAM usage."""
@@ -164,7 +204,7 @@ class DDInitializer:
 
     def _setup_datasets(self, boundaries_file):
         bathy_stats = None
-        if self.pickle_stats is not None:
+        if self.pickle_stats is not None and "bathy_min" in self.pickle_stats:
             bathy_stats = (self.pickle_stats["bathy_min"],
                            self.pickle_stats["bathy_max"])
 
@@ -177,6 +217,7 @@ class DDInitializer:
             ocean_masks=self.training_ocean_mask,
             bathymetry=self.training_bathymetry,
             bathy_stats=bathy_stats,
+            time_indices=getattr(self, 'training_time_indices', None),
         )
         self.test_data = OceanImageDataset(
             data_tensor=self.test_tensor,
@@ -187,6 +228,7 @@ class DDInitializer:
             ocean_masks=self.test_ocean_mask,
             bathymetry=self.test_bathymetry,
             bathy_stats=bathy_stats,
+            time_indices=getattr(self, 'test_time_indices', None),
         )
         self.validation_data = OceanImageDataset(
             data_tensor=self.validation_tensor,
@@ -197,6 +239,7 @@ class DDInitializer:
             ocean_masks=self.validation_ocean_mask,
             bathymetry=self.validation_bathymetry,
             bathy_stats=bathy_stats,
+            time_indices=getattr(self, 'validation_time_indices', None),
         )
 
     def _resolve_noise_dependent_settings(self):
