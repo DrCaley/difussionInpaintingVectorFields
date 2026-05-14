@@ -1,5 +1,6 @@
 import csv #csv file writing
 import sys #system path manipulation
+import datetime
 import random
 import shutil # clearing files in results folder
 import traceback
@@ -262,16 +263,32 @@ class ModelInpainter:
                                 u = final_noisy_image_cropped[0, 0].detach().cpu().numpy()
                                 v = final_noisy_image_cropped[0, 1].detach().cpu().numpy()
                                 H, W = u.shape
-                                Y, X = np.mgrid[0:H, 0:W]
-                                plt.figure(figsize=(6, 6))
+                                disp_scale = max(np.percentile(np.sqrt(u**2 + v**2), 90), 1e-8)
+                                gain = 6.0
+                                u_plot = gain * (u / disp_scale)
+                                v_plot = gain * (v / disp_scale)
+                                step = max(2, min(H, W) // 12)
+                                X, Y = np.meshgrid(np.arange(0, W, step), np.arange(0, H, step))
+                                plt.figure(figsize=(8, 6))
                                 ax = plt.gca()
-                                ax.quiver(X, Y, u, v)
-                                ax.set_title("Noisy field at t = T (final_noisy_image_cropped)")
-                                ax.set_ylim(0, H)
-                                ax.set_xlim(0, W)
+                                ax.quiver(
+                                    X, Y,
+                                    u_plot[::step, ::step],
+                                    v_plot[::step, ::step],
+                                    color='black', alpha=1.0,
+                                    angles='xy', scale_units='xy', scale=1.0,
+                                    width=0.007, headwidth=8, headlength=10, pivot='mid'
+                                )
+                                ax.set_title(f"Noisy field at t = T (final_noisy_image_cropped)\nSample {batch[1].item()}", fontweight='bold')
+                                ax.set_xlabel("Width (columns)")
+                                ax.set_ylabel("Height (rows)")
+                                ax.set_xlim(-0.5, W - 0.5)
+                                ax.set_ylim(H - 0.5, -0.5)
+                                ax.margins(x=0, y=0)
                                 ax.set_aspect('equal', adjustable='box')
+                                ax.set_facecolor("white")
                                 plt.tight_layout()
-                                plt.savefig(self.results_path / "debug_final_noisy_image.png")
+                                plt.savefig(self.results_path / "debug_final_noisy_image.png", dpi=150)
                                 plt.close()
                             
                             final_image_ddpm_cropped = top_left_crop(final_image_ddpm, 44, 94).to(device)

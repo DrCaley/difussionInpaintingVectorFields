@@ -98,11 +98,18 @@ class PTVisualizer():
                 max_dim = 8
                 figsize = (max_dim, max_dim * H / W) if W > H else (max_dim * W / H, max_dim)
 
-                plt.figure(figsize=figsize)
-                plt.quiver(x, y, u.cpu(), v.cpu(), scale=1.0 / vector_scale)
-                plt.title(title + " (Vector Field)")
-                plt.gca().set_aspect('equal', adjustable='box')
-                plt.savefig(os.path.join(save_dir, f"{title}_vector_field.png"))
+                fig, ax = plt.subplots(figsize=figsize)
+                u_np = u.cpu().numpy()
+                v_np = v.cpu().numpy()
+                ax.quiver(
+                    x, y,
+                    u_np,
+                    v_np,
+                    scale=1.0 / vector_scale
+                )
+                ax.set_title(title + " (Vector Field)")
+                ax.set_aspect('equal', adjustable='box')
+                plt.savefig(os.path.join(save_dir, f"{title}_vector_field.png"), dpi=150)
                 plt.close()
             else:
                 tensor = crop(tensor)
