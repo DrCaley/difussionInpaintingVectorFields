@@ -4,21 +4,25 @@ import datetime
 import random
 import shutil # clearing files in results folder
 import traceback
+from pathlib import Path
+
+# Set up path FIRST before any ddpm imports
+BASE_DIR = Path(__file__).resolve().parent
+sys.path.append(str(BASE_DIR.parent.parent))
 
 import torch
 import logging
 import numpy as np
 from tqdm import tqdm
 import matplotlib
+
+from ddpm.helper_functions.masks.straigth_line import StraightLineMaskGenerator
+from ddpm.helper_functions.masks.random_path import RandomPathMaskGenerator
+from ddpm.helper_functions.masks.squiggly_line import SquigglyLineMaskGenerator
 matplotlib.use('Agg')  # Use non-GUI backend
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from scipy.ndimage import distance_transform_edt
-from pathlib import Path
-import random
-
-BASE_DIR = Path(__file__).resolve().parent
-sys.path.append(str(BASE_DIR.parent.parent))
 
 from ddpm.helper_functions.masks import MaskGenerator
 from ddpm.helper_functions.masks import *
@@ -240,14 +244,23 @@ class ModelInpainter:
                 with torch.no_grad():
                     for resample in self.resamples:
                         for i in tqdm(range(n_samples), leave=False, desc="Samples", colour="#006666"):
-                            final_image_ddpm, final_noisy_image = inpaint_generate_new_images(
+                            base_id = f"{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}"
+
+                            out = inpaint_generate_new_images(
                                 self.best_model, input_image, mask, n_samples=1,
-                                device=device, resample_steps=resample, noise_strategy=self.noise_strategy
+                                device=device, resample_steps=resample, noise_strategy=self.noise_strategy,
+                                return_final_noised=True
                             )
+
+                            # unpack return which may include the final noised image
+                            if isinstance(out, tuple) and len(out) == 2:
+                                final_image_ddpm, final_noised_field = out
+                            else:
+                                final_image_ddpm = out
+                                final_noised_field = None
 
                             standardizer = self.dd.get_standardizer()
                             final_image_ddpm = torch.unsqueeze(standardizer.unstandardize(torch.squeeze(final_image_ddpm, 0)).to(device), 0)
-                            final_noisy_image = torch.unsqueeze(standardizer.unstandardize(torch.squeeze(final_noisy_image, 0)).to(device), 0)
                             # GP baseline uses dense kernel algebra that is more stable on CPU
                             # than on MPS (especially for Cholesky in float64).
                             try:
@@ -257,40 +270,6 @@ class ModelInpainter:
                                 gp_field = input_image_original.clone()
 
                             input_image_original_cropped = top_left_crop(input_image_original, 44, 94).to(device)
-                            final_noisy_image_cropped = top_left_crop(final_noisy_image, 44, 94).to(device)
-                            
-                            if image_counter == 0 and resample == self.resamples[0] and i == 0:
-                                u = final_noisy_image_cropped[0, 0].detach().cpu().numpy()
-                                v = final_noisy_image_cropped[0, 1].detach().cpu().numpy()
-                                H, W = u.shape
-                                disp_scale = max(np.percentile(np.sqrt(u**2 + v**2), 90), 1e-8)
-                                gain = 6.0
-                                u_plot = gain * (u / disp_scale)
-                                v_plot = gain * (v / disp_scale)
-                                step = max(2, min(H, W) // 12)
-                                X, Y = np.meshgrid(np.arange(0, W, step), np.arange(0, H, step))
-                                plt.figure(figsize=(8, 6))
-                                ax = plt.gca()
-                                ax.quiver(
-                                    X, Y,
-                                    u_plot[::step, ::step],
-                                    v_plot[::step, ::step],
-                                    color='black', alpha=1.0,
-                                    angles='xy', scale_units='xy', scale=1.0,
-                                    width=0.007, headwidth=8, headlength=10, pivot='mid'
-                                )
-                                ax.set_title(f"Noisy field at t = T (final_noisy_image_cropped)\nSample {batch[1].item()}", fontweight='bold')
-                                ax.set_xlabel("Width (columns)")
-                                ax.set_ylabel("Height (rows)")
-                                ax.set_xlim(-0.5, W - 0.5)
-                                ax.set_ylim(H - 0.5, -0.5)
-                                ax.margins(x=0, y=0)
-                                ax.set_aspect('equal', adjustable='box')
-                                ax.set_facecolor("white")
-                                plt.tight_layout()
-                                plt.savefig(self.results_path / "debug_final_noisy_image.png", dpi=150)
-                                plt.close()
-                            
                             final_image_ddpm_cropped = top_left_crop(final_image_ddpm, 44, 94).to(device)
                             
                             mask_cropped = top_left_crop(mask, 44, 94).to(device)
@@ -305,9 +284,28 @@ class ModelInpainter:
                             mask_percentage = self.compute_mask_percentage(mask)
                             avg_dist = self.compute_avg_distance_to_seen(mask_cropped)
 
-                            base_id = f"{batch[1].item()}_{mask_generator}_resample{resample}_num_lines_{num_lines}"
-
                             torch.save(final_image_ddpm_cropped, self.results_path / f"ddpm{base_id}.pt")
+                            if final_noised_field is not None:
+                                standardizer = self.dd.get_standardizer()
+                                final_noised_field = torch.unsqueeze(
+                                    standardizer.unstandardize(torch.squeeze(final_noised_field, 0)).to(device),
+                                    0,
+                                )
+                                final_noised_field_cropped = top_left_crop(final_noised_field, 44, 94).to(device)
+                                ptv = PTVisualizer(
+                                    mask_type=mask_generator,
+                                    sample_num=batch[1].item(),
+                                    vector_scale=self.vector_scale,
+                                    num_lines=num_lines,
+                                    resamples=resample,
+                                    results_dir=self.results_path,
+                                )
+                                ptv.visualize_tensor(
+                                    final_noised_field_cropped[0],
+                                    title=f"final_noised{base_id}",
+                                    save_dir=str(self.results_path),
+                                    vector_scale=self.vector_scale,
+                                )
                             torch.save(mask_cropped, self.results_path / f"mask{base_id}.pt")
                             torch.save(input_image_original_cropped, self.results_path / f"initial{base_id}.pt")
                             torch.save(gp_field_cropped, self.results_path / f"gp_field{base_id}.pt")
@@ -364,6 +362,8 @@ class ModelInpainter:
 
                             if not self.save_pt_fields:
                                 (self.results_path / f"ddpm{base_id}.pt").unlink()
+                                if final_noised_field is not None and (self.results_path / f"final_noised{base_id}.pt").exists():
+                                    (self.results_path / f"final_noised{base_id}.pt").unlink()
                                 (self.results_path / f"mask{base_id}.pt").unlink()
                                 (self.results_path / f"initial{base_id}.pt").unlink()
                                 (self.results_path / f"gp_field{base_id}.pt").unlink()
@@ -482,12 +482,6 @@ class ModelInpainter:
         self.set_results_path("./results")
         self.csv_file = self.results_path / "inpainting_xl_data.csv"
         self.write_header()
-        
-    def measure_variability(self, n_runs = 10, base_seed = 0):
-        mse = []
-        #for (trial in range n_runs) {
-            # work in progress
-        #}
 
 # === USAGE EXAMPLE ===
 if __name__ == '__main__':
@@ -497,13 +491,15 @@ if __name__ == '__main__':
     if (mi.clear_all_previous_results): # clearing all files in results folder
         mi.clear_all_results() 
         
-    set_seed(26)
+    set_seed(42)
 
     for _ in range (1): # adds a mask
-        mi.add_mask(StraightLineMaskGenerator(1,1))
+        mi.add_mask(StraightLineMaskGenerator(1, 1))
+        # mi.add_mask(RandomPathMaskGenerator(5, 2))
+        # mi.add_mask(SquigglyLineMaskGenerator(3, 2))
 
     mi.visualize_images()
     mi.find_coverage()
     
-    # up to here, just loads model from trained_models/weekend_ddpm_ocean_model.pt
+    # up to here, just loads the model from the yaml config 
     mi.begin_inpainting()

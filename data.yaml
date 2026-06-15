@@ -25,8 +25,8 @@ standardizer_type:
   # units
 
 noise_function: 
-              # gaussian
-              div_free
+              gaussian
+              # div_free
               # div_gaussian
               # hh_decomp_div_free
               # cached_div
@@ -50,21 +50,10 @@ inpainting_batch_size: 1
 num_images_to_process: 1
 n_samples: 1
 resample_nums: [1]
-save_pt_fields: True
 random_seed: 42
 clear_all_previous_results: True
 enable_visualization: True
-debug_projection: True
-debug_projection_every: 10
-debug_projection_save_midpoint_images: True
-debug_projection_dir: "results/debug_projection"
-
-max_iterations: 20
-allowable_error: 1e-4
-scaling_function:
-                # max
-                # average
 
 model_paths:
-#  - "trained_models/div_free_model.pt" 
-  - "trained_models/weekend_ddpm_oceam_model.pt"
+  - "trained_models/weekend_ddpm_ocean_model.pt"
+#  - "trained_models/div_free_model.pt"
